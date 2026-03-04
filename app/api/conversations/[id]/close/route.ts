@@ -1,0 +1,53 @@
+import { NextResponse } from "next/server";
+import { requireSession } from "@/lib/api";
+import { createAuditLog, getConversation } from "@/lib/repo";
+import { closeConversationSchema } from "@/lib/schemas";
+import { emitRealtime } from "@/lib/realtime";
+import { TicketService } from "@/lib/services";
+import { sendWhatsappMessage } from "@/lib/whatsapp-client";
+
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  const auth = await requireSession();
+  if (auth.error || !auth.session) return auth.error;
+
+  const body = await request.json();
+  const parsed = closeConversationSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Motivo invalido" }, { status: 400 });
+  }
+
+  const { id } = await context.params;
+  const existing = await getConversation(auth.session.organizationId, id);
+  if (!existing) {
+    return NextResponse.json({ error: "Conversa nao encontrada" }, { status: 404 });
+  }
+
+  await TicketService.close(auth.session.organizationId, id, parsed.data.reason);
+
+  await createAuditLog(auth.session.organizationId, auth.session.userId, "close_ticket", "conversation", id, {
+    reason: parsed.data.reason,
+  });
+
+  emitRealtime("conversation.updated", { id, status: "encerrado", closeReason: parsed.data.reason });
+
+  // Se solicitar pesquisa de satisfação e tiver número do contato, envia mensagem de nota
+  if (parsed.data.sendSurvey && existing.contactPhone) {
+    const provider = process.env.WHATSAPP_PROVIDER || "unofficial";
+
+    const agentName = auth.session.name || "nosso time";
+    const surveyText =
+      `Seu atendimento com ${agentName} foi finalizado.\n` +
+      `De 1 a 5, qual nota você dá para o atendimento? Responda apenas com o número.`;
+
+    if (provider === "unofficial") {
+      // Envio em background: não bloquear a finalização do chamado caso o WhatsApp esteja offline.
+      // fromBot: true evita que processOutboundMessageFromDevice reabra a conversa encerrada.
+      void sendWhatsappMessage(existing.contactPhone, surveyText, { skipRateLimit: true, fromBot: true }).catch((err) => {
+        console.error("Failed to send survey message (unofficial WhatsApp)", err);
+      });
+    }
+    // Se provider != unofficial, não envia nada por enquanto (não estamos usando Twilio)
+  }
+
+  return NextResponse.json({ conversation: { id, status: "encerrado" } });
+}

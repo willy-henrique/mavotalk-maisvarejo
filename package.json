@@ -1,0 +1,49 @@
+{
+  "name": "willtalk",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "node server.cjs",
+    "build": "next build",
+    "start": "set NODE_ENV=production&& node server.cjs",
+    "lint": "eslint",
+    "worker": "node worker.mjs",
+    "seed": "node scripts/seed-firebase.mjs",
+    "seed-supabase": "node scripts/seed-supabase.mjs",
+    "jwt-secret": "node scripts/jwt-secret.mjs"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.48.0",
+    "bcryptjs": "^3.0.3",
+    "bullmq": "^5.69.3",
+    "cloudinary": "^2.9.0",
+    "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.3.1",
+    "firebase-admin": "^13.6.1",
+    "ioredis": "^5.9.3",
+    "jose": "^6.1.3",
+    "next": "16.1.6",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.1.3",
+    "qrcode": "^1.5.4",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
+    "twilio": "^5.12.2",
+    "whatsapp-web.js": "^1.34.6",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.1.6",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

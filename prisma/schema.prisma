@@ -1,0 +1,198 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  admin
+  gestor
+  atendente
+}
+
+enum ConversationStatus {
+  aguardando
+  em_atendimento
+  pendente_cliente
+  encerrado
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum MessageType {
+  text
+  image
+  document
+}
+
+model Organization {
+  id            String         @id @default(cuid())
+  name          String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  users         User[]
+  contacts      Contact[]
+  channels      Channel[]
+  queues        Queue[]
+  conversations Conversation[]
+  messages      Message[]
+  tickets       Ticket[]
+  slaPolicies   SlaPolicy[]
+  businessHours BusinessHour[]
+  auditLogs     AuditLog[]
+}
+
+model User {
+  id             String       @id @default(cuid())
+  organizationId String
+  name           String
+  email          String       @unique
+  passwordHash   String
+  role           UserRole
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  assignedTickets Ticket[]    @relation("TicketAssignee")
+  auditLogs      AuditLog[]
+}
+
+model Channel {
+  id                String       @id @default(cuid())
+  organizationId    String
+  provider          String       @default("twilio")
+  twilioPhoneNumber String       @unique
+  isActive          Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  organization      Organization @relation(fields: [organizationId], references: [id])
+}
+
+model Contact {
+  id             String         @id @default(cuid())
+  organizationId String
+  name           String?
+  phoneNumber    String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  conversations  Conversation[]
+
+  @@unique([organizationId, phoneNumber])
+}
+
+model Queue {
+  id              String         @id @default(cuid())
+  organizationId  String
+  name            String
+  menuOption      Int
+  colorHex        String
+  defaultSlaMins  Int            @default(30)
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  organization    Organization   @relation(fields: [organizationId], references: [id])
+  conversations   Conversation[]
+  tickets         Ticket[]
+  slaPolicy       SlaPolicy?
+
+  @@unique([organizationId, menuOption])
+}
+
+model Conversation {
+  id              String             @id @default(cuid())
+  organizationId  String
+  contactId       String
+  queueId         String?
+  status          ConversationStatus @default(aguardando)
+  triageCompleted Boolean            @default(false)
+  menuAttempts    Int                @default(0)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  closedAt        DateTime?
+  organization    Organization       @relation(fields: [organizationId], references: [id])
+  contact         Contact            @relation(fields: [contactId], references: [id])
+  queue           Queue?             @relation(fields: [queueId], references: [id])
+  messages        Message[]
+  ticket          Ticket?
+}
+
+model Message {
+  id              String           @id @default(cuid())
+  organizationId  String
+  conversationId  String
+  externalId      String?
+  direction       MessageDirection
+  type            MessageType
+  content         String
+  mediaUrl        String?
+  mimeType        String?
+  createdAt       DateTime         @default(now())
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  conversation    Conversation     @relation(fields: [conversationId], references: [id])
+}
+
+model Ticket {
+  id                  String         @id @default(cuid())
+  organizationId      String
+  conversationId      String         @unique
+  queueId             String?
+  assigneeId          String?
+  closeReason         String?
+  firstResponseAt     DateTime?
+  firstResponseDueAt  DateTime?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  closedAt            DateTime?
+  organization        Organization   @relation(fields: [organizationId], references: [id])
+  conversation        Conversation   @relation(fields: [conversationId], references: [id])
+  queue               Queue?         @relation(fields: [queueId], references: [id])
+  assignee            User?          @relation("TicketAssignee", fields: [assigneeId], references: [id])
+}
+
+model SlaPolicy {
+  id                String        @id @default(cuid())
+  organizationId    String
+  queueId           String        @unique
+  firstResponseMins Int           @default(30)
+  warningBeforeMins Int           @default(10)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  organization      Organization  @relation(fields: [organizationId], references: [id])
+  queue             Queue         @relation(fields: [queueId], references: [id])
+}
+
+model BusinessHour {
+  id             String       @id @default(cuid())
+  organizationId String
+  weekday        Int
+  startTime      String
+  endTime        String
+  timezone       String       @default("America/Sao_Paulo")
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, weekday])
+}
+
+model AuditLog {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String?
+  action         String
+  entityType     String
+  entityId       String
+  metadata       Json?
+  createdAt      DateTime     @default(now())
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  user           User?        @relation(fields: [userId], references: [id])
+}
+

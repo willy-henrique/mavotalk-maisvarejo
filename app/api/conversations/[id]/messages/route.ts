@@ -1,0 +1,93 @@
+import { NextResponse } from "next/server";
+import twilio from "twilio";
+import { requireSession } from "@/lib/api";
+import {
+  addOutboundMessage,
+  getConversation,
+  getContactById,
+} from "@/lib/repo";
+import { sendMessageSchema } from "@/lib/schemas";
+import { emitRealtime } from "@/lib/realtime";
+import { sendWhatsappMessage } from "@/lib/whatsapp-client";
+import {
+  buildQuickReplyContext,
+  replaceVariables,
+} from "@/lib/quick-reply-service";
+
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
+  const auth = await requireSession();
+  if (auth.error || !auth.session) return auth.error;
+
+  const { id } = await context.params;
+  const body = await request.json();
+  const parsed = sendMessageSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Mensagem invalida" }, { status: 400 });
+  }
+
+  const conversation = await getConversation(auth.session.organizationId, id);
+  if (!conversation) {
+    return NextResponse.json({ error: "Conversa nao encontrada" }, { status: 404 });
+  }
+
+  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+  const twilioFrom = process.env.TWILIO_WHATSAPP_NUMBER;
+  const provider = process.env.WHATSAPP_PROVIDER || "twilio";
+
+  let externalId: string | undefined;
+
+  if (!conversation.contactPhone) {
+    return NextResponse.json({ error: "Numero do contato nao disponivel" }, { status: 400 });
+  }
+
+  const contact = await getContactById(auth.session.organizationId, conversation.contactId);
+  const ticketNumber = id.slice(0, 8);
+
+  const ctx = buildQuickReplyContext({
+    userName: auth.session.name || "Atendente",
+    contactName: contact?.name || "Cliente",
+    ticketNumber,
+  });
+  const resolvedContent = replaceVariables(parsed.data.content, ctx);
+
+  const authorId = auth.session.userId;
+  const authorName = auth.session.name || "Atendente";
+  // Envia para o WhatsApp com a assinatura em linha separada
+  const whatsappBody = `${authorName}:\n${resolvedContent}`;
+
+  // Tentativa de envio externo (WhatsApp / Twilio) — mas não bloqueia o registro da mensagem
+  try {
+    if (provider === "unofficial") {
+      externalId = await sendWhatsappMessage(conversation.contactPhone, whatsappBody, {
+        skipRateLimit: true,
+      });
+    } else if (twilioSid && twilioToken && twilioFrom) {
+      const client = twilio(twilioSid, twilioToken);
+      const sent = await client.messages.create({
+        from: twilioFrom,
+        to: String(conversation.contactPhone),
+        body: whatsappBody,
+      });
+      externalId = sent.sid;
+    }
+  } catch (err) {
+    // Se o WhatsApp não estiver pronto ou Twilio falhar, ainda assim registramos a mensagem no histórico
+    // e deixamos o atendente ver o erro apenas nos logs.
+    console.error("Failed to send outbound WhatsApp message", err);
+  }
+
+  const message = await addOutboundMessage(
+    auth.session.organizationId,
+    id,
+    resolvedContent,
+    externalId,
+    { authorId },
+  );
+
+  emitRealtime("message.created", { conversationId: id, message });
+  emitRealtime("conversation.updated", { id, status: "em_atendimento" });
+
+  return NextResponse.json({ message }, { status: 201 });
+}

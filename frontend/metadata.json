@@ -1,0 +1,8 @@
+{
+  "name": "OmniDesk Pro - Enterprise HelpDesk",
+  "description": "A high-performance SaaS HelpDesk platform with real-time chat, SLA management, remote access vault, and AI-powered support capabilities.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
