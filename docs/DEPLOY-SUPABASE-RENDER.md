@@ -37,7 +37,7 @@ navegador ou Chromium embutido.
 4. Em **Connect**, copie a connection string do **Session pooler** (host `pooler.supabase.com`, porta `5432`).
 5. Nunca versione essa URL.
 
-As migrations ficam em `supabase/migrations/` e são aplicadas por `npm run db:migrate`, que registra cada arquivo em `mavo_schema_migrations` com checksum. O schema ativa RLS em todas as tabelas sem criar políticas públicas. O navegador nunca acessa o Supabase diretamente; toda operação passa pelo backend autenticado.
+As migrations ficam em `supabase/migrations/` e são aplicadas por `npm run db:migrate`, que registra cada arquivo em `mavo_schema_migrations` com checksum. Em seguida, `npm run db:bootstrap:production` garante de forma idempotente a organização indicada por `DEFAULT_ORG_ID`, sem criar ou alterar credenciais de usuários. O schema ativa RLS em todas as tabelas sem criar políticas públicas. O navegador nunca acessa o Supabase diretamente; toda operação passa pelo backend autenticado.
 
 ## 2. Criar os serviços no Render
 
@@ -49,7 +49,7 @@ As migrations ficam em `supabase/migrations/` e são aplicadas por `npm run db:m
 
 O serviço web usa:
 
-- build: `npm ci && npm run typecheck && npm run build && npm run db:migrate && npm run db:verify`;
+- build: `npm ci && npm run typecheck && npm run build && npm run db:migrate && npm run db:bootstrap:production && npm run db:verify`;
 - start: `npm run start`;
 - porta: a variável `PORT` fornecida pelo Render;
 - health check: `/api/health`;

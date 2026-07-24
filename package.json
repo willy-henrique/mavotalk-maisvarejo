@@ -13,6 +13,7 @@
     "worker": "node worker.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:migrate:status": "node scripts/db-migrate-status.mjs",
+    "db:bootstrap:production": "node scripts/db-bootstrap-production.mjs",
     "db:verify": "node scripts/db-verify.mjs",
     "db:seed:development": "node scripts/db-seed-development.mjs",
     "render:validate": "node scripts/validate-render-blueprint.mjs",
