@@ -3,10 +3,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 test("deploy garante a organização padrão sem alterar credenciais de usuários", async () => {
-  const [packageJson, blueprint, bootstrap, verifier] = await Promise.all([
+  const [packageJson, blueprint, bootstrap, migrate, verifier] = await Promise.all([
     readFile("package.json", "utf8"),
     readFile("render.yaml", "utf8"),
-    readFile("scripts/db-bootstrap-production.mjs", "utf8"),
+    readFile("scripts/db-bootstrap-common.mjs", "utf8"),
+    readFile("scripts/db-migrate.mjs", "utf8"),
     readFile("scripts/db-verify.mjs", "utf8"),
   ]);
 
@@ -18,5 +19,7 @@ test("deploy garante a organização padrão sem alterar credenciais de usuário
   assert.match(bootstrap, /INSERT INTO organizations/);
   assert.match(bootstrap, /ON CONFLICT \(id\) DO NOTHING/);
   assert.doesNotMatch(bootstrap, /password|INSERT INTO users|UPDATE users/i);
+  assert.match(migrate, /bootstrapDefaultOrganization/);
+  assert.match(migrate, /NODE_ENV === "production"/);
   assert.match(verifier, /defaultOrganizationExists/);
 });

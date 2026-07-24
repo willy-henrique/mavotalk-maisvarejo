@@ -4,6 +4,7 @@ import {
   listMigrationFiles,
   readMigration,
 } from "./db-common.mjs";
+import { bootstrapDefaultOrganization } from "./db-bootstrap-common.mjs";
 
 const pool = createMigrationPool();
 const client = await pool.connect();
@@ -57,6 +58,11 @@ try {
       [fileName, checksum],
     );
     console.log(`OK ${fileName}`);
+  }
+
+  if (process.env.NODE_ENV === "production") {
+    const organizationId = await bootstrapDefaultOrganization(client);
+    console.log(`BOOTSTRAP organization ${organizationId}`);
   }
 } finally {
   await client
