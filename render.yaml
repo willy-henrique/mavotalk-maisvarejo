@@ -19,7 +19,7 @@ services:
     runtime: node
     region: virginia
     plan: free
-    buildCommand: npm ci && npm run typecheck && npm run build && npm run db:migrate && npm run db:verify
+    buildCommand: npm ci --include=dev && npm run typecheck && npm run build && npm run db:migrate && npm run db:verify
     startCommand: npm run start
     healthCheckPath: /api/health
     envVars:
@@ -151,7 +151,7 @@ services:
     name: mavo-talk-web
     runtime: static
     rootDir: frontend
-    buildCommand: npm ci && npm run typecheck && npm run build
+    buildCommand: npm ci --include=dev && npm run typecheck && npm run build
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_BASE_URL
