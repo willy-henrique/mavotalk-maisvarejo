@@ -88,6 +88,12 @@ services:
       # painel sob demanda em vez de subir junto com o processo.
       - key: WHATSAPP_AUTO_CONNECT
         value: "false"
+      # Desliga isolamento por site e limita renderers: reduz drasticamente o
+      # consumo do Chromium na instância gratuita.
+      - key: WHATSAPP_LOW_MEMORY
+        value: "true"
+      - key: WHATSAPP_MAX_OLD_SPACE_MB
+        value: "256"
       - key: DEFAULT_ORG_ID
         sync: false
       - key: WILLTALK_WEBHOOK_TOKEN

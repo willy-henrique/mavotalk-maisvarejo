@@ -653,6 +653,42 @@ export async function waitForWhatsappReady(maxMs: number): Promise<boolean> {
   return getState().status === "ready";
 }
 
+/**
+ * Argumentos do Chromium usado pelo whatsapp-web.js.
+ *
+ * `WHATSAPP_LOW_MEMORY=true` corta o consumo em instâncias pequenas (o plano
+ * gratuito do Render dá ~512 MB) desligando o isolamento por site e limitando o
+ * número de renderers. É o que costuma decidir entre conectar e morrer por OOM.
+ */
+function buildPuppeteerArgs(): string[] {
+  const args = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-gpu",
+    "--disable-dev-shm-usage",
+    "--disable-software-rasterizer",
+    "--no-first-run",
+  ];
+
+  if (String(process.env.WHATSAPP_LOW_MEMORY || "").toLowerCase() !== "true") {
+    return args;
+  }
+
+  args.push(
+    "--no-zygote",
+    "--renderer-process-limit=1",
+    "--disable-features=site-per-process,TranslateUI",
+    "--disable-extensions",
+    "--disable-background-networking",
+    "--disable-accelerated-2d-canvas",
+    "--disable-breakpad",
+    "--mute-audio",
+    `--js-flags=--max-old-space-size=${process.env.WHATSAPP_MAX_OLD_SPACE_MB || "256"}`,
+  );
+
+  return args;
+}
+
 export async function initWhatsappClient() {
   ensureUnhandledRejectionGuard();
   const provider = process.env.WHATSAPP_PROVIDER || "twilio";
@@ -679,14 +715,7 @@ export async function initWhatsappClient() {
     }),
     puppeteer: {
       headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-gpu",
-        "--disable-dev-shm-usage",
-        "--disable-software-rasterizer",
-        "--no-first-run",
-      ],
+      args: buildPuppeteerArgs(),
     },
   });
 
