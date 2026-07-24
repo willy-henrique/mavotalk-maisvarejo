@@ -7,8 +7,7 @@ const nextConfig: NextConfig = {
   serverExternalPackages: [
     "lightningcss",
     "lightningcss-win32-x64-msvc",
-    "whatsapp-web.js",
-    "puppeteer",
+    "@whiskeysockets/baileys",
   ],
   async headers() {
     const masterHeaders = [

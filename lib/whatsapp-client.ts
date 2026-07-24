@@ -1,6 +1,18 @@
 import qrcode from "qrcode";
 import twilio from "twilio";
-import { Client, LocalAuth, type Message } from "whatsapp-web.js";
+import makeWASocket, {
+  useMultiFileAuthState,
+  fetchLatestBaileysVersion,
+  downloadMediaMessage,
+  getContentType,
+  DisconnectReason,
+  Browsers,
+  type WASocket,
+  type WAMessage,
+  type AnyMessageContent,
+  proto,
+} from "@whiskeysockets/baileys";
+import { Boom } from "@hapi/boom";
 import { isOpenBusinessHour } from "@/lib/business-hours";
 import { uploadBase64ToCloudinary } from "@/lib/cloudinary";
 import {
@@ -37,7 +49,7 @@ type WhatsappState = {
 type KnownError = { message?: string };
 
 declare global {
-  var __waClient: Client | undefined;
+  var __waClient: WASocket | undefined;
   var __waState: WhatsappState | undefined;
   var __waInitPromise: Promise<WhatsappState> | undefined;
   var __waDestroyPromise: Promise<void> | undefined;
@@ -56,50 +68,86 @@ function getState(): WhatsappState {
   return global.__waState;
 }
 
-function chatIdToPhone(chatId: string) {
-  const digits = chatId.replace(/@(c\.us|lid)$/i, "").replace(/\D/g, "");
+/** Baileys usa `xxx@s.whatsapp.net` (ou `@lid`) para chats 1:1, diferente do `@c.us` do whatsapp-web.js. */
+function chatIdToPhone(jid: string) {
+  const digits = jid.replace(/@(s\.whatsapp\.net|lid)$/i, "").replace(/\D/g, "");
   return `whatsapp:+${digits}`;
 }
 
 function phoneToChatId(phone: string) {
   const digits = phone.replace("whatsapp:", "").replace(/\D/g, "");
-  return `${digits}@c.us`;
+  return `${digits}@s.whatsapp.net`;
 }
 
-function isDirectUserChat(chatId: string): boolean {
-  return /@(c\.us|lid)$/i.test(String(chatId || ""));
+function isDirectUserChat(jid: string): boolean {
+  return /@(s\.whatsapp\.net|lid)$/i.test(String(jid || ""));
 }
 
-/** Tipos internos do WhatsApp Web que não devem abrir triagem nem webhook. */
-const WA_IGNORE_INBOUND_TYPES = new Set([
-  "e2e_notification",
-  "notification",
-  "protocol",
-  "gp2",
-  "revoked",
-  "ciphertext",
-  "broadcast_notification",
-  "reaction",
-  "call_log",
+/** Tipos de conteúdo Baileys que não representam uma mensagem real de conversa. */
+const WA_IGNORE_CONTENT_TYPES = new Set([
+  "protocolMessage",
+  "reactionMessage",
+  "senderKeyDistributionMessage",
+  "pollUpdateMessage",
+  "pollCreationMessage",
+  "messageContextInfo",
+  "call",
 ]);
 
-/** Evita processar status, broadcast e ruído que não é conversa 1:1 real. */
-function shouldIgnoreInboundWhatsApp(msg: Message): boolean {
-  const extended = msg as Message & { isStatus?: boolean; broadcast?: boolean };
-  if (extended.isStatus || extended.broadcast) return true;
-  const from = String(msg.from || "");
-  if (from === "status@broadcast" || /@broadcast$/i.test(from)) return true;
-  const t = String(msg.type || "");
-  if (t && WA_IGNORE_INBOUND_TYPES.has(t)) return true;
+/** Evita processar status, broadcast, notificações de sistema e ruído que não é conversa 1:1 real. */
+function shouldIgnoreInboundWhatsApp(msg: WAMessage): boolean {
+  if (msg.broadcast) return true;
+  const jid = String(msg.key?.remoteJid || "");
+  if (jid === "status@broadcast" || /@broadcast$/i.test(jid)) return true;
+  if (msg.messageStubType) return true;
+  const contentType = getContentType(msg.message || undefined);
+  if (!contentType || WA_IGNORE_CONTENT_TYPES.has(contentType)) return true;
   return false;
+}
+
+function extractMessageText(message: proto.IMessage | null | undefined): string {
+  if (!message) return "";
+  const text =
+    message.conversation ||
+    message.extendedTextMessage?.text ||
+    message.imageMessage?.caption ||
+    message.videoMessage?.caption ||
+    message.documentMessage?.caption ||
+    "";
+  return String(text || "").trim();
+}
+
+type InboundMediaKind = "image" | "audio" | "document" | null;
+
+function detectInboundMedia(message: proto.IMessage | null | undefined): {
+  kind: InboundMediaKind;
+  mimeType?: string;
+} {
+  if (!message) return { kind: null };
+  if (message.imageMessage) return { kind: "image", mimeType: message.imageMessage.mimetype || undefined };
+  if (message.stickerMessage) return { kind: "image", mimeType: message.stickerMessage.mimetype || undefined };
+  if (message.audioMessage) return { kind: "audio", mimeType: message.audioMessage.mimetype || undefined };
+  if (message.videoMessage) return { kind: "document", mimeType: message.videoMessage.mimetype || undefined };
+  if (message.documentMessage) return { kind: "document", mimeType: message.documentMessage.mimetype || undefined };
+  return { kind: null };
+}
+
+async function downloadInboundMedia(
+  msg: WAMessage,
+): Promise<{ base64: string; mimeType?: string } | null> {
+  try {
+    const buffer = await downloadMediaMessage(msg, "buffer", {});
+    const { mimeType } = detectInboundMedia(msg.message);
+    return { base64: buffer.toString("base64"), mimeType };
+  } catch (err) {
+    logger.warn({ err, id: msg.key?.id }, "Failed to download inbound WhatsApp media");
+    return null;
+  }
 }
 
 function isKnownWhatsappNoiseError(error: unknown): boolean {
   const message = String((error as KnownError)?.message || error || "").toLowerCase();
-  return (
-    message.includes("execution context was destroyed") ||
-    (message.includes("ebusy") && message.includes("first_party_sets.db"))
-  );
+  return message.includes("timed out") || message.includes("connection closed");
 }
 
 function ensureUnhandledRejectionGuard() {
@@ -126,36 +174,36 @@ let clientReadyAt: number | null = null;
 /** ChatIds de envios automáticos (bot) - mensagens enviadas por aqui não devem alterar status para em_atendimento. */
 const recentBotSends = new Set<string>();
 
-async function rateLimitedSend(client: Client, chatId: string, text: string, fromBot = false) {
-  if (fromBot) recentBotSends.add(chatId);
+async function rateLimitedSend(sock: WASocket, jid: string, text: string, fromBot = false) {
+  if (fromBot) recentBotSends.add(jid);
   const now = Date.now();
   const elapsed = now - lastSendAt;
   if (elapsed < WA_MIN_SEND_INTERVAL_MS) {
     await new Promise((r) => setTimeout(r, WA_MIN_SEND_INTERVAL_MS - elapsed));
   }
   lastSendAt = Date.now();
-  return client.sendMessage(chatId, text);
+  return sock.sendMessage(jid, { text });
 }
 
 /** Persiste mensagens enviadas pelo celular (mesmo número conectado) para aparecer no Inbox.
  * Cria contato e conversa se não existirem, para que threads iniciadas pelo celular apareçam. */
-async function processOutboundMessageFromDevice(msg: Message) {
-  if (!msg.fromMe || !isDirectUserChat(msg.to)) return;
+async function processOutboundMessageFromDevice(msg: WAMessage) {
+  const to = String(msg.key?.remoteJid || "");
+  if (!msg.key?.fromMe || !isDirectUserChat(to)) return;
 
   const organizationId = DEFAULT_ORGANIZATION_ID;
-  const toPhone = chatIdToPhone(msg.to);
+  const toPhone = chatIdToPhone(to);
 
-  const chatId = msg.to;
-  const fromBot = recentBotSends.has(chatId);
-  if (fromBot) recentBotSends.delete(chatId);
+  const fromBot = recentBotSends.has(to);
+  if (fromBot) recentBotSends.delete(to);
 
-  const { contact, conversation } = await getOrCreateContactAndOpenConversation(
+  const { conversation } = await getOrCreateContactAndOpenConversation(
     organizationId,
     toPhone,
     "Contato",
   );
 
-  const body = (msg.body || "").trim() || "[mídia]";
+  const body = extractMessageText(msg.message) || "[mídia]";
 
   // Nunca alterar status de conversa encerrada para em_atendimento (ex: mensagem de pesquisa de satisfação).
   // Só muda status para em_atendimento se for mensagem real do atendente (não bot, não nova, não encerrada).
@@ -166,7 +214,7 @@ async function processOutboundMessageFromDevice(msg: Message) {
     organizationId,
     conversation.id,
     body,
-    msg.id?.id,
+    msg.key?.id || undefined,
     skipStatusUpdate ? { skipStatusUpdate: true } : undefined,
   );
 
@@ -186,47 +234,38 @@ async function processOutboundMessageFromDevice(msg: Message) {
   });
 }
 
-async function handleInboundViaBotTriagem(msg: Message) {
-  let fromPhone = chatIdToPhone(msg.from);
-  let contactName = "Cliente";
-  try {
-    const contact = await msg.getContact();
-    contactName = contact?.pushname || contact?.name || "Cliente";
-    const contactNumber = String((contact as { number?: string }).number || "").replace(/\D/g, "");
-    if (contactNumber.length >= 10) {
-      fromPhone = `whatsapp:+${contactNumber}`;
-    }
-  } catch {
-    // ignore
-  }
+async function handleInboundViaBotTriagem(msg: WAMessage) {
+  const remoteJid = String(msg.key?.remoteJid || "");
+  const fromPhone = chatIdToPhone(remoteJid);
+  const contactName = msg.pushName || "Cliente";
 
-  let inboundText = (msg.body || "").trim();
+  let inboundText = extractMessageText(msg.message);
   let mediaUrl: string | undefined;
   let mimeType: string | undefined;
-  if (msg.hasMedia) {
-    try {
-      const media = await msg.downloadMedia();
-      if (media?.data) {
-        mimeType = media.mimetype || undefined;
-        const uploaded = await uploadBase64ToCloudinary(media.data, mimeType || null);
+  const { kind } = detectInboundMedia(msg.message);
+  if (kind) {
+    const downloaded = await downloadInboundMedia(msg);
+    if (downloaded) {
+      mimeType = downloaded.mimeType;
+      try {
+        const uploaded = await uploadBase64ToCloudinary(downloaded.base64, mimeType || null);
         mediaUrl = uploaded?.secure_url || undefined;
+      } catch (err) {
+        logger.warn(
+          { err, from: remoteJid, id: msg.key?.id },
+          "Failed to process inbound media for ticket-upsert",
+        );
       }
-      if (!inboundText) {
-        inboundText = mimeType?.startsWith("image/") ? "[imagem]" : "[midia]";
-      }
-    } catch (err) {
-      logger.warn(
-        { err, from: msg.from, id: msg.id?.id },
-        "Failed to process inbound media for ticket-upsert",
-      );
-      if (!inboundText) inboundText = "[midia]";
+    }
+    if (!inboundText) {
+      inboundText = kind === "image" ? "[imagem]" : "[midia]";
     }
   }
 
   if (!inboundText) inboundText = "[sem_texto]";
 
   const result = await invokeTicketUpsertLocal({
-    event_id: msg.id?.id || `wa-${Date.now()}`,
+    event_id: msg.key?.id || `wa-${Date.now()}`,
     canal: "whatsapp",
     organization_id: DEFAULT_ORGANIZATION_ID,
     cliente: {
@@ -244,7 +283,7 @@ async function handleInboundViaBotTriagem(msg: Message) {
         status: result.status,
         data: result.data,
         from: fromPhone,
-        event_id: msg.id?.id,
+        event_id: msg.key?.id,
         defaultOrgId: DEFAULT_ORGANIZATION_ID,
       },
       "ticket-upsert local failed — WhatsApp may reply but inbox will not update until fixed (check WILLTALK_WEBHOOK_TOKEN, WILLTALK_INTERNAL_BASE_URL/PORT, DEFAULT_ORG_ID vs user organization)",
@@ -252,24 +291,28 @@ async function handleInboundViaBotTriagem(msg: Message) {
   }
 }
 
-async function processInboundMessage(client: Client, msg: Message) {
-  if (msg.fromMe || !isDirectUserChat(msg.from)) return;
+async function processInboundMessage(sock: WASocket, msg: WAMessage) {
+  const remoteJid = String(msg.key?.remoteJid || "");
+  if (msg.key?.fromMe || !isDirectUserChat(remoteJid)) return;
   if (shouldIgnoreInboundWhatsApp(msg)) return;
 
   // Ignora mensagens enfileiradas que chegaram enquanto o WhatsApp estava desconectado.
-  // Quando o cliente reconecta, o whatsapp-web.js dispara "message" para todo histórico
-  // pendente — sem este filtro, o bot responderia a todos sem motivo.
-  if (clientReadyAt !== null && typeof msg.timestamp === "number" && msg.timestamp < clientReadyAt) {
+  // Quando o cliente reconecta, o Baileys reenvia notificações pendentes ("append") —
+  // sem este filtro, o bot responderia a todos sem motivo.
+  const messageTimestamp = Number(msg.messageTimestamp || 0);
+  if (clientReadyAt !== null && messageTimestamp > 0 && messageTimestamp < clientReadyAt) {
     logger.debug(
-      { from: msg.from, msgTs: msg.timestamp, readyAt: clientReadyAt },
+      { from: remoteJid, msgTs: messageTimestamp, readyAt: clientReadyAt },
       "Skipping pre-connection queued message",
     );
     return;
   }
 
-  const hasContent = Boolean((msg.body || "").trim()) || Boolean(msg.hasMedia);
+  const { kind: mediaKind } = detectInboundMedia(msg.message);
+  const bodyRaw = extractMessageText(msg.message);
+  const hasContent = Boolean(bodyRaw) || Boolean(mediaKind);
   if (!hasContent) {
-    logger.debug({ from: msg.from, type: msg.type }, "Ignoring inbound with no body and no media");
+    logger.debug({ from: remoteJid }, "Ignoring inbound with no body and no media");
     return;
   }
 
@@ -281,7 +324,7 @@ async function processInboundMessage(client: Client, msg: Message) {
   }
 
   const organizationId = DEFAULT_ORGANIZATION_ID;
-  const externalId = msg.id?.id;
+  const externalId = msg.key?.id || undefined;
   if (externalId) {
     try {
       const existing = await findMessageByExternalId(organizationId, externalId);
@@ -291,63 +334,27 @@ async function processInboundMessage(client: Client, msg: Message) {
     }
   }
 
-  let fromPhone = chatIdToPhone(msg.from);
-  const body = (msg.body || "").trim();
+  const fromPhone = chatIdToPhone(remoteJid);
+  const body = bodyRaw;
+  const profileName = (msg.pushName || "").trim() || "Cliente";
 
-  let profileName = "Cliente";
   let avatarUrl: string | null = null;
-  const raw = (msg as { _data?: { notifyName?: string } })._data;
-  if (raw?.notifyName && String(raw.notifyName).trim()) profileName = String(raw.notifyName).trim();
   try {
-    const waContact = await msg.getContact();
-    const c = waContact as {
-      pushname?: string;
-      name?: string;
-      shortName?: string;
-      formattedName?: string;
-      number?: string;
-      getProfilePicUrl?: () => Promise<string | null>;
-    };
-    const push = c.pushname && String(c.pushname).trim();
-    const name = c.name && String(c.name).trim();
-    const shortName = c.shortName && String(c.shortName).trim();
-    const formattedName = c.formattedName && String(c.formattedName).trim();
-    if (profileName === "Cliente") {
-      if (push) profileName = push;
-      else if (name) profileName = name;
-      else if (shortName) profileName = shortName;
-      else if (formattedName) profileName = formattedName;
-    }
-    if (typeof c.getProfilePicUrl === "function") {
-      try {
-        const pic = await c.getProfilePicUrl();
-        if (pic) avatarUrl = String(pic);
-      } catch {
-        // ignore avatar errors
-      }
-    }
-    const contactNumber = String(c.number || "").replace(/\D/g, "");
-    if (contactNumber.length >= 10) {
-      fromPhone = `whatsapp:+${contactNumber}`;
-    }
+    const pic = await sock.profilePictureUrl(remoteJid, "image");
+    if (pic) avatarUrl = String(pic);
   } catch {
-    // keep defaults if getContact fails
+    // sem foto de perfil ou sem permissão — ignora
   }
 
   const businessRouting = await routeBusinessWhatsappMessage({
     organizationId,
     phone: fromPhone,
-    message: body || (msg.hasMedia ? "[mídia]" : ""),
+    message: body || (mediaKind ? "[mídia]" : ""),
     conversationReference: externalId,
   });
   if (businessRouting.destination === "business") {
     if (businessRouting.reply) {
-      await rateLimitedSend(
-        client,
-        msg.from,
-        businessRouting.reply,
-        true,
-      );
+      await rateLimitedSend(sock, remoteJid, businessRouting.reply, true);
     }
     return;
   }
@@ -369,17 +376,13 @@ async function processInboundMessage(client: Client, msg: Message) {
   let cloudinaryPublicId: string | null = null;
   let type: "text" | "image" | "document" | "audio" = "text";
 
-  if (msg.hasMedia) {
-    const media = await msg.downloadMedia();
-    if (media) {
-      mimeType = media.mimetype || null;
-      type = mimeType?.startsWith("audio/")
-        ? "audio"
-        : mimeType?.startsWith("image/")
-          ? "image"
-          : "document";
+  if (mediaKind) {
+    const downloaded = await downloadInboundMedia(msg);
+    if (downloaded) {
+      mimeType = downloaded.mimeType || null;
+      type = mediaKind;
       try {
-        const upload = await uploadBase64ToCloudinary(media.data, mimeType);
+        const upload = await uploadBase64ToCloudinary(downloaded.base64, mimeType);
         mediaUrl = upload?.secure_url || null;
         cloudinaryPublicId = upload?.public_id || null;
       } catch {
@@ -393,7 +396,7 @@ async function processInboundMessage(client: Client, msg: Message) {
     conversationId: String(conversation.id),
     content: body || "[midia]",
     type,
-    externalId: msg.id.id,
+    externalId: msg.key?.id || undefined,
     mediaUrl,
     mimeType,
     cloudinaryPublicId,
@@ -460,8 +463,8 @@ async function processInboundMessage(client: Client, msg: Message) {
           fallback: { cliente: contact.name, canal: "whatsapp", mensagem: body || "[midia]" },
         });
         await rateLimitedSend(
-          client,
-          msg.from,
+          sock,
+          remoteJid,
           `${quickGuidance ? `${quickGuidance}\n\n` : ""}Perfeito, obrigado pelas informações. Encaminhei seu chamado para o técnico responsável da fila *${String(currentQueue?.name || "Suporte")}* para continuidade.${outOfHoursSuffix}`,
           true,
         );
@@ -486,7 +489,7 @@ async function processInboundMessage(client: Client, msg: Message) {
         conversationId: String(conversation.id),
         fallback: { cliente: contact.name, canal: "whatsapp", mensagem: body || "[midia]" },
       });
-      await rateLimitedSend(client, msg.from, `${reply}${outOfHoursSuffix}`, true);
+      await rateLimitedSend(sock, remoteJid, `${reply}${outOfHoursSuffix}`, true);
       return;
     }
 
@@ -513,8 +516,8 @@ async function processInboundMessage(client: Client, msg: Message) {
         },
       });
       await rateLimitedSend(
-        client,
-        msg.from,
+        sock,
+        remoteJid,
         `Olá! Seu chamado foi registrado. Em breve um atendente responderá.${outOfHoursSuffix}`,
         true,
       );
@@ -552,7 +555,7 @@ async function processInboundMessage(client: Client, msg: Message) {
         },
       });
 
-      await rateLimitedSend(client, msg.from, buildInvestigationPrompt(String(queue.name)), true);
+      await rateLimitedSend(sock, remoteJid, buildInvestigationPrompt(String(queue.name)), true);
       return;
     }
 
@@ -581,8 +584,8 @@ async function processInboundMessage(client: Client, msg: Message) {
       });
 
       await rateLimitedSend(
-        client,
-        msg.from,
+        sock,
+        remoteJid,
         `Nao consegui identificar a opcao selecionada. Seu chamado foi encaminhado para atendimento humano.${outOfHoursSuffix}`,
         true,
       );
@@ -611,7 +614,7 @@ async function processInboundMessage(client: Client, msg: Message) {
       contact.name,
     );
 
-    await rateLimitedSend(client, msg.from, `${menu}\n\nTentativa ${nextAttempts}/3.${outOfHoursSuffix}`, true);
+    await rateLimitedSend(sock, remoteJid, `${menu}\n\nTentativa ${nextAttempts}/3.${outOfHoursSuffix}`, true);
     return;
   }
 
@@ -653,41 +656,7 @@ export async function waitForWhatsappReady(maxMs: number): Promise<boolean> {
   return getState().status === "ready";
 }
 
-/**
- * Argumentos do Chromium usado pelo whatsapp-web.js.
- *
- * `WHATSAPP_LOW_MEMORY=true` corta o consumo em instâncias pequenas (o plano
- * gratuito do Render dá ~512 MB) desligando o isolamento por site e limitando o
- * número de renderers. É o que costuma decidir entre conectar e morrer por OOM.
- */
-function buildPuppeteerArgs(): string[] {
-  const args = [
-    "--no-sandbox",
-    "--disable-setuid-sandbox",
-    "--disable-gpu",
-    "--disable-dev-shm-usage",
-    "--disable-software-rasterizer",
-    "--no-first-run",
-  ];
-
-  if (String(process.env.WHATSAPP_LOW_MEMORY || "").toLowerCase() !== "true") {
-    return args;
-  }
-
-  args.push(
-    "--no-zygote",
-    "--renderer-process-limit=1",
-    "--disable-features=site-per-process,TranslateUI",
-    "--disable-extensions",
-    "--disable-background-networking",
-    "--disable-accelerated-2d-canvas",
-    "--disable-breakpad",
-    "--mute-audio",
-    `--js-flags=--max-old-space-size=${process.env.WHATSAPP_MAX_OLD_SPACE_MB || "256"}`,
-  );
-
-  return args;
-}
+const RECONNECT_DELAY_MS = 3_000;
 
 export async function initWhatsappClient() {
   ensureUnhandledRejectionGuard();
@@ -708,62 +677,84 @@ export async function initWhatsappClient() {
   state.status = "initializing";
   state.lastError = null;
 
-  const client = new Client({
-    authStrategy: new LocalAuth({
-      clientId: process.env.WHATSAPP_SESSION_NAME || "mavo-talk",
-      dataPath: process.env.WHATSAPP_AUTH_PATH || ".wwebjs_auth",
-    }),
-    puppeteer: {
-      headless: true,
-      args: buildPuppeteerArgs(),
-    },
-  });
-
-  client.on("qr", async (qr) => {
-    state.status = "qr";
-    state.qrDataUrl = await qrcode.toDataURL(qr);
-  });
-
-  client.on("ready", async () => {
-    state.status = "ready";
-    state.qrDataUrl = null;
-    state.connectedPhone = client.info?.wid?.user ? `+${client.info.wid.user}` : null;
-    clientReadyAt = Math.floor(Date.now() / 1000);
-  });
-
-  client.on("auth_failure", (error) => {
-    state.status = "error";
-    state.lastError = String(error);
-  });
-
-  client.on("disconnected", (reason) => {
-    state.status = "disconnected";
-    state.lastError = String(reason);
-    state.connectedPhone = null;
-    clientReadyAt = null;
-    global.__waClient = undefined;
-  });
-
-  client.on("message", (msg) => {
-    if (msg.fromMe) return;
-    void processInboundMessage(client, msg).catch((error) => {
-      logger.error({ err: error }, "Failed to process inbound WhatsApp message");
-    });
-  });
-
-  client.on("message_create", (msg) => {
-    if (!msg.fromMe) return;
-    if (!isDirectUserChat(msg.to || "")) return;
-    if (shouldIgnoreInboundWhatsApp(msg)) return;
-    void processOutboundMessageFromDevice(msg).catch((error) => {
-      logger.error({ err: error }, "Failed to process outbound WhatsApp message (message_create)");
-    });
-  });
-
   const initPromise = (async () => {
     try {
-      await client.initialize();
-      global.__waClient = client;
+      const authPath = process.env.WHATSAPP_AUTH_PATH || ".wwebjs_auth";
+      const { state: authState, saveCreds } = await useMultiFileAuthState(authPath);
+      const { version } = await fetchLatestBaileysVersion();
+
+      const sock = makeWASocket({
+        version,
+        auth: authState,
+        logger,
+        browser: Browsers.appropriate(process.env.WHATSAPP_SESSION_NAME || "Mavo Talk"),
+        markOnlineOnConnect: false,
+        syncFullHistory: false,
+      });
+
+      sock.ev.on("creds.update", saveCreds);
+
+      sock.ev.on("connection.update", (update) => {
+        const { connection, lastDisconnect, qr } = update;
+
+        if (qr) {
+          state.status = "qr";
+          void qrcode.toDataURL(qr).then((url) => {
+            state.qrDataUrl = url;
+          });
+        }
+
+        if (connection === "open") {
+          state.status = "ready";
+          state.qrDataUrl = null;
+          state.lastError = null;
+          const rawId = sock.user?.id || "";
+          const digits = rawId.split(":")[0]?.split("@")[0] || "";
+          state.connectedPhone = digits ? `+${digits}` : null;
+          clientReadyAt = Math.floor(Date.now() / 1000);
+        }
+
+        if (connection === "close") {
+          const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
+          const loggedOut = statusCode === DisconnectReason.loggedOut;
+
+          state.status = "disconnected";
+          state.lastError = lastDisconnect?.error ? String(lastDisconnect.error.message || lastDisconnect.error) : null;
+          state.connectedPhone = null;
+          clientReadyAt = null;
+          if (global.__waClient === sock) {
+            global.__waClient = undefined;
+          }
+
+          if (!loggedOut) {
+            setTimeout(() => {
+              void initWhatsappClient().catch((err) => {
+                logger.error({ err }, "Failed to auto-reconnect WhatsApp client");
+              });
+            }, RECONNECT_DELAY_MS).unref();
+          } else {
+            logger.warn("WhatsApp session logged out; reconnect requires a new QR Code");
+          }
+        }
+      });
+
+      sock.ev.on("messages.upsert", ({ messages, type }) => {
+        if (type !== "notify" && type !== "append") return;
+        for (const msg of messages) {
+          if (!msg.message) continue;
+          if (msg.key?.fromMe) {
+            void processOutboundMessageFromDevice(msg).catch((error) => {
+              logger.error({ err: error }, "Failed to process outbound WhatsApp message (device)");
+            });
+          } else {
+            void processInboundMessage(sock, msg).catch((error) => {
+              logger.error({ err: error }, "Failed to process inbound WhatsApp message");
+            });
+          }
+        }
+      });
+
+      global.__waClient = sock;
       return state;
     } catch (error) {
       state.status = "error";
@@ -788,9 +779,9 @@ export async function destroyWhatsappClient() {
   }
 
   const destroyPromise = (async () => {
-  if (!global.__waClient) return;
+    if (!global.__waClient) return;
     try {
-      await global.__waClient.destroy();
+      global.__waClient.end(undefined);
     } catch (error) {
       if (!isKnownWhatsappNoiseError(error)) {
         logger.error({ err: error }, "Failed to destroy WhatsApp client");
@@ -816,19 +807,44 @@ export async function destroyWhatsappClient() {
 
 /** Envia indicador de digitação para o contato no WhatsApp (apenas unofficial). */
 export async function sendTypingIndicator(contactPhone: string): Promise<void> {
-  const client = global.__waClient;
-  if (!client || getState().status !== "ready") return;
+  const sock = global.__waClient;
+  if (!sock || getState().status !== "ready") return;
 
   try {
-    const chatId = phoneToChatId(contactPhone);
-    const chat = await client.getChatById(chatId);
-    await chat.sendStateTyping();
+    const jid = phoneToChatId(contactPhone);
+    await sock.presenceSubscribe(jid);
+    await sock.sendPresenceUpdate("composing", jid);
   } catch {
     // ignora erro (ex: chat não encontrado)
   }
 }
 
-/** Envio via whatsapp-web.js (QR). Triagem/bot e `fromBot` usam apenas este caminho.
+function buildOutboundMediaContent(mediaUrl: string, caption?: string): AnyMessageContent {
+  const clean = mediaUrl.split("?")[0].toLowerCase();
+  if (/\.(jpe?g|png|gif|webp)$/.test(clean)) {
+    return { image: { url: mediaUrl }, caption: caption || undefined };
+  }
+  if (/\.(mp4|3gp|mov)$/.test(clean)) {
+    return { video: { url: mediaUrl }, caption: caption || undefined };
+  }
+  if (/\.(mp3|ogg|oga|m4a|wav|opus)$/.test(clean)) {
+    return { audio: { url: mediaUrl }, mimetype: "audio/mpeg" };
+  }
+  const fileName = mediaUrl.split("/").pop() || "arquivo";
+  const extMatch = /\.([a-z0-9]+)$/.exec(clean);
+  const documentMimeTypes: Record<string, string> = {
+    pdf: "application/pdf",
+    doc: "application/msword",
+    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    xls: "application/vnd.ms-excel",
+    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    txt: "text/plain",
+  };
+  const mimetype = (extMatch && documentMimeTypes[extMatch[1]]) || "application/octet-stream";
+  return { document: { url: mediaUrl }, mimetype, fileName, caption: caption || undefined };
+}
+
+/** Envio via Baileys (QR). Triagem/bot e `fromBot` usam apenas este caminho.
  * Mensagens do atendente pelo painel com Twilio continuam em `conversations/[id]/messages`. */
 export async function sendWhatsappMessage(
   toPhone: string,
@@ -838,12 +854,12 @@ export async function sendWhatsappMessage(
   const provider = process.env.WHATSAPP_PROVIDER || "twilio";
   if (provider !== "unofficial") {
     throw new Error(
-      "Triagem e envios automaticos usam whatsapp-web.js. Defina WHATSAPP_PROVIDER=unofficial e conecte o QR no painel.",
+      "Triagem e envios automaticos usam o WhatsApp nao-oficial. Defina WHATSAPP_PROVIDER=unofficial e conecte o QR no painel.",
     );
   }
 
-  const client = global.__waClient;
-  if (!client) {
+  const sock = global.__waClient;
+  if (!sock) {
     throw new Error("WhatsApp client nao inicializado");
   }
 
@@ -857,32 +873,33 @@ export async function sendWhatsappMessage(
     throw new Error(`Telefone invalido para envio WhatsApp: ${toPhone}`);
   }
 
-  const chatId = phoneToChatId(toPhone);
+  const jid = phoneToChatId(toPhone);
 
-  // Marca como envio de bot ANTES de enviar, para que o evento message_create
-  // gerado pelo whatsapp-web.js seja reconhecido como automático.
+  // Marca como envio de bot ANTES de enviar, para que o listener de mensagens
+  // gerado pelo Baileys (fromMe) seja reconhecido como automático.
   if (options?.fromBot) {
-    recentBotSends.add(chatId);
+    recentBotSends.add(jid);
   }
 
+  let sent: WAMessage | undefined;
   if (options?.mediaUrl) {
-    const { MessageMedia } = await import("whatsapp-web.js");
-    const media = await MessageMedia.fromUrl(options.mediaUrl);
-    const sent = await client.sendMessage(chatId, media, { caption: text || undefined });
-    return sent.id.id;
+    sent = await sock.sendMessage(jid, buildOutboundMediaContent(options.mediaUrl, text));
+  } else if (options?.skipRateLimit === true) {
+    sent = await sock.sendMessage(jid, { text });
+  } else {
+    sent = await rateLimitedSend(sock, jid, text);
   }
 
-  const sent =
-    options?.skipRateLimit === true
-      ? await client.sendMessage(chatId, text)
-      : await rateLimitedSend(client, chatId, text);
-  return sent.id.id;
+  if (!sent?.key?.id) {
+    throw new Error("Falha ao enviar mensagem: WhatsApp nao retornou confirmacao");
+  }
+  return sent.key.id;
 }
 
 const TRIAGE_READY_WAIT_MS = Number(process.env.WILLTALK_TRIAGE_READY_WAIT_MS) || 12_000;
 
 /**
- * Triagem (ticket-upsert): tenta whatsapp-web.js com init + espera; se falhar ou não estiver pronto,
+ * Triagem (ticket-upsert): tenta o WhatsApp nao-oficial com init + espera; se falhar ou nao estiver pronto,
  * usa Twilio quando configurado (`WILLTALK_TRIAGE_TWILIO_FALLBACK`, padrão true).
  */
 export async function sendTriageMessageToWhatsApp(

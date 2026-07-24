@@ -17,12 +17,11 @@ O Blueprint atual usa **exclusivamente instâncias gratuitas**. Leia a seção d
 
 Consequências que você precisa aceitar:
 
-1. **A sessão do WhatsApp por QR Code não sobrevive a deploys nem a restarts.** Sem disco, `LocalAuth` grava em `/tmp` e perde tudo. Será preciso reler o QR. O Blueprint assume esse risco explicitamente com `WHATSAPP_ALLOW_EPHEMERAL_SESSION=true`.
-2. **O Chromium do `whatsapp-web.js` não cabe com folga em 512 MB.** Por isso `WHATSAPP_AUTO_CONNECT=false`: conecte sob demanda pelo painel e monitore a memória. Se o serviço reiniciar sozinho ao conectar, é OOM — esse é o sinal de que o WhatsApp por QR precisa de plano pago.
-3. **A hibernação derruba o bot.** Um bot de WhatsApp precisa estar sempre no ar. Veja a seção 7 para o keep-alive.
-4. Jobs enfileirados podem ser perdidos quando o Key Value reinicia. Hoje só `media-cleanup` faz trabalho real (remoção no Cloudinary); os demais são de observabilidade.
+1. **A sessão do WhatsApp por QR Code não sobrevive a deploys nem a restarts.** Sem disco, o auth state do Baileys grava em `/tmp` e perde tudo. Será preciso reler o QR. O Blueprint assume esse risco explicitamente com `WHATSAPP_ALLOW_EPHEMERAL_SESSION=true`.
+2. **A hibernação derruba o bot.** Um bot de WhatsApp precisa estar sempre no ar. Veja a seção 7 para o keep-alive.
+3. Jobs enfileirados podem ser perdidos quando o Key Value reinicia. Hoje só `media-cleanup` faz trabalho real (remoção no Cloudinary); os demais são de observabilidade.
 
-Quando houver orçamento, o caminho de saída é: web `starter` + disco de 1 GB + worker `starter` + Key Value `starter` (~US$24/mês). Isso elimina os quatro pontos acima.
+Quando houver orçamento, o caminho de saída é: web `starter` + disco de 1 GB + worker `starter` + Key Value `starter` (~US$24/mês). Isso elimina os pontos acima. Diferente do `whatsapp-web.js` (que dependia de um Chromium completo e estourava os 512 MB do free), o provedor `unofficial` hoje usa a Baileys — biblioteca sem navegador embutido, leve o suficiente para rodar tranquila no plano gratuito.
 
 ## 1. Criar e preparar o Supabase
 
@@ -120,9 +119,13 @@ https://SEU-DOMINIO/api/webhooks/twilio
 
 A primeira mensagem após a hibernação sofre o atraso do cold start (~1 min).
 
-### WhatsApp por QR Code
+### WhatsApp por QR Code (Baileys)
 
-É o padrão do Blueprint (`unofficial`), mas no plano gratuito é frágil pelos motivos da seção 0. Conecte manualmente pelo painel após cada deploy e acompanhe a memória. Para uso sério, o caminho é uma instância paga com disco de 1 GB montado em `/var/data`, com `WHATSAPP_AUTH_PATH=/var/data/wwebjs_auth` e `WHATSAPP_ALLOW_EPHEMERAL_SESSION` removido.
+É o padrão do Blueprint (`unofficial`), implementado com a Baileys — sem Chromium, cabe de boa nos 512 MB do free. A limitação real que sobra é a falta de disco persistente: conecte manualmente pelo painel após cada deploy/restart (a sessão é perdida). Para uso sério, o caminho é uma instância paga com disco de 1 GB montado em `/var/data`, com `WHATSAPP_AUTH_PATH=/var/data/whatsapp_auth` e `WHATSAPP_ALLOW_EPHEMERAL_SESSION` removido — assim a sessão sobrevive a deploys.
+
+Se o WhatsApp desconectar (queda de rede, restart do processo), o serviço tenta reconectar sozinho a cada poucos segundos usando as credenciais salvas — só é preciso reler o QR quando a sessão é deslogada de fato (ex.: removida pelo celular) ou quando o disco é ephemeral e o processo reinicia.
+
+Como `sendTriageMessageToWhatsApp` tenta o `unofficial` primeiro e cai para o Twilio automaticamente se não estiver pronto, vale configurar as duas credenciais (Baileys conectado pelo QR + Twilio configurado) para ter redundância sem custo extra.
 
 ## 7. Evitar a hibernação
 
@@ -152,8 +155,8 @@ Isso não elimina o restart por deploy nem a perda da sessão do WhatsApp — s�
 
 - **Health 503 / banco offline:** revise `DATABASE_URL_RUNTIME`, senha, host do pooler e `PG_SSL=true`.
 - **Build falha em `db:migrate`:** confira `DATABASE_URL_MIGRATIONS`. Migration já aplicada e alterada também aborta — crie uma migration nova em vez de editar a antiga.
-- **Boot falha com `WHATSAPP_AUTH_PATH`:** em instância sem disco, `WHATSAPP_ALLOW_EPHEMERAL_SESSION=true` e caminho absoluto (`/tmp/wwebjs_auth`) são obrigatórios.
-- **Serviço reinicia ao conectar o WhatsApp:** é OOM do Chromium em 512 MB. Use Twilio ou plano pago.
+- **Boot falha com `WHATSAPP_AUTH_PATH`:** em instância sem disco, `WHATSAPP_ALLOW_EPHEMERAL_SESSION=true` e caminho absoluto (`/tmp/whatsapp_auth`) são obrigatórios.
+- **WhatsApp não reconecta sozinho após ficar `disconnected`:** confira o `lastError` em `/api/whatsapp/status` — se a sessão foi deslogada (`loggedOut`), é preciso ler um novo QR pelo painel; qualquer outro motivo tenta reconectar automaticamente em poucos segundos.
 - **Primeira requisição do dia demora ~1 min:** hibernação. Veja a seção 7.
 - **Login master não configurado:** preencha `MAVO_MASTER_EMAIL`, `MAVO_MASTER_PASSWORD` e `JWT_SECRET`, depois faça redeploy.
 - **Bot transfere ofertas/horários para humano:** complete os campos `SUPERMARKET_*` indicados no `/mavo`.

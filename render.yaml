@@ -75,8 +75,11 @@ services:
         value: "true"
       - key: WORKER_CONCURRENCY
         value: "2"
+      # Baileys (WhatsApp via QR) como canal principal: sem Chromium, roda de boa
+      # nos 512 MB do plano gratuito. Twilio fica configurado como fallback
+      # automático (ver sendTriageMessageToWhatsApp em lib/whatsapp-client.ts).
       - key: WHATSAPP_PROVIDER
-        value: twilio
+        value: unofficial
       - key: TWILIO_ACCOUNT_SID
         sync: false
       - key: TWILIO_AUTH_TOKEN
@@ -86,22 +89,14 @@ services:
       - key: TWILIO_WEBHOOK_BASE_URL
         value: https://mavo-talk-api.onrender.com
       - key: WHATSAPP_AUTH_PATH
-        value: /tmp/wwebjs_auth
+        value: /tmp/whatsapp_auth
       - key: WHATSAPP_SESSION_NAME
         value: mavo-talk-production
       # Sem disco no plano gratuito: a sessão não sobrevive a restart.
       - key: WHATSAPP_ALLOW_EPHEMERAL_SESSION
         value: "true"
-      # O Chromium do whatsapp-web.js não cabe com folga em 512 MB. Conecte pelo
-      # painel sob demanda em vez de subir junto com o processo.
       - key: WHATSAPP_AUTO_CONNECT
         value: "false"
-      # Desliga isolamento por site e limita renderers: reduz drasticamente o
-      # consumo do Chromium na instância gratuita.
-      - key: WHATSAPP_LOW_MEMORY
-        value: "true"
-      - key: WHATSAPP_MAX_OLD_SPACE_MB
-        value: "256"
       - key: DEFAULT_ORG_ID
         sync: false
       - key: WILLTALK_WEBHOOK_TOKEN
