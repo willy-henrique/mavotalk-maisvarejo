@@ -58,7 +58,10 @@ function encryptionKey(keyMaterial: string): Buffer {
       "WHATSAPP_AUTH_ENCRYPTION_KEY deve conter ao menos 32 caracteres",
     );
   }
-  return createHash("sha256").update(value, "utf8").digest();
+  return createHash("sha256")
+    .update("mavo-whatsapp-auth-v1\u0000", "utf8")
+    .update(value, "utf8")
+    .digest();
 }
 
 function additionalAuthenticatedData(context: string): Buffer {

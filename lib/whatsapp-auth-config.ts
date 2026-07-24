@@ -7,9 +7,14 @@ type Environment = Readonly<Record<string, string | undefined>>;
 export function configuredWhatsappAuthStore(
   environment: Environment = process.env,
 ): WhatsappAuthStore {
-  return String(environment.WHATSAPP_AUTH_STORE || "")
+  const configured = String(environment.WHATSAPP_AUTH_STORE || "")
     .trim()
-    .toLowerCase() === "database"
+    .toLowerCase();
+  if (configured === "database" || configured === "filesystem") {
+    return configured;
+  }
+  return environment.NODE_ENV === "production" &&
+    String(environment.DB_PROVIDER || "supabase").toLowerCase() === "supabase"
     ? "database"
     : "filesystem";
 }
@@ -40,4 +45,29 @@ export function shouldAutoReconnectWhatsapp(
   manuallyDisconnected: boolean,
 ): boolean {
   return !loggedOut && !manuallyDisconnected;
+}
+
+export function configuredWhatsappAuthKeyMaterials(
+  explicitKey?: string,
+  environment: Environment = process.env,
+): string[] {
+  const dedicated =
+    String(explicitKey || "").trim() ||
+    String(environment.WHATSAPP_AUTH_ENCRYPTION_KEY || "").trim();
+  if (dedicated && Buffer.byteLength(dedicated, "utf8") < 32) {
+    throw new Error(
+      "WHATSAPP_AUTH_ENCRYPTION_KEY deve conter ao menos 32 caracteres",
+    );
+  }
+  const jwtSecret = String(environment.JWT_SECRET || "").trim();
+  const candidates = [dedicated, jwtSecret].filter(
+    (value) => Buffer.byteLength(value, "utf8") >= 32,
+  );
+  const unique = [...new Set(candidates)];
+  if (!unique.length) {
+    throw new Error(
+      "WHATSAPP_AUTH_ENCRYPTION_KEY ou JWT_SECRET forte é obrigatório",
+    );
+  }
+  return unique;
 }

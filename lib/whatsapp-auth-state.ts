@@ -17,6 +17,7 @@ import {
   type EncryptedWhatsappAuthValue,
 } from "@/lib/whatsapp-auth-crypto";
 import {
+  configuredWhatsappAuthKeyMaterials,
   configuredWhatsappAuthPersistence,
   configuredWhatsappAuthStore,
   type WhatsappAuthStore,
@@ -62,16 +63,6 @@ function authContext(
   keyId: string,
 ): string {
   return [organizationId, sessionName, keyType, keyId].join("\u001f");
-}
-
-function encryptionKey(explicit?: string): string {
-  const value =
-    String(explicit || "").trim() ||
-    environmentValue("WHATSAPP_AUTH_ENCRYPTION_KEY");
-  if (!value) {
-    throw new Error("WHATSAPP_AUTH_ENCRYPTION_KEY não configurada");
-  }
-  return value;
 }
 
 async function loadRows(
@@ -153,7 +144,21 @@ async function applyMutations(
 async function createDatabaseAuthState(
   options: AuthStateOptions,
 ): Promise<WhatsappAuthStateHandle> {
-  const keyMaterial = encryptionKey(options.encryptionKey);
+  const keyMaterials = configuredWhatsappAuthKeyMaterials(
+    options.encryptionKey,
+  );
+  const primaryKeyMaterial = keyMaterials[0];
+  const decrypt = <T>(row: AuthRow, context: string): T => {
+    let lastError: unknown = null;
+    for (const keyMaterial of keyMaterials) {
+      try {
+        return decryptWhatsappAuthValue<T>(row, keyMaterial, context);
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError || new Error("Não foi possível decifrar a sessão WhatsApp");
+  };
   let mutationQueue: Promise<void> = Promise.resolve();
   const enqueueMutation = <T>(operation: () => Promise<T>): Promise<T> => {
     const result = mutationQueue.then(operation, operation);
@@ -174,9 +179,8 @@ async function createDatabaseAuthState(
       );
       const row = rows[0];
       if (!row) return null;
-      return decryptWhatsappAuthValue<T>(
+      return decrypt<T>(
         row,
-        keyMaterial,
         authContext(
           options.organizationId,
           options.sessionName,
@@ -193,7 +197,11 @@ async function createDatabaseAuthState(
       keyType,
       keyId,
     );
-    const encrypted = encryptWhatsappAuthValue(value, keyMaterial, context);
+    const encrypted = encryptWhatsappAuthValue(
+      value,
+      primaryKeyMaterial,
+      context,
+    );
     await withTenantTransaction(options.organizationId, async (client) => {
       await applyMutations(
         client,
@@ -233,9 +241,8 @@ async function createDatabaseAuthState(
       for (const id of ids) {
         const row = byId.get(id);
         if (!row) continue;
-        let value = decryptWhatsappAuthValue<SignalDataTypeMap[T]>(
+        let value = decrypt<SignalDataTypeMap[T]>(
           row,
-          keyMaterial,
           authContext(
             options.organizationId,
             options.sessionName,
@@ -274,7 +281,11 @@ async function createDatabaseAuthState(
           upserts.push({
             key_type: type,
             key_id: id,
-            ...encryptWhatsappAuthValue(value, keyMaterial, context),
+            ...encryptWhatsappAuthValue(
+              value,
+              primaryKeyMaterial,
+              context,
+            ),
           });
         }
       }

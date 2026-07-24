@@ -149,7 +149,10 @@ A primeira mensagem após a hibernação sofre o atraso do cold start (~1 min).
 Chromium. A sessão é persistida na tabela `whatsapp_auth_state`, isolada por
 organização e nome de sessão. Todos os valores são cifrados na aplicação antes
 de chegar ao banco. `WHATSAPP_AUTH_ENCRYPTION_KEY` é gerada pelo Blueprint e
-nunca deve ser trocada ou removida enquanto existir uma sessão ativa.
+nunca deve ser trocada ou removida enquanto existir uma sessão ativa. Durante
+a primeira sincronização do Blueprint, o backend também aceita uma subchave
+separada derivada do `JWT_SECRET`; isso evita cair em filesystem efêmero se a
+variável nova ainda não tiver sido aplicada pelo Render.
 
 Se o WhatsApp desconectar por queda de rede ou restart, o serviço tenta
 reconectar usando as credenciais do Supabase. Se a sessão for deslogada de fato

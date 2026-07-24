@@ -6,6 +6,7 @@ import {
   encryptWhatsappAuthValue,
 } from "../../lib/whatsapp-auth-crypto";
 import {
+  configuredWhatsappAuthKeyMaterials,
   configuredWhatsappAuthPersistence,
   configuredWhatsappAuthStore,
   shouldAutoReconnectWhatsapp,
@@ -72,6 +73,17 @@ test("classifica store SQL como persistente e filesystem efêmero corretamente",
     "database",
   );
   assert.equal(
+    configuredWhatsappAuthStore({
+      NODE_ENV: "production",
+      DB_PROVIDER: "supabase",
+    }),
+    "database",
+  );
+  assert.equal(
+    configuredWhatsappAuthStore({ NODE_ENV: "development" }),
+    "filesystem",
+  );
+  assert.equal(
     configuredWhatsappAuthPersistence({
       WHATSAPP_AUTH_STORE: "database",
     }),
@@ -91,6 +103,33 @@ test("classifica store SQL como persistente e filesystem efêmero corretamente",
       RENDER_DISK_PATH: "/var/data",
     }),
     true,
+  );
+});
+
+test("usa chave dedicada com fallback estável no JWT durante a sincronização", () => {
+  const jwtSecret = "j".repeat(32);
+  const dedicated = "d".repeat(48);
+
+  assert.deepEqual(
+    configuredWhatsappAuthKeyMaterials(undefined, {
+      JWT_SECRET: jwtSecret,
+    }),
+    [jwtSecret],
+  );
+  assert.deepEqual(
+    configuredWhatsappAuthKeyMaterials(undefined, {
+      WHATSAPP_AUTH_ENCRYPTION_KEY: dedicated,
+      JWT_SECRET: jwtSecret,
+    }),
+    [dedicated, jwtSecret],
+  );
+  assert.throws(
+    () =>
+      configuredWhatsappAuthKeyMaterials(undefined, {
+        WHATSAPP_AUTH_ENCRYPTION_KEY: "curta",
+        JWT_SECRET: jwtSecret,
+      }),
+    /ao menos 32 caracteres/,
   );
 });
 
