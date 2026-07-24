@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "PowerShell(Copy-Item \"C:\\\\willydev\\\\willtalk\\\\node_modules\\\\lightningcss-win32-x64-msvc\\\\lightningcss.win32-x64-msvc.node\" \"C:\\\\willydev\\\\willtalk\\\\node_modules\\\\lightningcss\\\\lightningcss.win32-x64-msvc.node\")"
+    ]
+  }
+}

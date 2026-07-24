@@ -8,10 +8,18 @@ export function getIO() {
   return global.__io;
 }
 
-export function emitRealtime(event: string, payload: unknown) {
+export function organizationRoom(organizationId: string): string {
+  return `organization:${organizationId}`;
+}
+
+export function emitRealtime(
+  organizationId: string,
+  event: string,
+  payload: unknown,
+) {
   const io = getIO();
-  if (io) {
-    io.emit(event, payload);
+  if (io && organizationId) {
+    io.to(organizationRoom(organizationId)).emit(event, payload);
   }
 }
 

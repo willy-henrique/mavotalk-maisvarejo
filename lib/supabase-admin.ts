@@ -1,15 +1,27 @@
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
+import { createPostgresSupabaseShim, type SupabaseLikeClient } from "@/lib/postgres-supabase-shim";
 
-let client: SupabaseClient | null = null;
+type AnyDbClient = ReturnType<typeof createClient> | SupabaseLikeClient;
 
-export function getSupabaseClient(): SupabaseClient {
-  if (client) return client;
+let client: AnyDbClient | null = null;
+
+export function getSupabaseClient(): AnyDbClient {
+  if (client) {
+    return client;
+  }
 
   const url = process.env.SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const databaseUrl =
+    process.env.DATABASE_URL_RUNTIME || process.env.DATABASE_URL;
+
+  if (databaseUrl) {
+    client = createPostgresSupabaseShim();
+    return client;
+  }
 
   if (!url || !serviceRoleKey) {
-    throw new Error("SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY não configurados no .env");
+    throw new Error("Configure DATABASE_URL ou SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY no .env");
   }
 
   client = createClient(url, serviceRoleKey, {
@@ -21,4 +33,3 @@ export function getSupabaseClient(): SupabaseClient {
 
   return client;
 }
-

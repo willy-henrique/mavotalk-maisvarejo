@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/api";
 import { assignConversation, createAuditLog, getConversation } from "@/lib/repo";
 import { emitRealtime } from "@/lib/realtime";
+import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
 
 export async function POST(_: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireSession();
@@ -19,7 +20,17 @@ export async function POST(_: Request, context: { params: Promise<{ id: string }
     assigneeId: auth.session.userId,
   });
 
-  emitRealtime("conversation.updated", { id, status: "em_atendimento" });
+  emitRealtime(auth.session.organizationId, "conversation.updated", { id, status: "em_atendimento" });
+  void sendWillTalkWebhook({
+    event: "ticket_updated",
+    organizationId: auth.session.organizationId,
+    conversationId: id,
+    fallback: {
+      cliente: "Cliente",
+      tecnico: auth.session.name,
+      canal: "whatsapp",
+    },
+  });
 
   return NextResponse.json({ conversation: { id, status: "em_atendimento" } });
 }

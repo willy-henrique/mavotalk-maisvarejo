@@ -1,5 +1,7 @@
--- WillTalk — Supabase schema (PostgreSQL)
--- Run this against your Supabase database via SQL Editor or psql.
+-- Mavo Talk — baseline legado do schema Supabase/PostgreSQL.
+-- Mantido para compatibilidade com instalações anteriores. Em instalações e
+-- atualizações novas, a fonte autoritativa é supabase/migrations/ e os comandos
+-- npm run db:migrate / npm run db:verify.
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -58,6 +60,8 @@ CREATE TABLE IF NOT EXISTS queues (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_queues_org_menu_option
+  ON queues (organization_id, menu_option);
 
 -- Contacts
 CREATE TABLE IF NOT EXISTS contacts (
@@ -176,3 +180,17 @@ CREATE TABLE IF NOT EXISTS channels (
   twilio_phone_number   TEXT,
   is_active             BOOLEAN NOT NULL DEFAULT true
 );
+
+-- Impede acesso pelo Data API público. O backend do Mavo Talk usa a conexão
+-- PostgreSQL segura do Render (ou a service role) e continua com acesso.
+ALTER TABLE organizations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE queues ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tickets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE quick_replies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE business_hours ENABLE ROW LEVEL SECURITY;
+ALTER TABLE channels ENABLE ROW LEVEL SECURITY;

@@ -12,7 +12,16 @@ import {
   updateTicketByConversation,
 } from "@/lib/repo";
 import { emitRealtime } from "@/lib/realtime";
+import { invokeTicketUpsertLocal } from "@/lib/n8n-ticket-upsert-client";
+import {
+  buildInvestigationAiReply,
+  buildQuickGuidance,
+  INVESTIGATION_AI_ROUNDS,
+} from "@/lib/investigation-reply";
 import { buildDemandMenu, normalizePhone } from "@/lib/utils";
+import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
+import { routeBusinessWhatsappMessage } from "@/lib/business-access/business-whatsapp-router";
+import { requestIdFrom } from "@/lib/observability";
 
 function twimlMessage(body: string) {
   const response = new twilio.twiml.MessagingResponse();
@@ -42,15 +51,27 @@ function emptyTwiML() {
 }
 
 export async function POST(request: Request) {
+  const requestId = requestIdFrom(request);
+  const n8nOnlyMode = String(process.env.WILLTALK_N8N_ONLY || "").toLowerCase() === "true";
   const rawBody = await request.text();
   const params = new URLSearchParams(rawBody);
 
   const signature = request.headers.get("x-twilio-signature") || "";
   const token = process.env.TWILIO_AUTH_TOKEN;
 
+  if (!token && process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      { error: "Webhook Twilio indisponível", requestId },
+      { status: 503 },
+    );
+  }
   if (token) {
     const asObject = Object.fromEntries(params.entries());
-    const valid = twilio.validateRequest(token, signature, request.url, asObject);
+    const configuredBase = process.env.TWILIO_WEBHOOK_BASE_URL?.replace(/\/$/, "");
+    const validationUrl = configuredBase
+      ? `${configuredBase}${new URL(request.url).pathname}`
+      : request.url;
+    const valid = twilio.validateRequest(token, signature, validationUrl, asObject);
     if (!valid) {
       return NextResponse.json({ error: "Assinatura Twilio invalida" }, { status: 403 });
     }
@@ -84,9 +105,37 @@ export async function POST(request: Request) {
       const existing = await findMessageByExternalId(organizationId, messageSid);
       if (existing) return emptyTwiML();
     } catch {
-      // On Firestore/network error, process message anyway to avoid losing it
+      // Em falha transitória de persistência, segue para não perder a mensagem.
     }
   }
+
+  const businessRouting = await routeBusinessWhatsappMessage({
+    organizationId,
+    phone: from,
+    message: body || (mediaUrl ? "[mídia]" : ""),
+    conversationReference: messageSid,
+    requestId,
+  });
+  if (businessRouting.destination === "business") {
+    return businessRouting.reply
+      ? withXml(twimlMessage(businessRouting.reply))
+      : emptyTwiML();
+  }
+
+  // Bot-first / Cérebro v3: mesma triagem do não-oficial — delega ao ticket-upsert (sem TwiML de resposta).
+  if (n8nOnlyMode) {
+    void invokeTicketUpsertLocal({
+      event_id: messageSid || `tw-${Date.now()}`,
+      canal: "whatsapp",
+      organization_id: organizationId,
+      cliente: { nome: profileName, telefone: from },
+      mensagem: body || "[midia]",
+      mediaUrl: mediaUrl || undefined,
+      mimeType: mediaType || undefined,
+    });
+    return emptyTwiML();
+  }
+
   const { contact, conversation } = await getOrCreateContactAndOpenConversation(
     organizationId,
     from,
@@ -116,7 +165,29 @@ export async function POST(request: Request) {
     cloudinaryPublicId,
   });
 
-  emitRealtime("message.created", { conversationId: conversation.id, message: inbound });
+  emitRealtime(organizationId, "message.created", { conversationId: conversation.id, message: inbound });
+  if (conversation.isNew) {
+    void sendWillTalkWebhook({
+      event: "ticket_created",
+      organizationId,
+      conversationId: String(conversation.id),
+      fallback: {
+        cliente: contact.name,
+        canal: "whatsapp",
+        mensagem: body || "[midia]",
+      },
+    });
+  }
+  void sendWillTalkWebhook({
+    event: "message_received",
+    organizationId,
+    conversationId: String(conversation.id),
+    fallback: {
+      cliente: contact.name,
+      canal: "whatsapp",
+      mensagem: body || "[midia]",
+    },
+  });
 
   const queues = (await listQueues(organizationId)).filter((q) => q.isActive !== false);
 
@@ -124,17 +195,77 @@ export async function POST(request: Request) {
   const outOfHoursSuffix = businessOpen
     ? ""
     : "\n\nEstamos fora do horario comercial no momento. Seu chamado foi registrado e responderemos no proximo expediente.";
+  const buildInvestigationPrompt = (queueName?: string | null) => {
+    const header = queueName
+      ? `Perfeito, recebi sua demanda de *${queueName}*.`
+      : "Perfeito, recebi sua demanda.";
+    return `${header} Para te ajudar com mais precisão, me envie por favor: 1) print/foto da tela, 2) mensagem de erro exata e 3) se o impacto está total ou parcial.${outOfHoursSuffix}`;
+  };
 
   if (!conversation.triageCompleted) {
+    if (conversation.queueId) {
+      const currentQueue = queues.find((item) => String(item.id) === String(conversation.queueId));
+      const attempts = Number(conversation.menuAttempts || 0);
+
+      if (attempts >= INVESTIGATION_AI_ROUNDS) {
+        const quickGuidance = buildQuickGuidance(body);
+        await updateConversationById(organizationId, String(conversation.id), {
+          triageCompleted: true,
+          menuAttempts: attempts + 1,
+          status: "aguardando",
+        });
+
+        emitRealtime(organizationId, "conversation.updated", {
+          id: String(conversation.id),
+          queueId: String(conversation.queueId),
+          status: "aguardando",
+        });
+        void sendWillTalkWebhook({
+          event: "ticket_updated",
+          organizationId,
+          conversationId: String(conversation.id),
+          fallback: { cliente: contact.name, canal: "whatsapp", mensagem: body || "[midia]" },
+        });
+
+        return withXml(
+          twimlMessage(
+            `${quickGuidance ? `${quickGuidance}\n\n` : ""}Perfeito, obrigado pelas informações. Encaminhei seu chamado para o técnico responsável da fila *${String(currentQueue?.name || "Suporte")}* para continuidade.${outOfHoursSuffix}`,
+          ),
+        );
+      }
+
+      const reply = await buildInvestigationAiReply({
+        roundIndex: attempts,
+        body: body || (mediaType?.startsWith("image/") ? "[imagem]" : ""),
+        mediaUrl: finalMediaUrl,
+        mimeType: mediaType,
+        queueName: String(currentQueue?.name || "Suporte"),
+      });
+
+      await updateConversationById(organizationId, String(conversation.id), {
+        menuAttempts: attempts + 1,
+        status: "aguardando",
+      });
+      void sendWillTalkWebhook({
+        event: "ticket_updated",
+        organizationId,
+        conversationId: String(conversation.id),
+        fallback: { cliente: contact.name, canal: "whatsapp", mensagem: body || "[midia]" },
+      });
+
+      return withXml(twimlMessage(`${reply}${outOfHoursSuffix}`));
+    }
+
     const selectedOption = Number.parseInt(body, 10);
     const queue = queues.find((item) => Number(item.menuOption) === selectedOption);
 
     if (Number.isInteger(selectedOption) && queue) {
       const dueAt = new Date(Date.now() + Number(queue.defaultSlaMins || 30) * 60 * 1000);
 
-      await updateConversationById(String(conversation.id), {
+      await updateConversationById(organizationId, String(conversation.id), {
         queueId: String(queue.id),
-        triageCompleted: true,
+        triageCompleted: false,
+        menuAttempts: 0,
         status: "aguardando",
       });
 
@@ -143,29 +274,47 @@ export async function POST(request: Request) {
         firstResponseDueAt: dueAt,
       });
 
-      emitRealtime("conversation.updated", {
+      emitRealtime(organizationId, "conversation.updated", {
         id: String(conversation.id),
         queueId: String(queue.id),
         status: "aguardando",
       });
+      void sendWillTalkWebhook({
+        event: "ticket_updated",
+        organizationId,
+        conversationId: String(conversation.id),
+        fallback: {
+          cliente: contact.name,
+          canal: "whatsapp",
+          mensagem: body || "[midia]",
+        },
+      });
 
-      return withXml(
-        twimlMessage(`Demanda *${String(queue.name)}* registrada. Seu chamado esta na fila de atendimento.${outOfHoursSuffix}`),
-      );
+      return withXml(twimlMessage(buildInvestigationPrompt(String(queue.name))));
     }
 
     const nextAttempts = Number(conversation.menuAttempts || 0) + 1;
 
     if (nextAttempts >= 3) {
-      await updateConversationById(String(conversation.id), {
+      await updateConversationById(organizationId, String(conversation.id), {
         triageCompleted: true,
         menuAttempts: nextAttempts,
         status: "aguardando",
       });
 
-      emitRealtime(conversation.isNew ? "conversation.created" : "conversation.updated", {
+      emitRealtime(organizationId, conversation.isNew ? "conversation.created" : "conversation.updated", {
         id: String(conversation.id),
         status: "aguardando",
+      });
+      void sendWillTalkWebhook({
+        event: "ticket_updated",
+        organizationId,
+        conversationId: String(conversation.id),
+        fallback: {
+          cliente: contact.name,
+          canal: "whatsapp",
+          mensagem: body || "[midia]",
+        },
       });
 
       return withXml(
@@ -175,8 +324,18 @@ export async function POST(request: Request) {
       );
     }
 
-    await updateConversationById(String(conversation.id), {
+    await updateConversationById(organizationId, String(conversation.id), {
       menuAttempts: nextAttempts,
+    });
+    void sendWillTalkWebhook({
+      event: "ticket_updated",
+      organizationId,
+      conversationId: String(conversation.id),
+      fallback: {
+        cliente: contact.name,
+        canal: "whatsapp",
+        mensagem: body || "[midia]",
+      },
     });
 
     const menu = buildDemandMenu(
@@ -184,18 +343,29 @@ export async function POST(request: Request) {
         menuOption: Number(q.menuOption),
         name: String(q.name),
       })),
+      contact.name,
     );
 
     return withXml(twimlMessage(`${menu}\n\nTentativa ${nextAttempts}/3.${outOfHoursSuffix}`));
   }
 
-  await updateConversationById(String(conversation.id), {
+  await updateConversationById(organizationId, String(conversation.id), {
     status: conversation.status === "encerrado" ? "aguardando" : conversation.status,
   });
 
-  emitRealtime(conversation.isNew ? "conversation.created" : "conversation.updated", {
+  emitRealtime(organizationId, conversation.isNew ? "conversation.created" : "conversation.updated", {
     id: String(conversation.id),
     status: conversation.status === "encerrado" ? "aguardando" : conversation.status,
+  });
+  void sendWillTalkWebhook({
+    event: "ticket_updated",
+    organizationId,
+    conversationId: String(conversation.id),
+    fallback: {
+      cliente: contact.name,
+      canal: "whatsapp",
+      mensagem: body || "[midia]",
+    },
   });
 
   return withXml(twimlMessage(`Mensagem recebida. Um atendente continuara o atendimento por aqui.${outOfHoursSuffix}`));

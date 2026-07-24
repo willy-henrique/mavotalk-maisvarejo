@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="mavo" x1="8" y1="6" x2="58" y2="62" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8173F1"/>
+      <stop offset=".58" stop-color="#604DDF"/>
+      <stop offset="1" stop-color="#4533BF"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="url(#mavo)"/>
+  <circle cx="55" cy="8" r="16" fill="#fff" opacity=".1"/>
+  <path d="M15 15h34a6 6 0 0 1 6 6v18a6 6 0 0 1-6 6H34l-12 9v-9h-7a6 6 0 0 1-6-6V21a6 6 0 0 1 6-6Z" fill="#fff"/>
+  <path d="m20 35 6-11 6 9 6-9 6 11" fill="none" stroke="#6250DE" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

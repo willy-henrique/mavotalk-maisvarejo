@@ -114,7 +114,7 @@ const Painel: React.FC = () => {
             </svg>
             Área do administrador
           </span>
-          <h1 className="text-2xl font-black tracking-tight">Painel WillTalk</h1>
+          <h1 className="text-2xl font-black tracking-tight">Painel Mavo Talk</h1>
         </div>
         <p className="max-w-4xl mt-2 text-slate-400 text-sm">
           Conexão WhatsApp e configurações restritas a administradores e gestores.

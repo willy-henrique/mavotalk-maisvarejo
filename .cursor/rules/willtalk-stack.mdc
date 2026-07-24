@@ -1,0 +1,45 @@
+---
+description: Stack técnica e convenções do projeto WillTalk
+alwaysApply: true
+---
+
+# WillTalk — Stack e Convenções
+
+## Stack
+
+- **Framework**: Next.js 14+ (App Router)
+- **Linguagem**: TypeScript strict
+- **WhatsApp**: whatsapp-web.js (provider "unofficial") ou Twilio
+- **Banco**: Supabase (PostgreSQL) ou Firestore (configurável via repo pattern)
+- **Validação**: Zod para schemas de API
+- **Logger**: pino (`@/lib/logger`)
+- **Realtime**: `emitRealtime` para eventos de painel
+
+## Padrões de Código
+
+- Imports com alias `@/lib/...`, `@/components/...`
+- Funções async/await, sem callbacks
+- Erros tratados com try/catch, logados via `logger.error`
+- Entidades: `organizationId`, `conversationId`, `contactId`, `ticketId`
+- Telefone sempre no formato `whatsapp:+55XXXXXXXXXXX`
+- Datas em ISO 8601
+
+## Repo Pattern
+
+O projeto usa `lib/repo.ts` como facade que delega para `supabase-repo.ts` ou `firestore-repo.ts`:
+
+```typescript
+import { addInboundMessage, addOutboundMessage, listQueues, ... } from "@/lib/repo";
+```
+
+Nunca importe diretamente de `supabase-repo` ou `firestore-repo`.
+
+## Portas
+
+- WillTalk Next.js: `4001` ou `4002`
+- n8n: `5678`
+- Cérebro Operacional: `3000`
+
+## Variáveis de Ambiente
+
+Definidas em `.env` (não `.env.local`). Nunca commitar credenciais.

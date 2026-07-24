@@ -3,17 +3,27 @@
  * In dev, use relative URLs so Vite proxy sends requests to the backend.
  */
 
-const getBaseUrl = (): string => {
+export const getApiBaseUrl = (): string => {
   if (import.meta.env.DEV) return '';
-  const origin = import.meta.env.VITE_API_ORIGIN;
+  const origin =
+    import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_ORIGIN;
   return origin ? origin.replace(/\/$/, '') : '';
+};
+
+export const getSocketUrl = (): string => {
+  if (import.meta.env.DEV) return window.location.origin;
+  const origin =
+    import.meta.env.VITE_SOCKET_URL ||
+    import.meta.env.VITE_API_BASE_URL ||
+    import.meta.env.VITE_API_ORIGIN;
+  return origin ? origin.replace(/\/$/, '') : window.location.origin;
 };
 
 export async function apiFetch(
   path: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const base = getBaseUrl();
+  const base = getApiBaseUrl();
   const url = path.startsWith('http') ? path : `${base}${path}`;
   return fetch(url, {
     ...options,
@@ -53,11 +63,24 @@ async function parseJsonOrThrow(res: Response, path: string): Promise<unknown> {
   }
 }
 
+function errorMessage(data: unknown, fallback: string): string {
+  const error = (data as { error?: unknown })?.error;
+  if (typeof error === 'string') return error;
+  if (
+    error &&
+    typeof error === 'object' &&
+    typeof (error as { message?: unknown }).message === 'string'
+  ) {
+    return String((error as { message: string }).message);
+  }
+  return fallback;
+}
+
 export async function apiGet<T = unknown>(path: string): Promise<T> {
   const res = await apiFetch(path, { method: 'GET' });
   const data = await parseJsonOrThrow(res, path);
   if (!res.ok) {
-    const msg = (data as { error?: string })?.error || res.statusText;
+    const msg = errorMessage(data, res.statusText);
     throw new Error(msg);
   }
   return data as T;
@@ -70,7 +93,7 @@ export async function apiPost<T = unknown>(path: string, body?: unknown): Promis
   });
   const data = await parseJsonOrThrow(res, path);
   if (!res.ok) {
-    const msg = (data as { error?: string })?.error || res.statusText;
+    const msg = errorMessage(data, res.statusText);
     throw new Error(msg);
   }
   return data as T;
@@ -83,8 +106,15 @@ export async function apiPatch<T = unknown>(path: string, body?: unknown): Promi
   });
   const data = await parseJsonOrThrow(res, path);
   if (!res.ok) {
-    const msg = (data as { error?: string })?.error || res.statusText;
+    const msg = errorMessage(data, res.statusText);
     throw new Error(msg);
   }
+  return data as T;
+}
+
+export async function apiDelete<T = unknown>(path: string): Promise<T> {
+  const res = await apiFetch(path, { method: 'DELETE' });
+  const data = await parseJsonOrThrow(res, path);
+  if (!res.ok) throw new Error(errorMessage(data, res.statusText));
   return data as T;
 }

@@ -1,15 +1,15 @@
 {
-  "name": "omnidesk-pro---enterprise-helpdesk",
+  "name": "mavo-talk-web",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@google/genai": "^1.42.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^6.28.0",

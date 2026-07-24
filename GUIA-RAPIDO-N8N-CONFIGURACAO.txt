@@ -1,0 +1,123 @@
+﻿ðŸš€ GUIA RÃPIDO: CONFIGURAÃ‡ÃƒO N8N PARA WILLTALK + MAVO.AI
+
+========================================
+PASSO 1: INICIAR N8N
+========================================
+Execute no terminal (como Administrador se necessÃ¡rio):
+
+docker run -it --rm --name n8n -p 5678:5678 n8nio/n8n
+
+OU se jÃ¡ tiver n8n instalado globalmente:
+n8n start
+
+Acesse: http://localhost:5678
+
+========================================
+PASSO 2: IMPORTAR WORKFLOW
+========================================
+1. Na interface do n8n, clique em "Workflows" no menu lateral
+2. Clique no botÃ£o "+ New" (canto superior direito)
+3. Clique no menu de 3 pontos (â‹®) e selecione "Import from file"
+4. Selecione o arquivo:
+   C:\willydev\chat-inteligente\docs\n8n-workflow-mavoai-completo.json
+5. Clique em "Import"
+
+========================================
+PASSO 3: CONFIGURAR VARIÃVEIS DE AMBIENTE
+========================================
+No workflow importado, configure as variÃ¡veis:
+
+1. Clique no Ã­cone de engrenagem (âš™ï¸) no canto superior direito
+2. VÃ¡ para a aba "Variables"
+3. Adicione estas variÃ¡veis:
+
+   NOME              VALOR
+   --------------------------------------------
+   MAVOAI_URL        http://localhost:3000
+   MAVOAI_TOKEN      <use o valor de WILLTALK_WEBHOOK_TOKEN do seu .env / Render>
+   WILLTALK_URL      http://localhost:4002
+   WILLTALK_TOKEN    <use o valor de WILLTALK_WEBHOOK_TOKEN do seu .env / Render>
+   CEREBRO_INTERNAL_TOKEN internal_secret_token_123
+
+4. Clique em "Save"
+
+========================================
+PASSO 4: ATIVAR WORKFLOW
+========================================
+âš ï¸ CRÃTICO: O workflow DEVE estar ATIVO!
+
+1. No workflow importado, procure pelo botÃ£o de toggle no canto superior direito
+2. Ele deve estar VERDE (ativado)
+3. Se estiver CINZA (desativado), clique para ativar
+
+========================================
+PASSO 5: VERIFICAR WEBHOOK
+========================================
+O webhook estÃ¡ configurado com o path:
+/webhook-test/03651a89-8f3b-4635-a06d-e97157750352
+
+Para testar se o webhook estÃ¡ registrado:
+1. Envie uma requisiÃ§Ã£o POST para:
+   http://localhost:5678/webhook-test/03651a89-8f3b-4635-a06d-e97157750352
+   
+2. Se retornar 200: Webhook funcionando!
+3. Se retornar 404: Workflow nÃ£o estÃ¡ ativo
+
+========================================
+PASSO 6: ATUALIZAR WILLTALK
+========================================
+Execute o script de atualizaÃ§Ã£o:
+
+cd C:\willydev\chat-inteligente
+scripts\atualizar-willtalk-env.bat
+
+Isso atualizarÃ¡ o .env do WillTalk com:
+WILLTALK_WEBHOOK_URL=http://localhost:5678/webhook-test/03651a89-8f3b-4635-a06d-e97157750352
+
+========================================
+PASSO 7: REINICIAR SERVIÃ‡OS
+========================================
+1. Reinicie o WillTalk:
+   cd C:\willydev\willtalk
+   npm run dev
+
+2. Verifique se MAVO.AI estÃ¡ rodando:
+   cd C:\willydev\chat-inteligente
+   npm run dev
+
+========================================
+PASSO 8: TESTAR INTEGRAÃ‡ÃƒO
+========================================
+Execute um dos testes:
+
+1. Teste rÃ¡pido:
+   teste-rapido-windows.bat
+
+2. Teste completo:
+   teste-integracao-completa-corrigido.bat
+
+3. Teste com mensagem WhatsApp simulada:
+   teste-mensagem-whatsapp.bat
+
+========================================
+PROBLEMAS COMUNS E SOLUÃ‡Ã•ES
+========================================
+
+âŒ PROBLEMA: n8n retorna 404 "webhook not registered"
+âœ… SOLUÃ‡ÃƒO: Workflow nÃ£o estÃ¡ ativo. Ative o toggle no canto superior direito.
+
+âŒ PROBLEMA: WillTalk nÃ£o envia para n8n
+âœ… SOLUÃ‡ÃƒO: Verifique .env do WillTalk. Execute scripts\atualizar-willtalk-env.bat
+
+âŒ PROBLEMA: MAVO.AI nÃ£o recebe ingestÃ£o
+âœ… SOLUÃ‡ÃƒO: Verifique se MAVO.AI estÃ¡ rodando (porta 3000)
+
+âŒ PROBLEMA: PostgreSQL nÃ£o conecta
+âœ… SOLUÃ‡ÃƒO: Verifique se PostgreSQL estÃ¡ rodando nas portas 5432 e 5433
+
+========================================
+FLUXO COMPLETO FUNCIONAL
+========================================
+âœ… WhatsApp -> WillTalk -> n8n -> WillTalk triagem -> MAVO.AI -> Resposta IA -> WhatsApp
+
+O sistema estÃ¡ 100% configurado para operaÃ§Ã£o completa!

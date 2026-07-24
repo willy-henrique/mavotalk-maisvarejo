@@ -9,7 +9,7 @@ async function main() {
     update: {},
     create: {
       id: "org_willtalk_default",
-      name: "WillTalk Suporte",
+      name: "Mavo Talk",
     },
   });
 
@@ -43,11 +43,13 @@ async function main() {
   });
 
   const demands = [
-    { menuOption: 1, name: "SPED (FISCAL)", colorHex: "#0EA5E9", defaultSlaMins: 30 },
-    { menuOption: 2, name: "Notas Saídas", colorHex: "#10B981", defaultSlaMins: 30 },
-    { menuOption: 3, name: "Notas Entrada", colorHex: "#F59E0B", defaultSlaMins: 30 },
-    { menuOption: 4, name: "Balança", colorHex: "#EF4444", defaultSlaMins: 45 },
-    { menuOption: 5, name: "Impressora", colorHex: "#8B5CF6", defaultSlaMins: 45 },
+    { menuOption: 1, name: "Ofertas e promoções", colorHex: "#F97316", defaultSlaMins: 5 },
+    { menuOption: 2, name: "Horários e localização", colorHex: "#3B82F6", defaultSlaMins: 5 },
+    { menuOption: 3, name: "Entregas e pedidos", colorHex: "#8B5CF6", defaultSlaMins: 10 },
+    { menuOption: 4, name: "Produtos e disponibilidade", colorHex: "#14B8A6", defaultSlaMins: 15 },
+    { menuOption: 5, name: "Açougue, padaria e hortifruti", colorHex: "#22C55E", defaultSlaMins: 15 },
+    { menuOption: 6, name: "Trocas, devoluções e pagamentos", colorHex: "#EAB308", defaultSlaMins: 20 },
+    { menuOption: 7, name: "Falar com um atendente", colorHex: "#EF4444", defaultSlaMins: 10 },
   ];
 
   for (const demand of demands) {
@@ -75,6 +77,14 @@ async function main() {
       },
     });
   }
+
+  await prisma.queue.updateMany({
+    where: {
+      organizationId: organization.id,
+      menuOption: { notIn: demands.map((item) => item.menuOption) },
+    },
+    data: { isActive: false },
+  });
 
   const businessDefaults = [
     { weekday: 1, startTime: "08:00", endTime: "18:00" },

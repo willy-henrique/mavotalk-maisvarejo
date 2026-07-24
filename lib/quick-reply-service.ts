@@ -5,7 +5,7 @@
 
 export function extractFirstName(name: string): string {
   if (!name || typeof name !== "string") return "";
-  let n = name
+  const n = name
     .replace(/\d+/g, " ")
     .replace(/\s+/g, " ")
     .trim();

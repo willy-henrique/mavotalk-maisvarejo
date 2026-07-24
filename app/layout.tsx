@@ -14,8 +14,12 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "WillTalk | Suporte WhatsApp",
-  description: "Plataforma profissional de atendimento e triagem via WhatsApp",
+  title: {
+    default: "Mavo Talk | Central de conversas",
+    template: "%s | Mavo Talk",
+  },
+  description: "Atendimento inteligente, organizado e humano em uma única central de conversas.",
+  applicationName: "Mavo Talk",
 };
 
 export default function RootLayout({
@@ -24,7 +28,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
       <body className={`${manrope.variable} ${plexMono.variable}`}>{children}</body>
     </html>
   );

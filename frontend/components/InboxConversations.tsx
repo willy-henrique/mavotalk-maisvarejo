@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { User } from '../types';
 import { Icons } from '../constants';
-import { apiFetch, apiPatch, apiPost } from '../services/api';
+import { apiFetch, apiPatch, apiPost, getApiBaseUrl, getSocketUrl } from '../services/api';
 
 type ConversationStatus = 'aguardando' | 'em_atendimento' | 'pendente_cliente' | 'encerrado';
 
@@ -76,6 +76,9 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const [quickReplyIndex, setQuickReplyIndex] = useState(0);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [typingAgent, setTypingAgent] = useState<{ name: string } | null>(null);
+  const [linkModalOpen, setLinkModalOpen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState('');
+  const [linkTitle, setLinkTitle] = useState('');
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const didInitRef = useRef(false);
@@ -210,7 +213,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
         userId: currentUser.id,
         userName: currentUser.name || 'Atendente',
       });
-      const base = import.meta.env.DEV ? '' : (import.meta.env.VITE_API_ORIGIN || '').replace(/\/$/, '');
+      const base = getApiBaseUrl();
       fetch(`${base}/api/conversations/${selectedId}/typing`, { method: 'POST', credentials: 'include' }).catch(() => {});
       typingTimeoutRef.current = setTimeout(() => {
         socketRef.current?.emit('typing:stop', { conversationId: selectedId, userId: currentUser.id });
@@ -230,6 +233,45 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     }
   };
 
+  const handleSendLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const url = linkUrl.trim();
+    if (!selectedId || !url) return;
+    const text = linkTitle.trim() ? `*${linkTitle.trim()}*\n${url}` : url;
+    setLinkModalOpen(false);
+    setLinkUrl('');
+    setLinkTitle('');
+    const optId = `opt-${Date.now()}`;
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === selectedId
+          ? {
+              ...c,
+              messages: [
+                ...(c.messages || []),
+                { id: optId, content: text, direction: 'outbound' as const, createdAt: new Date().toISOString() },
+              ],
+            }
+          : c,
+      ),
+    );
+    setSending(true);
+    try {
+      await apiPost(`/api/conversations/${selectedId}/messages`, { content: text });
+    } catch (err) {
+      console.error(err);
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === selectedId
+            ? { ...c, messages: (c.messages || []).filter((m) => m.id !== optId) }
+            : c,
+        ),
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !selectedId || !file.type.startsWith('image/') || uploadingImage) return;
@@ -238,7 +280,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const base = typeof window !== 'undefined' && import.meta.env.DEV ? '' : (import.meta.env.VITE_API_ORIGIN || '').replace(/\/$/, '');
+      const base = getApiBaseUrl();
       const res = await fetch(`${base}/api/conversations/${selectedId}/messages/upload`, {
         method: 'POST',
         credentials: 'include',
@@ -254,7 +296,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
       }
     } catch (err) {
       console.error(err);
-      alert('Falha ao enviar imagem. Verifique se o Cloudinary está configurado corretamente no .env (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET).');
+      alert('Falha ao enviar imagem. Verifique a configuração do serviço de mídia no backend.');
     } finally {
       setUploadingImage(false);
     }
@@ -327,7 +369,16 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
 
   useEffect(() => {
     fetchConversations(true);
-    const socket = io(window.location.origin, { path: '/socket.io' });
+    const socket = io(getSocketUrl(), {
+      path: '/socket.io',
+      withCredentials: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 10000,
+      randomizationFactor: 0.5,
+      timeout: 10000,
+    });
     socketRef.current = socket;
     socket.on('conversation.created', () => fetchConversations(false));
     socket.on('conversation.updated', () => fetchConversations(false));
@@ -336,7 +387,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
       if (payload?.conversationId && payload.conversationId !== selectedIdRef.current && document.hidden) {
         try {
           if (Notification.permission === 'granted') {
-            new Notification('WillTalk – Nova mensagem', { body: 'Você recebeu uma nova mensagem no chat.' });
+            new Notification('Mavo Talk – Nova mensagem', { body: 'Você recebeu uma nova mensagem no chat.' });
           }
         } catch {
           // ignore
@@ -347,6 +398,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
       if (payload.conversationId !== selectedIdRef.current) return;
       setTypingAgent(payload.isTyping ? { name: payload.userName } : null);
     });
+    socket.on('connect', () => fetchConversations(false));
     const t = setInterval(() => fetchConversations(false), 15000);
     return () => {
       socketRef.current = null;
@@ -440,7 +492,9 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   };
 
   const lastMessage = (c: ApiConversation) => {
-    const msgs = c.messages || [];
+    const msgs = [...(c.messages || [])].sort(
+      (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
+    );
     return msgs[msgs.length - 1];
   };
 
@@ -707,7 +761,9 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
               </div>
             </header>
             <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-3 min-h-0 flex flex-col">
-              {(selected.messages || []).map((m) => (
+              {[...(selected.messages || [])].sort(
+                (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
+              ).map((m) => (
                 <div
                   key={m.id}
                   className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
@@ -790,7 +846,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
             {selected.status !== 'encerrado' ? (
               <form onSubmit={handleSendMessage} className="p-4 bg-white dark:bg-slate-900/80 border-t border-slate-200 dark:border-slate-700 shrink-0 transition-colors">
                 <div className="flex gap-2 relative">
-                  <label className="shrink-0 flex items-center justify-center w-12 h-12 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer disabled:opacity-50 text-slate-500 dark:text-slate-400">
+                  <label className="shrink-0 flex items-center justify-center w-12 h-12 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer disabled:opacity-50 text-slate-500 dark:text-slate-400" title="Enviar imagem">
                     <input
                       type="file"
                       accept="image/*"
@@ -802,6 +858,18 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                       <path fillRule="evenodd" d="M1 5.25A2.25 2.25 0 013.25 3h13.5A2.25 2.25 0 0119 5.25v9.5A2.25 2.25 0 0116.75 17H3.25A2.25 2.25 0 011 14.75v-9.5zm1.5 5.81v3.69c0 .414.336.75.75.75h13.5a.75.75 0 00.75-.75v-3.69l-2.97-2.97a.75.75 0 00-1.06 0l-1.5 1.5a.75.75 0 01-1.06 0l-2.44-2.44a.75.75 0 00-1.06 0l-3.09 3.1z" clipRule="evenodd" />
                     </svg>
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => setLinkModalOpen(true)}
+                    disabled={sending}
+                    title="Anexar link de documento"
+                    className="shrink-0 flex items-center justify-center w-12 h-12 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-500 dark:text-slate-400"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                      <path d="M12.232 4.232a2.5 2.5 0 013.536 3.536l-1.225 1.224a.75.75 0 001.061 1.06l1.224-1.224a4 4 0 00-5.656-5.656l-3 3a4 4 0 00.225 5.865.75.75 0 00.977-1.138 2.5 2.5 0 01-.142-3.667l3-3z" />
+                      <path d="M11.603 7.963a.75.75 0 00-.977 1.138 2.5 2.5 0 01.142 3.667l-3 3a2.5 2.5 0 01-3.536-3.536l1.225-1.224a.75.75 0 00-1.061-1.06l-1.224 1.224a4 4 0 105.656 5.656l3-3a4 4 0 00-.225-5.865z" />
+                    </svg>
+                  </button>
                   <div className="flex-1 relative">
                     <input
                       ref={messageInputRef}
@@ -848,6 +916,60 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
               </div>
             )}
           </>
+        )}
+
+        {linkModalOpen && (
+          <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50"
+            onClick={() => setLinkModalOpen(false)}
+          >
+            <div
+              className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md p-6"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-4">Anexar link de documento</h3>
+              <form onSubmit={handleSendLink} className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">URL do documento *</label>
+                  <input
+                    type="url"
+                    value={linkUrl}
+                    onChange={(e) => setLinkUrl(e.target.value)}
+                    required
+                    autoFocus
+                    placeholder="https://docs.google.com/..."
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Título (opcional)</label>
+                  <input
+                    type="text"
+                    value={linkTitle}
+                    onChange={(e) => setLinkTitle(e.target.value)}
+                    placeholder="Ex: Proposta comercial"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div className="flex gap-2 justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setLinkModalOpen(false); setLinkUrl(''); setLinkTitle(''); }}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!linkUrl.trim()}
+                    className="px-6 py-2.5 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    Enviar link
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
 
         {editContactOpen && selected?.contact && (

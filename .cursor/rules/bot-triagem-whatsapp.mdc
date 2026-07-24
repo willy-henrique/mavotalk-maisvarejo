@@ -1,0 +1,79 @@
+---
+description: Configuração do bot de triagem WhatsApp com menu numérico, filas, SLA e handoff humano
+alwaysApply: true
+---
+
+# Bot de Triagem WhatsApp — WillTalk
+
+## Arquitetura
+
+O WillTalk é um sistema de atendimento via WhatsApp com triagem automática por menu numérico.
+
+```
+WhatsApp → whatsapp-web.js → processInboundMessage()
+  ├─ N8N_ONLY=true → handleInboundViaBotTriagem() → POST /api/webhooks/n8n/ticket-upsert
+  └─ N8N_ONLY=false → processa localmente (Twilio route)
+```
+
+O `ticket-upsert` é o endpoint central que:
+1. Salva a mensagem inbound
+2. Executa a triagem inteligente
+3. Envia a resposta direto no WhatsApp via `sendWhatsappMessage`
+4. Persiste a mensagem outbound no histórico
+
+## Fluxo de Triagem (OBRIGATÓRIO)
+
+### Regra principal
+A triagem só acontece se `conversation.triageCompleted === false`.
+
+### Casos de triagem:
+
+| Cenário | Ação | Resposta |
+|---------|------|----------|
+| Conversa nova (1ª msg) | Envia menu de boas-vindas | `buildDemandMenu()` |
+| Número válido → fila existe | `queueId` + `triageCompleted=true` + SLA | `buildTriageConfirmation(nomeFila)` |
+| Input inválido (tentativa < 3) | `menuAttempts++` | `buildTriageInvalidAttempt(options, attempt, 3)` |
+| 3 tentativas inválidas | `triageCompleted=true` + human handoff | `buildTriageHumanHandoff()` |
+| Sem filas configuradas | `triageCompleted=true` | `buildTriageNoQueues()` |
+| Nota 1-5 (satisfação) | Registra avaliação, NÃO abre triagem | `buildTriageRatingThanks()` |
+| Fora do horário | Adiciona aviso ao final | `buildOutOfHoursNotice()` |
+| Pós-triagem (`triageCompleted=true`) | Confirma recebimento (default) | `buildPostTriageClientAck()` + fora do horário se aplicável |
+
+### Pós-triagem
+Com `WILLTALK_POST_TRIAGE_REPLY=true` (padrão), cada mensagem após triagem recebe confirmação automática no WhatsApp até o atendente assumir. `WILLTALK_POST_TRIAGE_REPLY=false` restaura o modo “só humano responde”.
+
+## Arquivos-chave
+
+- `app/api/webhooks/n8n/ticket-upsert/route.ts` — Endpoint de triagem (recebe msg, decide, responde)
+- `lib/whatsapp-client.ts` — `handleInboundViaBotTriagem()` e `sendWhatsappMessage()`
+- `lib/utils.ts` — `buildDemandMenu`, `buildTriageConfirmation`, …, `buildPostTriageClientAck`, `buildOutOfHoursNotice`
+- `lib/cerebro-auto-reply.ts` — Auto-reply do Cérebro AI (só pós-triagem, opcional)
+- `lib/willtalk-webhook.ts` — Webhooks de notificação (desabilitado por padrão)
+
+## Variáveis de Ambiente Obrigatórias
+
+```env
+WILLTALK_N8N_ONLY=true
+WILLTALK_WEBHOOK_TOKEN=<token_forte_sha256>
+WHATSAPP_PROVIDER=unofficial
+DEFAULT_ORG_ID=org_willtalk-XXXXX
+```
+
+## Regras de Código
+
+- Mensagens WhatsApp usam markdown: `*negrito*`, `_itálico_`
+- Emojis são permitidos em mensagens de triagem (✅ ❌ ⚠️ ⭐ 👋 🕓)
+- `sendWhatsappMessage` com `fromBot: true` para evitar loop
+- `addOutboundMessage` com `skipStatusUpdate: true` para persistir sem mudar status
+- `emitRealtime` após cada mensagem para atualizar o painel em tempo real
+- Sempre tratar erros no envio WhatsApp com try/catch (não quebrar o fluxo)
+- Telefone normalizado: `whatsapp:+55XXXXXXXXXXX`
+- `event_id` obrigatório para idempotência (evitar duplicatas)
+
+## Proibido
+
+- Responder fora do fluxo de triagem
+- Enviar resposta AI do Cérebro ANTES da triagem completa
+- Ignorar contagem de tentativas (`menuAttempts`)
+- Criar respostas genéricas fora do padrão definido em `lib/utils.ts`
+- Fazer `sendWillTalkWebhook` apontar para n8n no caminho crítico

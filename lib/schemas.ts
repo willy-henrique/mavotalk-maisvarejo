@@ -32,7 +32,7 @@ export const updateContactSchema = z.object({
 export const adminCreateUserSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
-  password: z.string().min(4),
+  password: z.string().min(8).max(200),
   role: z.enum(["admin", "gestor", "atendente"]).default("atendente"),
 });
 
@@ -46,7 +46,7 @@ export const adminUpdateUserSchema = z
   .object({
     name: z.string().min(2).optional(),
     email: z.string().email().optional(),
-    password: z.string().min(4).optional(),
+    password: z.string().min(8).max(200).optional(),
     role: z.enum(["admin", "gestor", "atendente"]).optional(),
     isActive: z.boolean().optional(),
   })

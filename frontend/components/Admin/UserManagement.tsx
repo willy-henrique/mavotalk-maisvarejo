@@ -111,8 +111,8 @@ const UserManagement: React.FC = () => {
       setSubmitError('Preencha nome, e-mail e senha.');
       return;
     }
-    if (formPassword.length < 4) {
-      setSubmitError('A senha deve ter no mínimo 4 caracteres.');
+    if (formPassword.length < 8) {
+      setSubmitError('A senha deve ter no mínimo 8 caracteres.');
       return;
     }
     setSubmitting(true);
@@ -137,7 +137,7 @@ const UserManagement: React.FC = () => {
       <div className="flex justify-between items-end mb-8">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Colaboradores</h1>
-          <p className="text-slate-500">Gerencie sua equipe, permissões e acessos ao WillTalk.</p>
+          <p className="text-slate-500">Gerencie sua equipe, permissões e acessos ao Mavo Talk.</p>
         </div>
         <button
           onClick={openModal}
@@ -249,7 +249,7 @@ const UserManagement: React.FC = () => {
                     value={formEmail}
                     onChange={(e) => setFormEmail(e.target.value)}
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder="email@willtalk.com"
+                    placeholder="email@empresa.com"
                   />
                 </div>
                 <div>

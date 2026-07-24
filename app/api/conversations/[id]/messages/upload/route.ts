@@ -55,7 +55,7 @@ export async function POST(
       from: twilioFrom,
       to: String(conversation.contactPhone),
       body: `[${auth.session.name || "Atendente"}] Enviou uma imagem`,
-      mediaUrl: upload.secure_url,
+      mediaUrl: [upload.secure_url],
     });
     externalId = sent.sid;
   }
@@ -73,8 +73,8 @@ export async function POST(
     },
   );
 
-  emitRealtime("message.created", { conversationId: id, message });
-  emitRealtime("conversation.updated", { id, status: "em_atendimento" });
+  emitRealtime(auth.session.organizationId, "message.created", { conversationId: id, message });
+  emitRealtime(auth.session.organizationId, "conversation.updated", { id, status: "em_atendimento" });
 
   return NextResponse.json({ message }, { status: 201 });
 }

@@ -4,17 +4,20 @@ import { Icons } from './constants';
 import { useTheme } from './contexts/ThemeContext';
 import Sidebar from './components/Sidebar';
 import InboxConversations from './components/InboxConversations';
-import Dashboard from './components/Dashboard';
-import Vault from './components/Vault';
-import UserManagement from './components/Admin/UserManagement';
-import TicketTypeManagement from './components/Admin/TicketTypeManagement';
-import QuickReplyManagement from './components/Admin/QuickReplyManagement';
-import Contacts from './components/Contacts';
-import Painel from './components/Painel';
 import { AuthState, UserRole } from './types';
-import { mockTickets } from './services/mockData';
 import { AuthService } from './services/authService';
 import { apiFetch } from './services/api';
+
+const Dashboard = React.lazy(() => import('./components/Dashboard'));
+const UserManagement = React.lazy(() => import('./components/Admin/UserManagement'));
+const TicketTypeManagement = React.lazy(() => import('./components/Admin/TicketTypeManagement'));
+const QuickReplyManagement = React.lazy(() => import('./components/Admin/QuickReplyManagement'));
+const BusinessAccessManagement = React.lazy(() => import('./components/Admin/BusinessAccessManagement'));
+const AgentsManagement = React.lazy(() => import('./components/Admin/AgentsManagement'));
+const Contacts = React.lazy(() => import('./components/Contacts'));
+const Painel = React.lazy(() => import('./components/Painel'));
+const BusinessAnalytics = React.lazy(() => import('./components/BusinessAnalytics'));
+const BusinessAudit = React.lazy(() => import('./components/BusinessAudit'));
 
 type WhatsappStatus = 'idle' | 'initializing' | 'qr' | 'ready' | 'disconnected' | 'error';
 
@@ -26,16 +29,11 @@ const App: React.FC = () => {
   const [loginPass, setLoginPass] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
-  const [tickets, setTickets] = useState(mockTickets);
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsappStatus | null>(null);
   const [whatsappProvider, setWhatsappProvider] = useState<string>('');
 
   useEffect(() => {
-    if (session?.isAuthenticated) {
-      AuthService.refreshSession().then((refreshed) => {
-        if (refreshed) setSession(refreshed);
-      });
-    }
+    AuthService.refreshSession().then((refreshed) => setSession(refreshed));
   }, []);
 
   useEffect(() => {
@@ -85,7 +83,7 @@ const App: React.FC = () => {
             <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white mx-auto mb-6 shadow-xl shadow-blue-500/20">
               <Icons.Inbox className="w-8 h-8" />
             </div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">WillTalk</h1>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Mavo Talk</h1>
             <p className="text-slate-500 mt-2 font-medium">Suporte em tempo real para empresas.</p>
           </div>
 
@@ -98,7 +96,7 @@ const App: React.FC = () => {
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
                 className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all"
-                placeholder="nome@willtalk.com"
+                placeholder="nome@empresa.com"
               />
             </div>
             <div>
@@ -149,7 +147,7 @@ const App: React.FC = () => {
                 </svg>
               </button>
               <p className="text-sm font-semibold truncate">
-                Olá {session.user.name?.split(' ')[0] || 'Usuário'}, seja bem-vindo ao WillTalk!{' '}
+                Olá {session.user.name?.split(' ')[0] || 'Usuário'}, seja bem-vindo ao Mavo Talk!{' '}
                 <span className="text-white/80 font-normal">(Ativo)</span>
               </p>
             </div>
@@ -203,21 +201,27 @@ const App: React.FC = () => {
             </div>
           </header>
 
+          <React.Suspense fallback={<div className="flex-1 p-8 text-slate-500">Carregando módulo...</div>}>
           <Routes>
             <Route path="/" element={<Navigate to="/inbox" replace />} />
             <Route
               path="/inbox"
               element={<InboxConversations currentUser={session.user} />}
             />
-            <Route path="/dashboard" element={session.user.role === UserRole.AGENT ? <Navigate to="/inbox" replace /> : <Dashboard tickets={tickets} />} />
-            <Route path="/vault" element={<Vault tickets={tickets} />} />
+            <Route path="/dashboard" element={session.user.role === UserRole.AGENT ? <Navigate to="/inbox" replace /> : <Dashboard />} />
+            <Route path="/business" element={session.user.role === UserRole.AGENT ? <Navigate to="/inbox" replace /> : <BusinessAnalytics />} />
+            <Route path="/business/sincronizacao" element={session.user.role === UserRole.ADMIN ? <AgentsManagement /> : <Navigate to="/business" replace />} />
+            <Route path="/business/auditoria" element={session.user.role === UserRole.ADMIN ? <BusinessAudit /> : <Navigate to="/business" replace />} />
             <Route path="/contacts" element={<Contacts />} />
             <Route path="/admin/usuarios" element={<UserManagement />} />
             <Route path="/admin/tipos" element={<TicketTypeManagement />} />
             <Route path="/admin/respostas-rapidas" element={<QuickReplyManagement />} />
+            <Route path="/admin/acessos-gerenciais" element={session.user.role === UserRole.ADMIN ? <BusinessAccessManagement /> : <Navigate to="/inbox" replace />} />
+            <Route path="/admin/agentes" element={session.user.role === UserRole.ADMIN ? <AgentsManagement /> : <Navigate to="/inbox" replace />} />
             <Route path="/painel" element={<Painel />} />
             <Route path="*" element={<Navigate to="/inbox" replace />} />
           </Routes>
+          </React.Suspense>
         </main>
       </div>
   );

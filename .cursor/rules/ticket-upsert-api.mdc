@@ -1,0 +1,63 @@
+---
+description: Contrato da API ticket-upsert — endpoint central de triagem do bot
+globs: app/api/webhooks/n8n/ticket-upsert/**
+alwaysApply: false
+---
+
+# API ticket-upsert
+
+## Endpoint
+`POST /api/webhooks/n8n/ticket-upsert`
+
+## Autenticação
+Bearer token via header `Authorization: Bearer <WILLTALK_WEBHOOK_TOKEN>`
+
+## Schema do Payload (Zod)
+
+```typescript
+{
+  event_id: string,        // obrigatório, idempotência
+  canal: "whatsapp",       // literal
+  organization_id?: string,
+  cliente: { nome: string, telefone: string },
+  mensagem?: string,
+  body?: string,
+  media_url?: string,
+  mediaUrl?: string,
+  queue_id?: string,
+  prioridade?: "baixa" | "media" | "alta" | "critica",
+  ticket_ref?: string,
+  ticket_id?: string,
+  metadata?: Record<string, unknown>,
+}
+```
+
+## Resposta (DecisionPayload)
+
+```typescript
+{
+  action: "created" | "updated" | "ignored_duplicate" | "human_handoff" | "rating_recorded" | "error",
+  triageCompleted: boolean | null,
+  menuAttempts: number | null,
+  queueId: string | null,
+  shouldReply: boolean,
+  replyText: string | null,
+  conversationId: string | null,
+  ticketId: string | null,
+  // ...
+}
+```
+
+## Ordem de processamento
+
+1. Auth (Bearer token)
+2. Parse JSON + validação Zod
+3. Normalizar telefone (`whatsapp:+55...`)
+4. Checar duplicata (`findMessageByExternalId`)
+5. `getOrCreateContactAndOpenConversation`
+6. Resolver ticket por `ticket_id`/`ticket_ref` se fornecido
+7. Salvar mensagem inbound (`addInboundMessage`)
+8. Checar nota de satisfação (1-5)
+9. Executar triagem (menu, fila, tentativas, handoff)
+10. Enviar reply via WhatsApp (`sendReplyToWhatsApp`)
+11. Emitir webhooks e eventos realtime

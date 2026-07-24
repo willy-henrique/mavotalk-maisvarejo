@@ -5,6 +5,7 @@ import { closeConversationSchema } from "@/lib/schemas";
 import { emitRealtime } from "@/lib/realtime";
 import { TicketService } from "@/lib/services";
 import { sendWhatsappMessage } from "@/lib/whatsapp-client";
+import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireSession();
@@ -28,7 +29,18 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     reason: parsed.data.reason,
   });
 
-  emitRealtime("conversation.updated", { id, status: "encerrado", closeReason: parsed.data.reason });
+  emitRealtime(auth.session.organizationId, "conversation.updated", { id, status: "encerrado", closeReason: parsed.data.reason });
+  void sendWillTalkWebhook({
+    event: "ticket_updated",
+    organizationId: auth.session.organizationId,
+    conversationId: id,
+    fallback: {
+      cliente: "Cliente",
+      tecnico: auth.session.name,
+      canal: "whatsapp",
+      mensagem: `Ticket encerrado. Motivo: ${parsed.data.reason}`,
+    },
+  });
 
   // Se solicitar pesquisa de satisfação e tiver número do contato, envia mensagem de nota
   if (parsed.data.sendSurvey && existing.contactPhone) {

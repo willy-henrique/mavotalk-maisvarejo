@@ -11,20 +11,28 @@ interface SidebarProps {
 const TAB_BY_PATH: Record<string, string> = {
   '/inbox': 'inbox',
   '/dashboard': 'dashboard',
-  '/vault': 'vault',
+  '/business': 'business',
+  '/business/sincronizacao': 'business_sync',
+  '/business/auditoria': 'business_audit',
   '/contacts': 'contacts',
   '/admin/usuarios': 'admin_users',
   '/admin/tipos': 'admin_types',
   '/admin/respostas-rapidas': 'admin_quick_replies',
+  '/admin/acessos-gerenciais': 'admin_business_access',
+  '/admin/agentes': 'admin_agents',
   '/painel': 'painel',
 };
 
 const menuItems = [
   { id: 'inbox', label: 'Inbox', icon: Icons.Inbox, path: '/inbox', role: 'ANY' as const },
-  { id: 'dashboard', label: 'Métricas', icon: Icons.Chart, path: '/dashboard', role: 'METRICS' as const },
-  { id: 'vault', label: 'Cofre Acesso', icon: Icons.Vault, path: '/vault', role: 'ANY' as const },
+  { id: 'dashboard', label: 'Atendimento', icon: Icons.Chart, path: '/dashboard', role: 'METRICS' as const },
+  { id: 'business', label: 'Indicadores do negócio', icon: Icons.Chart, path: '/business', role: 'METRICS' as const },
   { id: 'contacts', label: 'Contatos', icon: Icons.Users, path: '/contacts', role: 'ANY' as const },
   { id: 'painel', label: 'Painel', icon: Icons.QrCode, path: '/painel', role: 'PAINEL' as const },
+  { id: 'business_sync', label: 'Sincronização', icon: Icons.Settings, path: '/business/sincronizacao', role: UserRole.ADMIN },
+  { id: 'business_audit', label: 'Auditoria gerencial', icon: Icons.Settings, path: '/business/auditoria', role: UserRole.ADMIN },
+  { id: 'admin_business_access', label: 'Acessos gerenciais', icon: Icons.Users, path: '/admin/acessos-gerenciais', role: UserRole.ADMIN },
+  { id: 'admin_agents', label: 'Agentes cloud', icon: Icons.Settings, path: '/admin/agentes', role: UserRole.ADMIN },
   { id: 'admin_users', label: 'Equipe', icon: Icons.Users, path: '/admin/usuarios', role: UserRole.ADMIN },
   { id: 'admin_types', label: 'Tipos de Ticket', icon: Icons.Settings, path: '/admin/tipos', role: UserRole.ADMIN },
   { id: 'admin_quick_replies', label: 'Respostas Rápidas', icon: Icons.Settings, path: '/admin/respostas-rapidas', role: UserRole.ADMIN },
@@ -36,6 +44,12 @@ const Sidebar: React.FC<SidebarProps> = ({ user }) => {
   const pathname = location.pathname;
   const activeTab = TAB_BY_PATH[pathname] ?? 'inbox';
   const [collapsed, setCollapsed] = useState(false);
+  const initials = user.name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'MT';
 
   const canSee = (item: (typeof menuItems)[0]) => {
     if (item.role === 'ANY') return true;
@@ -55,8 +69,8 @@ const Sidebar: React.FC<SidebarProps> = ({ user }) => {
           </div>
           {!collapsed && (
             <div className="min-w-0 overflow-hidden">
-              <h1 className="text-slate-800 dark:text-white font-black text-xl tracking-tighter truncate">WillTalk</h1>
-              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-widest leading-none">Suporte Pro</p>
+              <h1 className="text-slate-800 dark:text-white font-black text-xl tracking-tighter truncate">Mavo Talk</h1>
+              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-widest leading-none">Atendimento e negócio</p>
             </div>
           )}
         </div>
@@ -101,8 +115,11 @@ const Sidebar: React.FC<SidebarProps> = ({ user }) => {
 
       <div className={`p-4 border-t border-slate-200 dark:border-slate-800 ${collapsed ? 'flex justify-center' : ''}`}>
         <div className={`flex items-center gap-3 p-3 rounded-2xl bg-slate-100 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700/50 ${collapsed ? 'justify-center' : ''}`}>
-          <div className="w-10 h-10 rounded-full bg-slate-300 dark:bg-slate-700 shrink-0 overflow-hidden border-2 border-slate-300 dark:border-slate-600 shadow-sm">
-            <img src={`https://picsum.photos/seed/${user.id}/40/40`} alt="Avatar" />
+          <div
+            className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-200 shrink-0 border-2 border-blue-200 dark:border-blue-800 shadow-sm flex items-center justify-center text-xs font-black"
+            aria-label={`Usuário ${user.name}`}
+          >
+            {initials}
           </div>
           {!collapsed && (
             <div className="min-w-0 overflow-hidden">

@@ -8,17 +8,25 @@ import type {
   FireBusinessHour,
   ListContactItem,
   ContactAndConversation,
-} from "@/lib/firestore-repo";
+} from "@/lib/repo-types";
 import { getSupabaseClient } from "@/lib/supabase-admin";
+import type { Row, SupabaseLikeClient } from "@/lib/postgres-supabase-shim";
 import { DEFAULT_ORGANIZATION_ID } from "@/lib/utils";
 import { logger } from "@/lib/logger";
+import { SUPERMARKET_QUEUE_PRESET } from "@/lib/supermarket-config";
 import { randomUUID } from "node:crypto";
 
-function supa() {
-  return getSupabaseClient();
+// Both providers expose the fluent subset implemented by the local shim.
+// The repository normalizes every returned row before exposing it to callers.
+function supa(): SupabaseLikeClient {
+  return getSupabaseClient() as SupabaseLikeClient;
 }
 
-const ORG_ID = DEFAULT_ORGANIZATION_ID;
+function requireOrganizationId(organizationId: string): string {
+  const value = String(organizationId || "").trim();
+  if (!value) throw new Error("Contexto de organização ausente");
+  return value;
+}
 
 function iso(d: string | null | undefined): string {
   if (!d) return new Date().toISOString();
@@ -38,16 +46,28 @@ function isPlaceholderName(name: string): boolean {
 export async function getUserById(
   organizationId: string,
   id: string,
-): Promise<{ id: string; name: string } | null> {
+): Promise<
+  Pick<
+    FireUser,
+    "id" | "organizationId" | "name" | "email" | "role" | "isActive"
+  > | null
+> {
   const { data, error } = await supa()
     .from("users")
-    .select("id, name")
+    .select("id, organization_id, name, email, role, is_active")
     .eq("id", id)
     .eq("organization_id", organizationId)
     .maybeSingle();
   if (error) { logger.error({ err: error }, "supa getUserById"); throw error; }
   if (!data) return null;
-  return { id: String(data.id), name: String(data.name ?? "") };
+  return {
+    id: String(data.id),
+    organizationId: String(data.organization_id),
+    name: String(data.name ?? ""),
+    email: String(data.email ?? ""),
+    role: String(data.role ?? "atendente") as Role,
+    isActive: data.is_active !== false,
+  };
 }
 
 export async function getUserByEmail(email: string): Promise<FireUser | null> {
@@ -72,7 +92,7 @@ export async function getUserByEmail(email: string): Promise<FireUser | null> {
 }
 
 export async function listUsers(organizationId: string): Promise<FireUser[]> {
-  const orgId = organizationId || ORG_ID;
+  const orgId = requireOrganizationId(organizationId);
   const { data, error } = await supa()
     .from("users")
     .select("*")
@@ -96,7 +116,7 @@ export async function createUser(
   organizationId: string,
   payload: { name: string; email: string; passwordHash: string; role: Role; isActive?: boolean },
 ): Promise<{ error: "EMAIL_EXISTS" | null; user: FireUser | null }> {
-  const orgId = organizationId || ORG_ID;
+  const orgId = requireOrganizationId(organizationId);
   const normalizedEmail = payload.email.toLowerCase().trim();
   const { data: existing } = await supa()
     .from("users")
@@ -142,7 +162,7 @@ export async function updateUser(
   id: string,
   payload: Partial<{ name: string; email: string; passwordHash: string; role: Role; isActive: boolean }>,
 ): Promise<{ error: "NOT_FOUND" | "EMAIL_EXISTS" | null; user: FireUser | null }> {
-  const orgId = organizationId || ORG_ID;
+  const orgId = requireOrganizationId(organizationId);
   const { data: current } = await supa()
     .from("users")
     .select("*")
@@ -206,10 +226,10 @@ export async function deactivateUser(
 // ---------------------------------------------------------------------------
 
 export async function listQueues(organizationId: string): Promise<FireQueue[]> {
-  const orgId = organizationId || ORG_ID;
+  const orgId = requireOrganizationId(organizationId);
 
   // 1) Tenta carregar filas já existentes
-  let data;
+  let data: Row[] | null;
   {
     const { data: rows, error } = await supa()
       .from("queues")
@@ -223,28 +243,15 @@ export async function listQueues(organizationId: string): Promise<FireQueue[]> {
     data = rows;
   }
 
-  // 2) Se não houver nenhuma fila cadastrada, cria o menu padrão (1–12)
+  // 2) Se não houver nenhuma fila cadastrada, cria o menu padrão do supermercado.
   if (!data || data.length === 0) {
-    const defaults = [
-      { menu_option: 1, name: "Balança - MGV" },
-      { menu_option: 2, name: "Cadastro de produtos" },
-      { menu_option: 3, name: "Cotação" },
-      { menu_option: 4, name: "Fiscal (SPED Fiscal e Contribuições)" },
-      { menu_option: 5, name: "Impressora Fiscal / Etiqueta" },
-      { menu_option: 6, name: "Instalação de Certificado" },
-      { menu_option: 7, name: "Instalação do Sistema" },
-      { menu_option: 8, name: "Nota fiscal de Entrada" },
-      { menu_option: 9, name: "Nota fiscal de Saída" },
-      { menu_option: 10, name: "Relatório" },
-      { menu_option: 11, name: "Suporte financeiro" },
-      { menu_option: 12, name: "TEF / Cartão / PIX" },
-    ].map((q) => ({
+    const defaults = SUPERMARKET_QUEUE_PRESET.map((queue) => ({
       id: randomUUID(),
       organization_id: orgId,
-      name: q.name,
-      menu_option: q.menu_option,
-      color_hex: "#64748B",
-      default_sla_mins: 30,
+      name: queue.name,
+      menu_option: queue.menuOption,
+      color_hex: queue.colorHex,
+      default_sla_mins: queue.defaultSlaMins,
       is_active: true,
     }));
 
@@ -277,7 +284,7 @@ export async function listQueues(organizationId: string): Promise<FireQueue[]> {
 }
 
 export async function createQueue(organizationId: string, payload: Record<string, unknown>): Promise<FireQueue> {
-  const orgId = organizationId || ORG_ID;
+  const orgId = requireOrganizationId(organizationId);
   const id = randomUUID();
   const { data, error } = await supa()
     .from("queues")
@@ -309,7 +316,7 @@ export async function updateQueue(
   id: string,
   payload: Record<string, unknown>,
 ): Promise<FireQueue | null> {
-  const orgId = organizationId || ORG_ID;
+  const orgId = requireOrganizationId(organizationId);
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if ("name" in payload) updates.name = String(payload.name ?? "");
   if ("menuOption" in payload) updates.menu_option = Number(payload.menuOption ?? 0);
@@ -705,12 +712,14 @@ export async function addOutboundMessage(
     await supa()
       .from("conversations")
       .update({ status: "em_atendimento", updated_at: now })
-      .eq("id", conversationId);
+      .eq("id", conversationId)
+      .eq("organization_id", organizationId);
   } else {
     await supa()
       .from("conversations")
       .update({ updated_at: now })
-      .eq("id", conversationId);
+      .eq("id", conversationId)
+      .eq("organization_id", organizationId);
   }
 
   return {
@@ -749,6 +758,18 @@ export async function addInboundMessage(payload: {
     mime_type: payload.mimeType || null,
     cloudinary_public_id: payload.cloudinaryPublicId || null,
   });
+  const now = new Date().toISOString();
+  const { error: bumpErr } = await supa()
+    .from("conversations")
+    .update({ updated_at: now })
+    .eq("id", payload.conversationId)
+    .eq("organization_id", payload.organizationId);
+  if (bumpErr) {
+    logger.warn(
+      { err: bumpErr, conversationId: payload.conversationId },
+      "supa addInboundMessage: failed to bump conversation updated_at",
+    );
+  }
   return { id, ...payload };
 }
 
@@ -857,11 +878,16 @@ export async function getOrCreateContact(organizationId: string, phoneNumber: st
   return { id, organizationId, phoneNumber, name: finalName };
 }
 
-export async function updateContactAvatar(contactId: string, avatarUrl: string | null) {
+export async function updateContactAvatar(
+  organizationId: string,
+  contactId: string,
+  avatarUrl: string | null,
+) {
   await supa()
     .from("contacts")
     .update({ avatar_url: avatarUrl || null, updated_at: new Date().toISOString() })
-    .eq("id", contactId);
+    .eq("id", contactId)
+    .eq("organization_id", organizationId);
 }
 
 export async function listContacts(organizationId: string): Promise<ListContactItem[]> {
@@ -1098,7 +1124,7 @@ export async function getOrCreateOpenConversation(
     contactId,
     contactPhone,
     queueId: null,
-    status: "pendente_cliente",
+    status: "aguardando",
     triageCompleted: false,
     menuAttempts: 0,
     isNew: true,
@@ -1158,14 +1184,22 @@ export async function getOrCreateContactAndOpenConversation(
 // Conversation / Ticket Updates
 // ---------------------------------------------------------------------------
 
-export async function updateConversationById(id: string, payload: Record<string, unknown>) {
+export async function updateConversationById(
+  organizationId: string,
+  id: string,
+  payload: Record<string, unknown>,
+) {
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if ("status" in payload) updates.status = payload.status;
   if ("queueId" in payload) updates.queue_id = payload.queueId;
   if ("triageCompleted" in payload) updates.triage_completed = payload.triageCompleted;
   if ("menuAttempts" in payload) updates.menu_attempts = payload.menuAttempts;
   if ("contactPhone" in payload) updates.contact_phone = payload.contactPhone;
-  await supa().from("conversations").update(updates).eq("id", id);
+  await supa()
+    .from("conversations")
+    .update(updates)
+    .eq("id", id)
+    .eq("organization_id", organizationId);
 }
 
 export async function updateTicketByConversation(

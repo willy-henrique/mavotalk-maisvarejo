@@ -13,7 +13,7 @@ export const mockTicketTypes: TicketType[] = [
 export const mockUsers: User[] = [
   { 
     id: 'u-admin', 
-    name: 'Administrador WillTalk', 
+    name: 'Administrador Mavo Talk',
     email: 'admin@willtlk.com',
     password: 'admin123', 
     role: UserRole.ADMIN, 

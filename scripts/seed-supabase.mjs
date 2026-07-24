@@ -27,7 +27,7 @@ async function main() {
   {
     const { error } = await supabase
       .from("organizations")
-      .upsert({ id: orgId, name: "WillTalk" }, { onConflict: "id" });
+      .upsert({ id: orgId, name: "Mavo Talk" }, { onConflict: "id" });
     if (error) {
       console.error("Erro ao criar/atualizar organization:", error);
       process.exit(1);

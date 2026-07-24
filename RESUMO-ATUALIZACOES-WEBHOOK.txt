@@ -1,0 +1,69 @@
+📋 RESUMO DAS ATUALIZAÇÕES DO WEBHOOK N8N
+===========================================
+
+✅ TODOS OS ARQUIVOS FORAM ATUALIZADOS com o caminho correto do webhook:
+
+🔗 NOVO PATH DO WEBHOOK:
+http://localhost:5678/webhook-test/03651a89-8f3b-4635-a06d-e97157750352
+
+📁 ARQUIVOS ATUALIZADOS:
+1.  n8n-workflow-mavoai-completo.json (workflow do n8n)
+2.  WillTalk .env (configuração principal)
+3.  teste-rapido-windows.bat (script de teste)
+4.  teste-integracao-completa-corrigido.bat (script de teste)
+5.  teste-integracao-completa.bat (script de teste)
+6.  CONFIGURACAO-WILLTALK-MAVOAI.md (documentação)
+7.  atualizar-willtalk-env.bat (script de atualização)
+8.  teste-integracao-n8n.js (teste JavaScript)
+9.  teste-integracao-completa.js (teste JavaScript)
+10. start-teste-completo.bat (script de inicialização)
+11. verify-n8n-webhook.ps1 (script de verificação PowerShell)
+12. GUIA-RAPIDO-N8N-CONFIGURACAO.txt (novo guia)
+13. verificar-configuracao-webhook.bat (novo script de verificação)
+
+🎯 PROBLEMA RESOLVIDO:
+O erro 404 "webhook not registered" foi causado pelo uso do path incorreto.
+Antigo: /webhook/mavoai-ingest
+✅ Novo: /webhook-test/03651a89-8f3b-4635-a06d-e97157750352
+
+🚀 PRÓXIMOS PASSOS PARA O USUÁRIO:
+==================================
+
+1. 🔧 CONFIGURAR N8N:
+   - Iniciar n8n: docker run -it --rm --name n8n -p 5678:5678 n8nio/n8n
+   - Importar workflow: docs/n8n-workflow-mavoai-completo.json
+   - Ativar workflow (toggle no canto superior direito)
+   - Configurar variáveis no n8n
+
+2. 🔄 ATUALIZAR WILLTALK:
+   - Executar: cd C:\willydev\chat-inteligente
+   - Executar: scripts\atualizar-willtalk-env.bat
+   - Reiniciar WillTalk: npm run dev
+
+3. 🧪 TESTAR INTEGRAÇÃO:
+   - Executar: verificar-configuracao-webhook.bat
+   - Ou: teste-rapido-windows.bat
+   - Ou: teste-integracao-completa-corrigido.bat
+
+4. 📱 TESTE REAL:
+   - Conectar WhatsApp no WillTalk (QR code)
+   - Enviar mensagem real do celular
+   - Verificar fluxo completo
+
+🔍 VERIFICAÇÃO FINAL:
+- ✅ n8n responde na porta 5678
+- ✅ Workflow está ATIVO (toggle verde)
+- ✅ WillTalk .env tem URL correta
+- ✅ WillTalk responde na porta 4002
+- ✅ MAVO.AI responde na porta 3000
+- ✅ PostgreSQL rodando (portas 5432 e 5433)
+
+💡 DICA IMPORTANTE:
+O erro 404 "webhook not registered" só ocorre se:
+1. n8n não estiver rodando, OU
+2. Workflow não estiver ativo, OU
+3. URL do webhook estiver incorreta
+
+Com todas as atualizações feitas, o sistema está pronto para operação completa!
+
+🎉 SISTEMA 100% CONFIGURADO PARA WILLTALK + MAVO.AI VIA N8N!

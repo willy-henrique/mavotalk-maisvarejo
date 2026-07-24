@@ -1,0 +1,202 @@
+# Blueprint validado contra https://render.com/schema/render.yaml.json.
+# O PostgreSQL é externo (Supabase); este Blueprint não cria Render Postgres.
+previews:
+  generation: off
+
+services:
+  - type: web
+    name: mavo-talk-api
+    runtime: node
+    region: virginia
+    plan: starter
+    numInstances: 1
+    buildCommand: npm ci && npm run typecheck && npm run build
+    preDeployCommand: npm run db:migrate && npm run db:verify
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    maxShutdownDelaySeconds: 30
+    disk:
+      name: mavo-talk-whatsapp-session
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: HOST
+        value: 0.0.0.0
+      - key: DB_PROVIDER
+        value: supabase
+      - key: DATABASE_URL_RUNTIME
+        sync: false
+      - key: DATABASE_URL_MIGRATIONS
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: PG_SSL
+        value: "true"
+      - key: PG_POOL_MAX
+        value: "10"
+      - key: PG_CONNECTION_TIMEOUT_MS
+        value: "10000"
+      - key: PG_IDLE_TIMEOUT_MS
+        value: "30000"
+      - key: PG_APPLICATION_NAME
+        value: mavo-talk-api
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SESSION_COOKIE_NAME
+        value: mavo_talk_session
+      - key: SESSION_COOKIE_SAME_SITE
+        value: none
+      - key: FRONTEND_URL
+        sync: false
+      - key: MAVO_ALLOWED_ORIGINS
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: mavo-talk-key-value
+          property: connectionString
+      - key: MAVO_QUEUE_ENV
+        value: production
+      - key: WHATSAPP_PROVIDER
+        value: unofficial
+      - key: WHATSAPP_AUTH_PATH
+        value: /var/data/wwebjs_auth
+      - key: WHATSAPP_SESSION_NAME
+        value: mavo-talk-production
+      - key: WHATSAPP_AUTO_CONNECT
+        value: "true"
+      - key: RENDER_DISK_PATH
+        value: /var/data
+      - key: DEFAULT_ORG_ID
+        sync: false
+      - key: WILLTALK_WEBHOOK_TOKEN
+        generateValue: true
+      - key: WILLTALK_WEBHOOK_ORGANIZATION_ID
+        sync: false
+      - key: MAVO_BUSINESS_ANALYTICS_ENABLED
+        value: "true"
+      - key: MAVO_BUSINESS_ACCESS_ENABLED
+        value: "true"
+      - key: MAVO_AGENT_API_ENABLED
+        value: "true"
+      - key: MAVO_MCP_ENABLED
+        value: "false"
+      - key: MAVO_AGENT_CREDENTIAL_ENCRYPTION_KEY
+        sync: false
+      - key: MAVO_AGENT_CLOCK_TOLERANCE_SECONDS
+        value: "300"
+      - key: MAVO_AGENT_MAX_PAYLOAD_BYTES
+        value: "1048576"
+      - key: MAVO_AGENT_RATE_LIMIT_PER_MINUTE
+        value: "60"
+      - key: MAVO_AGENT_NEXT_SYNC_SECONDS
+        value: "300"
+      - key: MAVO_BUSINESS_SESSION_TTL_MINUTES
+        value: "15"
+      - key: MAVO_BUSINESS_PIN_MAX_ATTEMPTS
+        value: "5"
+      - key: MAVO_BUSINESS_PIN_LOCK_MINUTES
+        value: "15"
+      - key: MAVO_BUSINESS_QUERY_RATE_LIMIT_PER_MINUTE
+        value: "30"
+      - key: MAVO_DEFAULT_TIMEZONE
+        value: America/Sao_Paulo
+      - key: MAVO_DEFAULT_CURRENCY
+        value: BRL
+      - key: MAVO_MASTER_EMAIL
+        sync: false
+      - key: MAVO_MASTER_PASSWORD
+        sync: false
+      - key: MAVO_MASTER_NAME
+        value: Administrador Mavo
+      - key: MAVO_AI_BASE_URL
+        sync: false
+      - key: MAVO_AI_TOKEN
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+  - type: web
+    name: mavo-talk-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run typecheck && npm run build
+    staticPublishPath: ./dist
+    envVars:
+      - key: VITE_API_BASE_URL
+        sync: false
+      - key: VITE_SOCKET_URL
+        sync: false
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  - type: worker
+    name: mavo-talk-worker
+    runtime: node
+    region: virginia
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm run worker
+    maxShutdownDelaySeconds: 30
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DB_PROVIDER
+        value: supabase
+      - key: DATABASE_URL_RUNTIME
+        sync: false
+      - key: PG_SSL
+        value: "true"
+      - key: PG_POOL_MAX
+        value: "5"
+      - key: PG_APPLICATION_NAME
+        value: mavo-talk-worker
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: mavo-talk-key-value
+          property: connectionString
+      - key: MAVO_QUEUE_ENV
+        value: production
+      - key: WORKER_CONCURRENCY
+        value: "5"
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+  - type: keyvalue
+    name: mavo-talk-key-value
+    region: virginia
+    plan: starter
+    ipAllowList: []
+    maxmemoryPolicy: noeviction
+    persistenceMode: journal-snapshot

@@ -13,6 +13,7 @@ import {
   buildQuickReplyContext,
   replaceVariables,
 } from "@/lib/quick-reply-service";
+import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireSession();
@@ -86,8 +87,30 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     { authorId },
   );
 
-  emitRealtime("message.created", { conversationId: id, message });
-  emitRealtime("conversation.updated", { id, status: "em_atendimento" });
+  emitRealtime(auth.session.organizationId, "message.created", { conversationId: id, message });
+  emitRealtime(auth.session.organizationId, "conversation.updated", { id, status: "em_atendimento" });
+  void sendWillTalkWebhook({
+    event: "message_sent",
+    organizationId: auth.session.organizationId,
+    conversationId: id,
+    fallback: {
+      cliente: contact?.name || "Cliente",
+      canal: "whatsapp",
+      tecnico: authorName,
+      mensagem: resolvedContent,
+    },
+  });
+  void sendWillTalkWebhook({
+    event: "ticket_updated",
+    organizationId: auth.session.organizationId,
+    conversationId: id,
+    fallback: {
+      cliente: contact?.name || "Cliente",
+      canal: "whatsapp",
+      tecnico: authorName,
+      mensagem: resolvedContent,
+    },
+  });
 
   return NextResponse.json({ message }, { status: 201 });
 }

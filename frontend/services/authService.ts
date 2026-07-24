@@ -88,7 +88,11 @@ export class AuthService {
     }
     const data = (await res.json()) as { user?: { userId: string; name: string; email: string; role: BackendRole } };
     const payload = data.user;
-    if (!payload) return this.getSession();
+    if (!payload) {
+      this.state = { user: null, accessToken: null, isAuthenticated: false };
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      return null;
+    }
 
     const role = mapRole(payload.role);
     const user: User = {
