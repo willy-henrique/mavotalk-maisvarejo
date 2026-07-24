@@ -151,6 +151,23 @@ app
       }
     });
 
+    // No plano gratuito do Render não existe Background Worker, então as filas
+    // rodam dentro do próprio processo web.
+    let inlineWorkers = null;
+    if (String(process.env.MAVO_INLINE_WORKER || "").toLowerCase() === "true") {
+      try {
+        const { startWorkers } = await import("./worker.mjs");
+        inlineWorkers = startWorkers({ standalone: false });
+      } catch (error) {
+        console.error(
+          JSON.stringify({
+            event: "inline_worker_start_failed",
+            message: error instanceof Error ? error.message : "unknown",
+          }),
+        );
+      }
+    }
+
     global.__io = io;
     io.on("connection", (socket) => {
       const room = `organization:${socket.data.organizationId}`;
@@ -190,6 +207,10 @@ app
       deadline.unref();
       try {
         await new Promise((resolve) => io.close(resolve));
+        if (inlineWorkers) {
+          await inlineWorkers.close().catch(() => undefined);
+          inlineWorkers = null;
+        }
         if (global.__waClient) {
           await global.__waClient.destroy().catch(() => undefined);
           global.__waClient = undefined;

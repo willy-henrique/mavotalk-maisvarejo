@@ -64,6 +64,44 @@ test("ambiente da API valida chave de cifra e disco persistente", () => {
   );
 });
 
+test("sessão efêmera do WhatsApp exige opt-in explícito no Render", () => {
+  const semDisco: NodeJS.ProcessEnv = {
+    NODE_ENV: "production",
+    DB_PROVIDER: "supabase",
+    DATABASE_URL_RUNTIME: databaseUrl,
+    REDIS_URL: "rediss://default:secret@example.test:6379",
+    JWT_SECRET: "x".repeat(32),
+    MAVO_ALLOWED_ORIGINS: "https://app.example.test",
+    WHATSAPP_PROVIDER: "unofficial",
+    WHATSAPP_AUTH_PATH: "/tmp/wwebjs_auth",
+    RENDER: "true",
+  };
+
+  assert.throws(
+    () => validateApiEnvironment(semDisco),
+    /WHATSAPP_AUTH_PATH/,
+    "sem disco e sem opt-in deve falhar fechado",
+  );
+
+  assert.doesNotThrow(() =>
+    validateApiEnvironment({
+      ...semDisco,
+      WHATSAPP_ALLOW_EPHEMERAL_SESSION: "true",
+    }),
+  );
+
+  assert.throws(
+    () =>
+      validateApiEnvironment({
+        ...semDisco,
+        WHATSAPP_ALLOW_EPHEMERAL_SESSION: "true",
+        WHATSAPP_AUTH_PATH: "wwebjs_auth",
+      }),
+    /WHATSAPP_AUTH_PATH/,
+    "o opt-in não dispensa caminho absoluto",
+  );
+});
+
 test("worker falha fechado sem Redis em produção", () => {
   assert.throws(
     () =>

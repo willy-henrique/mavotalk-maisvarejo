@@ -1,5 +1,15 @@
 # Blueprint validado contra https://render.com/schema/render.yaml.json.
 # O PostgreSQL é externo (Supabase); este Blueprint não cria Render Postgres.
+#
+# ATENÇÃO — este Blueprint usa exclusivamente instâncias GRATUITAS. Isso impõe
+# limites reais, documentados em docs/DEPLOY-SUPABASE-RENDER.md:
+#   - sem disco persistente: a sessão do WhatsApp por QR Code é perdida a cada
+#     restart/deploy (WHATSAPP_ALLOW_EPHEMERAL_SESSION=true assume esse risco);
+#   - o serviço web hiberna após 15 min sem tráfego e leva ~1 min para acordar;
+#   - Background Worker não tem plano gratuito, então as filas rodam dentro do
+#     processo web via MAVO_INLINE_WORKER=true;
+#   - preDeployCommand exige plano pago, então as migrations rodam no build;
+#   - o Key Value gratuito não tem persistência: a fila é best-effort.
 previews:
   generation: off
 
@@ -8,17 +18,10 @@ services:
     name: mavo-talk-api
     runtime: node
     region: virginia
-    plan: starter
-    numInstances: 1
-    buildCommand: npm ci && npm run typecheck && npm run build
-    preDeployCommand: npm run db:migrate && npm run db:verify
+    plan: free
+    buildCommand: npm ci && npm run typecheck && npm run build && npm run db:migrate && npm run db:verify
     startCommand: npm run start
     healthCheckPath: /api/health
-    maxShutdownDelaySeconds: 30
-    disk:
-      name: mavo-talk-whatsapp-session
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
@@ -40,8 +43,10 @@ services:
         sync: false
       - key: PG_SSL
         value: "true"
+      # Instância gratuita tem pouca memória e o Supabase free tem limite baixo
+      # de conexões: pool enxuto.
       - key: PG_POOL_MAX
-        value: "10"
+        value: "3"
       - key: PG_CONNECTION_TIMEOUT_MS
         value: "10000"
       - key: PG_IDLE_TIMEOUT_MS
@@ -65,16 +70,24 @@ services:
           property: connectionString
       - key: MAVO_QUEUE_ENV
         value: production
+      # Sem Background Worker no plano gratuito: filas rodam no processo web.
+      - key: MAVO_INLINE_WORKER
+        value: "true"
+      - key: WORKER_CONCURRENCY
+        value: "2"
       - key: WHATSAPP_PROVIDER
         value: unofficial
       - key: WHATSAPP_AUTH_PATH
-        value: /var/data/wwebjs_auth
+        value: /tmp/wwebjs_auth
       - key: WHATSAPP_SESSION_NAME
         value: mavo-talk-production
-      - key: WHATSAPP_AUTO_CONNECT
+      # Sem disco no plano gratuito: a sessão não sobrevive a restart.
+      - key: WHATSAPP_ALLOW_EPHEMERAL_SESSION
         value: "true"
-      - key: RENDER_DISK_PATH
-        value: /var/data
+      # O Chromium do whatsapp-web.js não cabe com folga em 512 MB. Conecte pelo
+      # painel sob demanda em vez de subir junto com o processo.
+      - key: WHATSAPP_AUTO_CONNECT
+        value: "false"
       - key: DEFAULT_ORG_ID
         sync: false
       - key: WILLTALK_WEBHOOK_TOKEN
@@ -154,49 +167,9 @@ services:
         source: /*
         destination: /index.html
 
-  - type: worker
-    name: mavo-talk-worker
-    runtime: node
-    region: virginia
-    plan: starter
-    buildCommand: npm ci
-    startCommand: npm run worker
-    maxShutdownDelaySeconds: 30
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NODE_VERSION
-        value: "22"
-      - key: DB_PROVIDER
-        value: supabase
-      - key: DATABASE_URL_RUNTIME
-        sync: false
-      - key: PG_SSL
-        value: "true"
-      - key: PG_POOL_MAX
-        value: "5"
-      - key: PG_APPLICATION_NAME
-        value: mavo-talk-worker
-      - key: REDIS_URL
-        fromService:
-          type: keyvalue
-          name: mavo-talk-key-value
-          property: connectionString
-      - key: MAVO_QUEUE_ENV
-        value: production
-      - key: WORKER_CONCURRENCY
-        value: "5"
-      - key: CLOUDINARY_CLOUD_NAME
-        sync: false
-      - key: CLOUDINARY_API_KEY
-        sync: false
-      - key: CLOUDINARY_API_SECRET
-        sync: false
-
   - type: keyvalue
     name: mavo-talk-key-value
     region: virginia
-    plan: starter
+    plan: free
     ipAllowList: []
     maxmemoryPolicy: noeviction
-    persistenceMode: journal-snapshot
