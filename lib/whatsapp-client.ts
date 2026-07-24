@@ -36,6 +36,11 @@ import {
 import { DEFAULT_ORGANIZATION_ID, buildDemandMenu } from "@/lib/utils";
 import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
 import { routeBusinessWhatsappMessage } from "@/lib/business-access/business-whatsapp-router";
+import {
+  isDirectUserJid,
+  resolvePhoneJid,
+  whatsappPhoneFromJid,
+} from "@/lib/whatsapp-addressing";
 
 type WhatsappStatus = "idle" | "initializing" | "qr" | "ready" | "disconnected" | "error";
 
@@ -68,19 +73,27 @@ function getState(): WhatsappState {
   return global.__waState;
 }
 
-/** Baileys usa `xxx@s.whatsapp.net` (ou `@lid`) para chats 1:1, diferente do `@c.us` do whatsapp-web.js. */
-function chatIdToPhone(jid: string) {
-  const digits = jid.replace(/@(s\.whatsapp\.net|lid)$/i, "").replace(/\D/g, "");
-  return `whatsapp:+${digits}`;
-}
-
 function phoneToChatId(phone: string) {
   const digits = phone.replace("whatsapp:", "").replace(/\D/g, "");
   return `${digits}@s.whatsapp.net`;
 }
 
 function isDirectUserChat(jid: string): boolean {
-  return /@(s\.whatsapp\.net|lid)$/i.test(String(jid || ""));
+  return isDirectUserJid(jid);
+}
+
+async function resolveMessagePhone(
+  sock: WASocket,
+  msg: WAMessage,
+): Promise<string | null> {
+  const phoneJid = await resolvePhoneJid(
+    {
+      remoteJid: msg.key?.remoteJid,
+      remoteJidAlt: msg.key?.remoteJidAlt,
+    },
+    (lid) => sock.signalRepository.lidMapping.getPNForLID(lid),
+  );
+  return whatsappPhoneFromJid(phoneJid);
 }
 
 /** Tipos de conteúdo Baileys que não representam uma mensagem real de conversa. */
@@ -187,12 +200,22 @@ async function rateLimitedSend(sock: WASocket, jid: string, text: string, fromBo
 
 /** Persiste mensagens enviadas pelo celular (mesmo número conectado) para aparecer no Inbox.
  * Cria contato e conversa se não existirem, para que threads iniciadas pelo celular apareçam. */
-async function processOutboundMessageFromDevice(msg: WAMessage) {
+async function processOutboundMessageFromDevice(
+  sock: WASocket,
+  msg: WAMessage,
+) {
   const to = String(msg.key?.remoteJid || "");
   if (!msg.key?.fromMe || !isDirectUserChat(to)) return;
 
   const organizationId = DEFAULT_ORGANIZATION_ID;
-  const toPhone = chatIdToPhone(to);
+  const toPhone = await resolveMessagePhone(sock, msg);
+  if (!toPhone) {
+    logger.warn(
+      { to, toAlt: msg.key?.remoteJidAlt, id: msg.key?.id },
+      "Ignoring outbound WhatsApp message without a resolvable phone JID",
+    );
+    return;
+  }
 
   const fromBot = recentBotSends.has(to);
   if (fromBot) recentBotSends.delete(to);
@@ -234,9 +257,29 @@ async function processOutboundMessageFromDevice(msg: WAMessage) {
   });
 }
 
-async function handleInboundViaBotTriagem(msg: WAMessage) {
+async function handleInboundViaBotTriagem(
+  sock: WASocket,
+  msg: WAMessage,
+) {
   const remoteJid = String(msg.key?.remoteJid || "");
-  const fromPhone = chatIdToPhone(remoteJid);
+  const fromPhone = await resolveMessagePhone(sock, msg);
+  if (!fromPhone) {
+    logger.error(
+      {
+        from: remoteJid,
+        fromAlt: msg.key?.remoteJidAlt,
+        event_id: msg.key?.id,
+      },
+      "Inbound WhatsApp message has no resolvable phone JID",
+    );
+    await rateLimitedSend(
+      sock,
+      remoteJid,
+      "Não consegui iniciar o atendimento automático agora. Por favor, tente novamente em instantes.",
+      true,
+    );
+    return;
+  }
   const contactName = msg.pushName || "Cliente";
 
   let inboundText = extractMessageText(msg.message);
@@ -288,6 +331,55 @@ async function handleInboundViaBotTriagem(msg: WAMessage) {
       },
       "ticket-upsert local failed — WhatsApp may reply but inbox will not update until fixed (check WILLTALK_WEBHOOK_TOKEN, WILLTALK_INTERNAL_BASE_URL/PORT, DEFAULT_ORG_ID vs user organization)",
     );
+    await rateLimitedSend(
+      sock,
+      remoteJid,
+      "Não consegui concluir o atendimento automático agora. Por favor, tente novamente em instantes.",
+      true,
+    );
+    return;
+  }
+
+  const decision = result.data as {
+    shouldReply?: unknown;
+    replyText?: unknown;
+    replyDelivered?: unknown;
+    conversationId?: unknown;
+    organizationId?: unknown;
+  };
+  if (
+    decision.shouldReply === true &&
+    decision.replyDelivered === false &&
+    typeof decision.replyText === "string" &&
+    decision.replyText.trim()
+  ) {
+    const sent = await rateLimitedSend(
+      sock,
+      remoteJid,
+      decision.replyText.trim(),
+      true,
+    );
+    const conversationId = String(decision.conversationId || "").trim();
+    const organizationId = String(
+      decision.organizationId || DEFAULT_ORGANIZATION_ID,
+    ).trim();
+    if (conversationId && organizationId === DEFAULT_ORGANIZATION_ID) {
+      await addOutboundMessage(
+        organizationId,
+        conversationId,
+        decision.replyText.trim(),
+        sent?.key?.id || undefined,
+        { skipStatusUpdate: true },
+      );
+    }
+    logger.warn(
+      {
+        event_id: msg.key?.id,
+        from: fromPhone,
+        conversationId: conversationId || undefined,
+      },
+      "Recovered undelivered ticket-upsert reply using the original Baileys JID",
+    );
   }
 }
 
@@ -319,7 +411,7 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
   const n8nOnlyMode = String(process.env.WILLTALK_N8N_ONLY || "").toLowerCase() === "true";
   const aiTriageOnlyMode = String(process.env.WILLTALK_AI_TRIAGE_ONLY || "true").toLowerCase() !== "false";
   if (n8nOnlyMode || aiTriageOnlyMode) {
-    await handleInboundViaBotTriagem(msg);
+    await handleInboundViaBotTriagem(sock, msg);
     return;
   }
 
@@ -334,7 +426,14 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
     }
   }
 
-  const fromPhone = chatIdToPhone(remoteJid);
+  const fromPhone = await resolveMessagePhone(sock, msg);
+  if (!fromPhone) {
+    logger.error(
+      { from: remoteJid, fromAlt: msg.key?.remoteJidAlt, externalId },
+      "Unable to resolve inbound WhatsApp phone number",
+    );
+    return;
+  }
   const body = bodyRaw;
   const profileName = (msg.pushName || "").trim() || "Cliente";
 
@@ -743,7 +842,7 @@ export async function initWhatsappClient() {
         for (const msg of messages) {
           if (!msg.message) continue;
           if (msg.key?.fromMe) {
-            void processOutboundMessageFromDevice(msg).catch((error) => {
+            void processOutboundMessageFromDevice(sock, msg).catch((error) => {
               logger.error({ err: error }, "Failed to process outbound WhatsApp message (device)");
             });
           } else {

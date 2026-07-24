@@ -9,22 +9,10 @@ const { Server } = require("socket.io");
 const {
   validateApiEnvironment,
 } = require("./lib/config/runtime-env.cjs");
-
-function configuredOrigins() {
-  const raw =
-    process.env.MAVO_ALLOWED_ORIGINS ||
-    process.env.ALLOWED_ORIGINS ||
-    process.env.FRONTEND_URL ||
-    "";
-  const origins = raw
-    .split(",")
-    .map((value) => value.trim().replace(/\/$/, ""))
-    .filter(Boolean);
-  if (process.env.NODE_ENV !== "production") {
-    origins.push("http://localhost:4001", "http://localhost:5173");
-  }
-  return [...new Set(origins)];
-}
+const {
+  configuredOrigins,
+  isAllowedRequestOrigin,
+} = require("./lib/config/cors.cjs");
 
 function parseCookies(value) {
   return Object.fromEntries(
@@ -61,7 +49,12 @@ app
 
     const httpServer = createServer((req, res) => {
       const origin = String(req.headers.origin || "").replace(/\/$/, "");
-      if (origin && allowedOrigins.includes(origin)) {
+      const originAllowed = isAllowedRequestOrigin(
+        origin,
+        allowedOrigins,
+        req.headers,
+      );
+      if (origin && originAllowed) {
         res.setHeader("Access-Control-Allow-Origin", origin);
         res.setHeader("Access-Control-Allow-Credentials", "true");
         res.setHeader("Vary", "Origin");
@@ -75,14 +68,14 @@ app
         );
       }
       if (req.method === "OPTIONS") {
-        if (origin && !allowedOrigins.includes(origin)) {
+        if (!originAllowed) {
           res.writeHead(403).end();
           return;
         }
         res.writeHead(204).end();
         return;
       }
-      if (origin && !allowedOrigins.includes(origin)) {
+      if (!originAllowed) {
         res.writeHead(403, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Origem não permitida" }));
         return;

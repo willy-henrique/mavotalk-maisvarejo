@@ -61,6 +61,7 @@ type DecisionPayload = {
   queueId: string | null;
   shouldReply: boolean;
   replyText: string | null;
+  replyDelivered: boolean | null;
   events: string[];
   webhooks: string[];
   reason: string;
@@ -81,6 +82,7 @@ function decisionBase(partial: Partial<DecisionPayload>): DecisionPayload {
     queueId: null,
     shouldReply: false,
     replyText: null,
+    replyDelivered: null,
     events: [],
     webhooks: [],
     reason: "ok",
@@ -411,6 +413,7 @@ export async function POST(request: Request) {
     requestId,
   });
   if (businessRouting.destination === "business") {
+    let replyDelivered: boolean | null = null;
     if (businessRouting.reply) {
       const dryRun =
         String(process.env.WILLTALK_DRY_RUN_WHATSAPP || "").toLowerCase() ===
@@ -422,7 +425,9 @@ export async function POST(request: Request) {
             businessRouting.reply,
             { skipRateLimit: true, fromBot: true },
           );
+          replyDelivered = true;
         } catch (error) {
+          replyDelivered = false;
           logger.error(
             {
               err: error,
@@ -434,6 +439,7 @@ export async function POST(request: Request) {
           );
         }
       } else {
+        replyDelivered = true;
         logger.info(
           {
             organizationId,
@@ -453,6 +459,7 @@ export async function POST(request: Request) {
             : "updated",
         shouldReply: Boolean(businessRouting.reply),
         replyText: businessRouting.reply || null,
+        replyDelivered,
         reason: `business_${businessRouting.reason}`,
         duplicate: businessRouting.reason === "duplicate",
         organizationId,
@@ -648,6 +655,7 @@ export async function POST(request: Request) {
   let action: DecisionAction = conversation.isNew ? "created" : "updated";
   let shouldReply = false;
   let replyText: string | null = null;
+  let replyDelivered: boolean | null = null;
   let triageCompleted = Boolean(conversation.triageCompleted);
   let menuAttempts = Number(conversation.menuAttempts || 0);
   let queueId: string | null = conversation.queueId ? String(conversation.queueId) : null;
@@ -845,7 +853,12 @@ export async function POST(request: Request) {
   // ── SEND REPLY VIA WHATSAPP ────────────────────────────────────────
   const replyPhone = String(conversation.contactPhone || normalizedPhone);
   if (shouldReply && replyText) {
-    await sendReplyToWhatsApp(replyPhone, replyText, organizationId, String(conversation.id));
+    replyDelivered = await sendReplyToWhatsApp(
+      replyPhone,
+      replyText,
+      organizationId,
+      String(conversation.id),
+    );
   }
 
   // ── OUTBOUND WEBHOOKS ──────────────────────────────────────────────
@@ -955,6 +968,7 @@ export async function POST(request: Request) {
       queueId,
       shouldReply,
       replyText,
+      replyDelivered,
       events,
       webhooks,
       reason: decisionReason,
@@ -975,7 +989,7 @@ async function sendReplyToWhatsApp(
   text: string,
   organizationId: string,
   conversationId: string,
-): Promise<void> {
+): Promise<boolean> {
   const dryRun = String(process.env.WILLTALK_DRY_RUN_WHATSAPP || "").toLowerCase() === "true";
   if (dryRun) {
     const externalId = `dryrun-${Date.now()}`;
@@ -991,7 +1005,7 @@ async function sendReplyToWhatsApp(
       { conversationId, externalId, channel: "dry-run", textLength: text.length },
       "Triage reply simulated (WILLTALK_DRY_RUN_WHATSAPP=true)",
     );
-    return;
+    return true;
   }
 
   try {
@@ -1014,6 +1028,7 @@ async function sendReplyToWhatsApp(
       { conversationId, externalId, channel, textLength: text.length },
       "Triage reply sent via WhatsApp",
     );
+    return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     const hint =
@@ -1024,5 +1039,6 @@ async function sendReplyToWhatsApp(
       { conversationId, error: msg, hint: hint.trim() || undefined },
       `Failed to send triage reply via WhatsApp${hint}`,
     );
+    return false;
   }
 }

@@ -309,6 +309,7 @@ export async function getMavoSystemOverview(): Promise<MavoSystemOverview> {
   }
 
   const missingFields = [
+    !configured(process.env.SUPERMARKET_NAME) ? "Nome do supermercado" : null,
     !supermarketConfig.address ? "Endereço" : null,
     !supermarketConfig.weekdayHours ? "Horário semanal" : null,
     !supermarketConfig.offersUrl ? "Link de ofertas" : null,

@@ -19,7 +19,7 @@ services:
     runtime: node
     region: virginia
     plan: free
-    buildCommand: npm ci --include=dev && npm run typecheck && npm run build && npm run db:migrate && npm run db:verify
+    buildCommand: npm ci --include=dev && npm run typecheck && npm test && npm run lint && npm run build && npm run db:migrate && npm run db:verify
     startCommand: npm run start
     healthCheckPath: /api/health
     envVars:
@@ -63,6 +63,8 @@ services:
         sync: false
       - key: MAVO_ALLOWED_ORIGINS
         sync: false
+      - key: MAVO_API_PUBLIC_URL
+        value: https://mavo-talk-api.onrender.com
       - key: REDIS_URL
         fromService:
           type: keyvalue
@@ -96,13 +98,63 @@ services:
       - key: WHATSAPP_ALLOW_EPHEMERAL_SESSION
         value: "true"
       - key: WHATSAPP_AUTO_CONNECT
-        value: "false"
+        value: "true"
       - key: DEFAULT_ORG_ID
         sync: false
       - key: WILLTALK_WEBHOOK_TOKEN
         generateValue: true
       - key: WILLTALK_WEBHOOK_ORGANIZATION_ID
         sync: false
+      - key: WILLTALK_AI_TRIAGE_ONLY
+        value: "true"
+      - key: WILLTALK_N8N_ONLY
+        value: "false"
+      - key: WILLTALK_DRY_RUN_WHATSAPP
+        value: "false"
+      - key: SUPERMARKET_BOT_ENABLED
+        value: "true"
+      - key: SUPERMARKET_AUTO_APPLY_PRESET
+        value: "true"
+      - key: SUPERMARKET_BOT_NAME
+        value: Mavi
+      - key: SUPERMARKET_NAME
+        sync: false
+      - key: SUPERMARKET_ADDRESS
+        sync: false
+      - key: SUPERMARKET_MAPS_URL
+        sync: false
+      - key: SUPERMARKET_HOURS_WEEKDAYS
+        sync: false
+      - key: SUPERMARKET_HOURS_SUNDAY
+        sync: false
+      - key: SUPERMARKET_OFFERS_URL
+        sync: false
+      - key: SUPERMARKET_ORDER_URL
+        sync: false
+      - key: SUPERMARKET_DELIVERY_INFO
+        sync: false
+      - key: SUPERMARKET_PHONE
+        sync: false
+      - key: SUPERMARKET_AI_FALLBACK_ENABLED
+        value: "false"
+      - key: BUSINESS_HOURS_WEEKDAY_START
+        value: "07:00"
+      - key: BUSINESS_HOURS_WEEKDAY_END
+        value: "21:00"
+      - key: BUSINESS_HOURS_WEEKDAY_CLOSED
+        value: "false"
+      - key: BUSINESS_HOURS_SATURDAY_START
+        value: "07:00"
+      - key: BUSINESS_HOURS_SATURDAY_END
+        value: "21:00"
+      - key: BUSINESS_HOURS_SATURDAY_CLOSED
+        value: "false"
+      - key: BUSINESS_HOURS_SUNDAY_START
+        value: "08:00"
+      - key: BUSINESS_HOURS_SUNDAY_END
+        value: "14:00"
+      - key: BUSINESS_HOURS_SUNDAY_CLOSED
+        value: "false"
       - key: MAVO_BUSINESS_ANALYTICS_ENABLED
         value: "true"
       - key: MAVO_BUSINESS_ACCESS_ENABLED

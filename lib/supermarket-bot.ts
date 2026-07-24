@@ -51,7 +51,7 @@ export function getSupermarketBotConfig(): SupermarketBotConfig {
   return {
     enabled: envFlag("SUPERMARKET_BOT_ENABLED", true),
     botName: optionalEnv("SUPERMARKET_BOT_NAME") || "Mavi",
-    storeName: optionalEnv("SUPERMARKET_NAME") || "Mavo Supermercado",
+    storeName: optionalEnv("SUPERMARKET_NAME") || "Supermercado",
     address: optionalEnv("SUPERMARKET_ADDRESS"),
     mapsUrl: optionalEnv("SUPERMARKET_MAPS_URL"),
     weekdayHours: optionalEnv("SUPERMARKET_HOURS_WEEKDAYS"),

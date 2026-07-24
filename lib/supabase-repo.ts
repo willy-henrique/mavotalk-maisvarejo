@@ -1298,7 +1298,6 @@ export async function getBusinessHour(
     .select("*")
     .eq("organization_id", organizationId)
     .eq("weekday", weekday)
-    .eq("is_active", true)
     .maybeSingle();
   if (!data) return null;
   return {

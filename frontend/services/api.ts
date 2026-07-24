@@ -19,12 +19,17 @@ export const getSocketUrl = (): string => {
   return origin ? origin.replace(/\/$/, '') : window.location.origin;
 };
 
+export const getApiUrl = (path: string): string => {
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${getApiBaseUrl()}${normalizedPath}`;
+};
+
 export async function apiFetch(
   path: string,
   options: RequestInit = {}
 ): Promise<Response> {
-  const base = getApiBaseUrl();
-  const url = path.startsWith('http') ? path : `${base}${path}`;
+  const url = getApiUrl(path);
   return fetch(url, {
     ...options,
     credentials: 'include',

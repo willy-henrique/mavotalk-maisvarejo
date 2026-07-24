@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { User } from '../types';
 import { Icons } from '../constants';
-import { apiFetch, apiPatch, apiPost, getApiBaseUrl, getSocketUrl } from '../services/api';
+import { apiFetch, apiPatch, apiPost, getApiBaseUrl, getApiUrl, getSocketUrl } from '../services/api';
 
 type ConversationStatus = 'aguardando' | 'em_atendimento' | 'pendente_cliente' | 'encerrado';
 
@@ -781,13 +781,13 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                       </audio>
                     ) : m.type === 'image' && (m.cloudinaryPublicId || m.mediaUrl) ? (
                       <a
-                        href={m.cloudinaryPublicId ? `/api/media/signed?publicId=${encodeURIComponent(m.cloudinaryPublicId)}` : m.mediaUrl || '#'}
+                        href={m.cloudinaryPublicId ? getApiUrl(`/api/media/signed?publicId=${encodeURIComponent(m.cloudinaryPublicId)}`) : m.mediaUrl || '#'}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="block"
                       >
                         <img
-                          src={m.cloudinaryPublicId ? `/api/media/signed?publicId=${encodeURIComponent(m.cloudinaryPublicId)}` : m.mediaUrl || ''}
+                          src={m.cloudinaryPublicId ? getApiUrl(`/api/media/signed?publicId=${encodeURIComponent(m.cloudinaryPublicId)}`) : m.mediaUrl || ''}
                           alt=""
                           className="max-w-full rounded-lg max-h-64 object-contain"
                         />

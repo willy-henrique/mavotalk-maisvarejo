@@ -91,6 +91,24 @@ SUPERMARKET_PHONE=(00) 0000-0000
 
 O painel `/mavo` mostra os campos ausentes. Enquanto um dado não estiver configurado, a Mavi encaminha a solicitação para uma pessoa em vez de inventar resposta.
 
+Configure também o calendário usado pela automação para decidir se a equipe está
+disponível. O cadastro de horários no banco, quando existir, tem prioridade:
+
+```env
+BUSINESS_HOURS_WEEKDAY_START=07:00
+BUSINESS_HOURS_WEEKDAY_END=21:00
+BUSINESS_HOURS_WEEKDAY_CLOSED=false
+BUSINESS_HOURS_SATURDAY_START=07:00
+BUSINESS_HOURS_SATURDAY_END=21:00
+BUSINESS_HOURS_SATURDAY_CLOSED=false
+BUSINESS_HOURS_SUNDAY_START=08:00
+BUSINESS_HOURS_SUNDAY_END=14:00
+BUSINESS_HOURS_SUNDAY_CLOSED=false
+```
+
+Para fechar um grupo de dias, use `true` no respectivo campo `*_CLOSED`. Um dia
+marcado como inativo no cadastro do banco nunca cai no horário padrão.
+
 ## 5. Seed inicial
 
 O plano gratuito **não dá acesso ao Render Shell**. Rode o seed da sua máquina, apontando para o Supabase:

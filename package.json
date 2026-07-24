@@ -8,7 +8,7 @@
     "start": "node server.cjs",
     "typecheck": "tsc --noEmit --incremental false",
     "typecheck:all": "tsc --noEmit --incremental false && npm --prefix frontend run typecheck",
-    "test": "tsx --test tests/**/*.test.ts",
+    "test": "node scripts/run-tests.mjs",
     "lint": "eslint",
     "worker": "node worker.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",

@@ -54,7 +54,7 @@ const Painel: React.FC = () => {
       const res = await apiFetch('/api/whatsapp/connect', { method: 'POST' });
       if (!res.ok) {
         const data = await res.json();
-        if (res.status === 403) {
+        if (res.status === 403 && (data as { error?: string }).error === 'Sem permissão') {
           setActionError('Sem permissão. Apenas admin ou gestor pode conectar.');
         } else {
           setActionError((data as { error?: string }).error || 'Falha ao conectar');
@@ -76,7 +76,7 @@ const Painel: React.FC = () => {
       const res = await apiFetch('/api/whatsapp/disconnect', { method: 'POST' });
       if (!res.ok) {
         const data = await res.json();
-        if (res.status === 403) {
+        if (res.status === 403 && (data as { error?: string }).error === 'Sem permissão') {
           setActionError('Sem permissão.');
         } else {
           setActionError((data as { error?: string }).error || 'Falha ao desconectar');
