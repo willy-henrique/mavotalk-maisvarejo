@@ -76,7 +76,15 @@ services:
       - key: WORKER_CONCURRENCY
         value: "2"
       - key: WHATSAPP_PROVIDER
-        value: unofficial
+        value: twilio
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_NUMBER
+        sync: false
+      - key: TWILIO_WEBHOOK_BASE_URL
+        value: https://mavo-talk-api.onrender.com
       - key: WHATSAPP_AUTH_PATH
         value: /tmp/wwebjs_auth
       - key: WHATSAPP_SESSION_NAME
