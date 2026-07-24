@@ -20,6 +20,7 @@ import {
   listQueues,
   findMessageByExternalId,
   getOrCreateContactAndOpenConversation,
+  isContactBlocked,
   updateConversationById,
   updateTicketByConversation,
   updateContactAvatar,
@@ -173,6 +174,13 @@ async function downloadInboundMedia(
 ): Promise<{ base64: string; mimeType?: string } | null> {
   try {
     const buffer = await downloadMediaMessage(msg, "buffer", {});
+    if (buffer.byteLength > 16 * 1024 * 1024) {
+      logger.warn(
+        { id: msg.key?.id, sizeBytes: buffer.byteLength },
+        "Ignoring inbound WhatsApp media above 16 MB",
+      );
+      return null;
+    }
     const { mimeType } = detectInboundMedia(msg.message);
     return { base64: buffer.toString("base64"), mimeType };
   } catch (err) {
@@ -478,6 +486,11 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
     if (businessRouting.reply) {
       await rateLimitedSend(sock, remoteJid, businessRouting.reply, true);
     }
+    return;
+  }
+
+  if (await isContactBlocked(organizationId, fromPhone)) {
+    logger.info({ organizationId, phone: fromPhone }, "Ignored inbound message from blocked contact");
     return;
   }
 

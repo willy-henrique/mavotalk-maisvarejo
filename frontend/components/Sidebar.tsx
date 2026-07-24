@@ -6,6 +6,8 @@ import { AuthService } from '../services/authService';
 
 interface SidebarProps {
   user: User;
+  mobileOpen?: boolean;
+  onNavigate?: () => void;
 }
 
 const TAB_BY_PATH: Record<string, string> = {
@@ -38,7 +40,7 @@ const menuItems = [
   { id: 'admin_quick_replies', label: 'Respostas Rápidas', icon: Icons.Settings, path: '/admin/respostas-rapidas', role: UserRole.ADMIN },
 ];
 
-const Sidebar: React.FC<SidebarProps> = ({ user }) => {
+const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const pathname = location.pathname;
@@ -60,7 +62,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user }) => {
 
   return (
     <aside
-      className={`${collapsed ? 'w-20' : 'w-64'} bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex flex-col transition-all duration-300 relative z-[60] shadow-xl dark:shadow-2xl shrink-0 border-r border-slate-200 dark:border-slate-800`}
+      className={`${collapsed ? 'md:w-20' : 'md:w-64'} w-64 fixed inset-y-0 left-0 md:relative md:inset-auto ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex flex-col transition-all duration-300 z-[60] shadow-xl dark:shadow-2xl shrink-0 border-r border-slate-200 dark:border-slate-800`}
     >
       <div className="p-4 flex items-center justify-between gap-2">
         <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
@@ -98,7 +100,10 @@ const Sidebar: React.FC<SidebarProps> = ({ user }) => {
           return (
             <button
               key={item.id}
-              onClick={() => navigate(item.path)}
+              onClick={() => {
+                navigate(item.path);
+                onNavigate?.();
+              }}
               className={`w-full flex items-center gap-3 px-3 py-3.5 rounded-2xl transition-all ${
                 isActive
                   ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20'

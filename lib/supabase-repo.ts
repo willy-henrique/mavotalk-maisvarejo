@@ -694,7 +694,7 @@ export async function addOutboundMessage(
 
   const msgType = options?.type || "text";
   const id = randomUUID();
-  await supa().from("messages").insert({
+  const { error: insertError } = await supa().from("messages").insert({
     id,
     organization_id: organizationId,
     conversation_id: conversationId,
@@ -706,6 +706,13 @@ export async function addOutboundMessage(
     media_url: options?.mediaUrl || null,
     cloudinary_public_id: options?.cloudinaryPublicId || null,
   });
+  if (insertError) {
+    logger.error(
+      { err: insertError, organizationId, conversationId },
+      "supa addOutboundMessage: failed to persist message",
+    );
+    throw insertError;
+  }
 
   const now = new Date().toISOString();
   if (!options?.skipStatusUpdate) {
@@ -746,7 +753,7 @@ export async function addInboundMessage(payload: {
   cloudinaryPublicId?: string | null;
 }) {
   const id = randomUUID();
-  await supa().from("messages").insert({
+  const { error: insertError } = await supa().from("messages").insert({
     id,
     organization_id: payload.organizationId,
     conversation_id: payload.conversationId,
@@ -758,6 +765,17 @@ export async function addInboundMessage(payload: {
     mime_type: payload.mimeType || null,
     cloudinary_public_id: payload.cloudinaryPublicId || null,
   });
+  if (insertError) {
+    logger.error(
+      {
+        err: insertError,
+        organizationId: payload.organizationId,
+        conversationId: payload.conversationId,
+      },
+      "supa addInboundMessage: failed to persist message",
+    );
+    throw insertError;
+  }
   const now = new Date().toISOString();
   const { error: bumpErr } = await supa()
     .from("conversations")
@@ -809,7 +827,7 @@ export async function getCloudinaryPublicIdsForConversation(
 export async function getContactById(
   organizationId: string,
   contactId: string,
-): Promise<{ id: string; name: string; phoneNumber: string } | null> {
+): Promise<{ id: string; name: string; phoneNumber: string; blocked: boolean } | null> {
   const { data } = await supa()
     .from("contacts")
     .select("*")
@@ -821,6 +839,7 @@ export async function getContactById(
     id: String(data.id),
     name: String(data.name ?? "Cliente"),
     phoneNumber: String(data.phone_number ?? ""),
+    blocked: Boolean(data.blocked),
   };
 }
 
@@ -837,7 +856,13 @@ export async function getContactByPhone(organizationId: string, phoneNumber: str
     organizationId,
     phoneNumber: String(data.phone_number ?? phoneNumber),
     name: String(data.name ?? ""),
+    blocked: Boolean(data.blocked),
   };
+}
+
+export async function isContactBlocked(organizationId: string, phoneNumber: string): Promise<boolean> {
+  const contact = await getContactByPhone(organizationId, phoneNumber);
+  return contact?.blocked === true;
 }
 
 export async function getOrCreateContact(organizationId: string, phoneNumber: string, name: string) {
@@ -856,7 +881,8 @@ export async function getOrCreateContact(organizationId: string, phoneNumber: st
       await supa()
         .from("contacts")
         .update({ name: newName, updated_at: new Date().toISOString() })
-        .eq("id", existing.id);
+        .eq("id", existing.id)
+        .eq("organization_id", organizationId);
       return { id: String(existing.id), organizationId, phoneNumber: String(existing.phone_number), name: newName };
     }
     return {
@@ -1011,44 +1037,7 @@ async function getOpenConversation(
     .limit(1)
     .maybeSingle();
 
-  let data = openConv;
-
-  // 2) Se não houver nenhuma aberta, reaproveita a última conversa (mesmo encerrada)
-  //    para manter todo o histórico em um único chat por contato.
-  //    Reseta triagem para que o bot envie o menu de opções novamente,
-  //    mas já deixa o status em "aguardando" para aparecer na fila.
-  if (!data) {
-    const { data: lastConv } = await supa()
-      .from("conversations")
-      .select("*")
-      .eq("organization_id", organizationId)
-      .eq("contact_id", contactId)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (lastConv && lastConv.status === "encerrado") {
-      const now = new Date().toISOString();
-      await supa()
-        .from("conversations")
-        .update({
-          status: "aguardando",
-          triage_completed: false,
-          menu_attempts: 0,
-          queue_id: null,
-          updated_at: now,
-        })
-        .eq("id", lastConv.id);
-      lastConv.status = "aguardando";
-      lastConv.triage_completed = false;
-      lastConv.menu_attempts = 0;
-      lastConv.queue_id = null;
-      lastConv.updated_at = now;
-    }
-
-    data = lastConv ?? null;
-  }
-
+  const data = openConv;
   if (!data) return null;
   return {
     id: data.id,
@@ -1080,7 +1069,8 @@ export async function getOrCreateOpenConversation(
       await supa()
         .from("conversations")
         .update({ contact_phone: contactPhone, updated_at: new Date().toISOString() })
-        .eq("id", existing.id);
+        .eq("id", existing.id)
+        .eq("organization_id", organizationId);
     }
     return { ...existing, contactPhone: existing.contactPhone || contactPhone, isNew: false };
   }
@@ -1156,7 +1146,8 @@ export async function getOrCreateContactAndOpenConversation(
       await supa()
         .from("contacts")
         .update({ name: newName, updated_at: new Date().toISOString() })
-        .eq("id", existingContact.id);
+        .eq("id", existingContact.id)
+        .eq("organization_id", organizationId);
     }
     contact = {
       id: String(existingContact.id),

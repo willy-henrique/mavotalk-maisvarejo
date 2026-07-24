@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch, apiPost, apiPatch } from '../../services/api';
-import { Icons } from '../../constants';
 
 type QuickReply = {
   id: string;

@@ -61,6 +61,7 @@ export {
   getCloudinaryPublicIdsForConversation,
   getContactById,
   getContactByPhone,
+  isContactBlocked,
   getOrCreateContact,
   updateContact,
   updateContactAvatar,

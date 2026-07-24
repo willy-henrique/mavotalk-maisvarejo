@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, apiPatch } from '../services/api';
-import { Icons } from '../constants';
 
 type ApiContact = {
   id: string;
@@ -49,38 +48,11 @@ const Contacts: React.FC = () => {
       c.phoneNumber.includes(search)
   );
 
-  const formatDate = (iso: string | null) => {
-    if (!iso) return '-';
-    const d = new Date(iso);
-    const now = new Date();
-    const diff = now.getTime() - d.getTime();
-    if (diff < 60000) return 'agora';
-    if (diff < 3600000) return `${Math.floor(diff / 60000)} min`;
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h`;
-    return d.toLocaleDateString('pt-BR');
-  };
-
   const openConversation = (c: ApiContact) => {
     if (c.lastConversationId) {
       navigate(`/inbox?conversation=${c.lastConversationId}`);
     } else {
       navigate('/inbox');
-    }
-  };
-
-  const createConversation = async (c: ApiContact) => {
-    try {
-      const res = await apiFetch(`/api/contacts/${c.id}/start-conversation`, { method: 'POST' });
-      const data = (await res.json()) as { conversationId?: string };
-      if (res.ok && data.conversationId) {
-        navigate(`/inbox?conversation=${data.conversationId}`);
-      } else {
-        const msg = (data as { error?: string }).error || 'Erro ao criar chamado';
-        alert(msg);
-      }
-    } catch (e) {
-      console.error(e);
-      alert('Erro ao criar chamado');
     }
   };
 

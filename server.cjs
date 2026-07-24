@@ -66,6 +66,7 @@ app
           "Access-Control-Allow-Methods",
           "GET, POST, PUT, PATCH, DELETE, OPTIONS",
         );
+        res.setHeader("Access-Control-Max-Age", "600");
       }
       if (req.method === "OPTIONS") {
         if (!originAllowed) {
@@ -205,7 +206,12 @@ app
           inlineWorkers = null;
         }
         if (global.__waClient) {
-          await global.__waClient.destroy().catch(() => undefined);
+          // Baileys expõe `end`, não o `destroy` do antigo whatsapp-web.js.
+          try {
+            global.__waClient.end(undefined);
+          } catch {
+            // O processo já está encerrando; o timeout é o fallback.
+          }
           global.__waClient = undefined;
         }
         if (Array.isArray(global.__mavoQueues)) {

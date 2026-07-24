@@ -14,8 +14,8 @@ export const CloudinaryService = {
     return uploadTwilioMediaToCloudinary(mediaUrl, mimeType);
   },
 
-  getSignedUrl(publicId: string, expiresInSeconds = 3600) {
-    return generateSignedUrl(publicId, expiresInSeconds);
+  getSignedUrl(publicId: string) {
+    return generateSignedUrl(publicId);
   },
 
   async deleteResources(publicIds: string[]) {

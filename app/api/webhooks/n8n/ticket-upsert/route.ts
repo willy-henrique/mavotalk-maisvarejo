@@ -7,6 +7,7 @@ import {
   createAuditLog,
   findMessageByExternalId,
   getOrCreateContactAndOpenConversation,
+  isContactBlocked,
   listConversations,
   listQueues,
   updateConversationById,
@@ -31,23 +32,23 @@ import { requestIdFrom } from "@/lib/observability";
 import { timingSafeEqual } from "node:crypto";
 
 const ticketUpsertSchema = z.object({
-  event_id: z.string().min(1),
+  event_id: z.string().trim().min(1).max(160),
   canal: z.literal("whatsapp"),
-  organization_id: z.string().min(1).optional(),
+  organization_id: z.string().trim().min(1).max(128).optional(),
   cliente: z.object({
-    nome: z.string().min(1),
-    telefone: z.string().min(8),
+    nome: z.string().trim().min(1).max(160),
+    telefone: z.string().trim().min(8).max(32),
   }),
-  mensagem: z.string().min(1).optional(),
-  body: z.string().min(1).optional(),
-  media_url: z.string().url().optional(),
-  mediaUrl: z.string().url().optional(),
-  mime_type: z.string().min(1).optional(),
-  mimeType: z.string().min(1).optional(),
-  queue_id: z.string().min(1).optional(),
+  mensagem: z.string().min(1).max(20_000).optional(),
+  body: z.string().min(1).max(20_000).optional(),
+  media_url: z.string().url().max(2_048).optional(),
+  mediaUrl: z.string().url().max(2_048).optional(),
+  mime_type: z.string().min(1).max(160).optional(),
+  mimeType: z.string().min(1).max(160).optional(),
+  queue_id: z.string().min(1).max(128).optional(),
   prioridade: z.enum(["baixa", "media", "alta", "critica"]).optional(),
-  ticket_ref: z.string().min(1).optional(),
-  ticket_id: z.string().min(1).optional(),
+  ticket_ref: z.string().min(1).max(128).optional(),
+  ticket_id: z.string().min(1).max(128).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -337,6 +338,13 @@ async function resolveConversationTargetByTicketRef(params: {
 export async function POST(request: Request) {
   const incomingToken = getBearerToken(request.headers.get("authorization"));
   const requestId = requestIdFrom(request);
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > 1_048_576) {
+    return NextResponse.json(
+      decisionBase({ action: "error", shouldReply: false, reason: "payload_excedeu_limite" }),
+      { status: 413 },
+    );
+  }
 
   let body: unknown;
   try {
@@ -462,6 +470,22 @@ export async function POST(request: Request) {
         replyDelivered,
         reason: `business_${businessRouting.reason}`,
         duplicate: businessRouting.reason === "duplicate",
+        organizationId,
+        created: false,
+      }),
+      { status: 200 },
+    );
+  }
+
+  if (await isContactBlocked(organizationId, normalizedPhone)) {
+    logger.info(
+      { organizationId, normalizedPhone, requestId },
+      "n8n ticket-upsert ignored blocked contact",
+    );
+    return NextResponse.json(
+      decisionBase({
+        action: "updated",
+        reason: "contact_blocked",
         organizationId,
         created: false,
       }),

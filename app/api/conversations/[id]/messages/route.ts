@@ -14,6 +14,7 @@ import {
   replaceVariables,
 } from "@/lib/quick-reply-service";
 import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
+import { logger } from "@/lib/logger";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireSession();
@@ -44,6 +45,9 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   }
 
   const contact = await getContactById(auth.session.organizationId, conversation.contactId);
+  if (contact?.blocked) {
+    return NextResponse.json({ error: "Contato bloqueado para mensagens" }, { status: 409 });
+  }
   const ticketNumber = id.slice(0, 8);
 
   const ctx = buildQuickReplyContext({
@@ -58,7 +62,6 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   // Envia para o WhatsApp com a assinatura em linha separada
   const whatsappBody = `${authorName}:\n${resolvedContent}`;
 
-  // Tentativa de envio externo (WhatsApp / Twilio) — mas não bloqueia o registro da mensagem
   try {
     if (provider === "unofficial") {
       externalId = await sendWhatsappMessage(conversation.contactPhone, whatsappBody, {
@@ -72,11 +75,25 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
         body: whatsappBody,
       });
       externalId = sent.sid;
+    } else {
+      logger.error(
+        { provider, organizationId: auth.session.organizationId },
+        "Outbound WhatsApp provider is not configured",
+      );
+      return NextResponse.json(
+        { error: "Canal do WhatsApp indisponivel. Contate o administrador." },
+        { status: 503 },
+      );
     }
   } catch (err) {
-    // Se o WhatsApp não estiver pronto ou Twilio falhar, ainda assim registramos a mensagem no histórico
-    // e deixamos o atendente ver o erro apenas nos logs.
-    console.error("Failed to send outbound WhatsApp message", err);
+    logger.error(
+      { err, provider, organizationId: auth.session.organizationId, conversationId: id },
+      "Failed to deliver outbound WhatsApp message",
+    );
+    return NextResponse.json(
+      { error: "Nao foi possivel entregar a mensagem no WhatsApp. Tente novamente." },
+      { status: 503 },
+    );
   }
 
   const message = await addOutboundMessage(

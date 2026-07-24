@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WillTalk — Documentação técnica de produção</title>
+  <style>
+    @page { size: A4; margin: 15mm 13mm 17mm; }
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #526076;
+      --line: #d9e0ea;
+      --brand: #2563eb;
+      --soft: #f3f6fb;
+      --code: #101827;
+    }
+    * { box-sizing: border-box; }
+    html { font-size: 10.5pt; }
+    body {
+      margin: 0 auto;
+      max-width: 1120px;
+      color: var(--ink);
+      background: white;
+      font-family: "Segoe UI", Arial, sans-serif;
+      line-height: 1.48;
+    }
+    h1, h2, h3, h4 { color: #0f172a; line-height: 1.18; page-break-after: avoid; }
+    h1 {
+      margin: 0 0 12px;
+      padding: 24mm 0 10mm;
+      color: var(--brand);
+      font-size: 28pt;
+      border-bottom: 3px solid var(--brand);
+    }
+    h2 {
+      margin: 26px 0 12px;
+      padding-bottom: 5px;
+      font-size: 18pt;
+      border-bottom: 1px solid var(--line);
+    }
+    h3 { margin: 20px 0 9px; font-size: 13.5pt; }
+    p { margin: 7px 0 11px; }
+    a { color: #1d4ed8; text-decoration: none; }
+    blockquote {
+      margin: 14px 0;
+      padding: 10px 14px;
+      color: #334155;
+      background: #eff6ff;
+      border-left: 4px solid #3b82f6;
+    }
+    table {
+      width: 100%;
+      margin: 10px 0 18px;
+      border-collapse: collapse;
+      font-size: 8.6pt;
+      page-break-inside: auto;
+    }
+    thead { display: table-header-group; }
+    tr { page-break-inside: avoid; }
+    th, td {
+      padding: 6px 7px;
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }
+    th { color: #0f172a; background: #eaf0f9; }
+    tbody tr:nth-child(even) { background: #f8fafc; }
+    code {
+      padding: 1px 4px;
+      color: #be123c;
+      background: #f1f5f9;
+      border-radius: 3px;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.9em;
+    }
+    pre {
+      margin: 11px 0 17px;
+      padding: 13px;
+      color: #e2e8f0;
+      background: var(--code);
+      border-radius: 7px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      page-break-inside: avoid;
+    }
+    pre code { padding: 0; color: inherit; background: transparent; }
+    img {
+      display: block;
+      width: auto;
+      max-width: 100%;
+      max-height: 172mm;
+      margin: 14px auto 6px;
+      object-fit: contain;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      page-break-inside: avoid;
+    }
+    ul, ol { margin: 7px 0 13px; padding-left: 23px; }
+    li { margin: 3px 0; }
+    input[type="checkbox"] { margin-right: 6px; }
+    hr { border: 0; border-top: 1px solid var(--line); }
+    @media print {
+      body { max-width: none; }
+      h2 { break-before: auto; }
+      a { color: #1d4ed8; }
+    }
+  </style>
+</head>
+<body>
+<h1>WillTalk / Mavo Talk — Documentação técnica de produção</h1>
+<p><strong>Versão do documento:</strong> 1.0</p>
+<p><strong>Data da revisão:</strong> 24 de julho de 2026</p>
+<p><strong>Escopo:</strong> frontend operacional, API, WhatsApp, bot de supermercado, sincronização gerencial, segurança, banco de dados e deploy Render/Supabase.</p>
+<blockquote>
+<p>Este documento descreve o código efetivamente auditado na branch <code>main</code>. As imagens marcadas como “demonstração” foram produzidas com o mesmo build do frontend e dados sintéticos, sem expor clientes, credenciais ou um QR real.</p>
+</blockquote>
+<h2>1. Visão executiva</h2>
+<p>O WillTalk é uma plataforma multiempresa de atendimento e inteligência operacional para supermercados. O sistema concentra conversas do WhatsApp em tickets, executa triagem automática, distribui os atendimentos por filas, mantém histórico e SLA, expõe indicadores de atendimento e recebe dados comerciais por um agente instalado no ambiente do cliente.</p>
+<p>Em produção existem três recursos principais:</p>
+<ol>
+<li><strong><code>mavo-talk-web</code></strong>: SPA React/Vite servida como site estático no Render.</li>
+<li><strong><code>mavo-talk-api</code></strong>: Next.js com servidor HTTP próprio, Socket.IO, bot e workers inline.</li>
+<li><strong><code>mavo-talk-key-value</code></strong>: Redis/Key Value usado para rate limiting, filas BullMQ e coordenação transitória.</li>
+</ol>
+<p>O dado durável fica no PostgreSQL do Supabase. O navegador nunca acessa o Supabase diretamente.</p>
+<p><img src="assets/technical-guide/01-login-desktop.png" alt="Login desktop do build auditado"></p>
+<p><em>Figura 1 — Tela pública real do build auditado.</em></p>
+<h2>2. Arquitetura</h2>
+<pre><code class="language-mermaid">flowchart LR
+    U[Atendente / Gestor / Admin] --&gt;|HTTPS + cookie HttpOnly| WEB[React + Vite]
+    WEB --&gt;|REST / JSON| API[Next.js + servidor Node]
+    WEB &lt;--&gt;|Socket.IO autenticado| API
+    C[Cliente WhatsApp] &lt;--&gt;|Baileys por QR| API
+    T[Twilio opcional] &lt;--&gt;|Webhook assinado| API
+    API --&gt;|SQL parametrizado| DB[(Supabase PostgreSQL)]
+    API --&gt;|rate limit / BullMQ| REDIS[(Render Key Value)]
+    API --&gt;|mídias| CLOUD[Cloudinary]
+    API --&gt;|webhook com token| N8N[n8n / Cérebro]
+    AGENT[Agente do supermercado] --&gt;|HMAC + idempotência| API
+    API --&gt; BI[Indicadores gerenciais]
+</code></pre>
+<h3>2.1 Componentes e responsabilidades</h3>
+<table>
+<thead>
+<tr>
+<th>Componente</th>
+<th>Tecnologia</th>
+<th>Responsabilidade</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Frontend</td>
+<td>React 19, Vite, Tailwind, React Router, Recharts</td>
+<td>Login, Inbox, contatos, métricas, administração e indicadores</td>
+</tr>
+<tr>
+<td>API</td>
+<td>Next.js 16, Node.js 22, TypeScript</td>
+<td>Autorização, domínio, webhooks, integrações e páginas administrativas</td>
+</tr>
+<tr>
+<td>Servidor</td>
+<td><code>server.cjs</code>, HTTP nativo, Socket.IO</td>
+<td>CORS, WebSocket, ciclo de vida, workers inline e shutdown</td>
+</tr>
+<tr>
+<td>Banco</td>
+<td>PostgreSQL/Supabase</td>
+<td>Dados transacionais, auditoria, analytics e sessão cifrada do WhatsApp</td>
+</tr>
+<tr>
+<td>Repositório</td>
+<td><code>lib/supabase-repo.ts</code></td>
+<td>Acesso multi-tenant ao banco; todas as operações recebem <code>organizationId</code></td>
+</tr>
+<tr>
+<td>WhatsApp</td>
+<td>Baileys</td>
+<td>QR, recepção, envio e triagem sem Chromium</td>
+</tr>
+<tr>
+<td>Fallback</td>
+<td>Twilio</td>
+<td>Canal oficial opcional, webhook assinado e redundância de envio</td>
+</tr>
+<tr>
+<td>Filas</td>
+<td>BullMQ/Redis</td>
+<td>Webhooks, SLA e limpeza controlada de mídia</td>
+</tr>
+<tr>
+<td>Mídia</td>
+<td>Cloudinary</td>
+<td>Armazenamento e URLs assinadas verificadas contra organização e conversa</td>
+</tr>
+<tr>
+<td>Agente cloud</td>
+<td>HMAC-SHA256 + AES-GCM</td>
+<td>Ingestão de vendas, produtos, estoque e heartbeat</td>
+</tr>
+</tbody></table>
+<h2>3. Interfaces do sistema</h2>
+<h3>3.1 Login e sessão</h3>
+<p>O login operacional chama <code>POST /api/auth/login</code>. Se as credenciais forem válidas, a API cria um JWT HS256 com <code>issuer</code> e <code>audience</code> fixos e o grava em cookie <code>HttpOnly</code>, <code>Secure</code> em produção e <code>SameSite=None</code> para o frontend separado da API. A SPA confirma a sessão em <code>GET /api/me</code> antes de mostrar qualquer área protegida; o valor em <code>localStorage</code> serve somente como cache visual e não concede acesso.</p>
+<p><img src="assets/technical-guide/02-login-mobile.png" alt="Login mobile do build auditado"></p>
+<p><em>Figura 2 — Login responsivo, renderizado em viewport móvel.</em></p>
+<h3>3.2 Inbox</h3>
+<p>A Inbox consulta as conversas da organização da sessão, separa tickets abertos e resolvidos, permite puxar ou finalizar atendimentos e recebe atualizações em tempo real. Uma mensagem otimista desaparece e um erro visível é exibido se o provedor não confirmar a entrega.</p>
+<p><img src="assets/technical-guide/03-inbox-desktop-demo.png" alt="Inbox com dados demonstrativos"></p>
+<p><em>Figura 3 — Build real com fixture sintética. Nenhum telefone ou ticket pertence a cliente real.</em></p>
+<h3>3.3 Métricas de atendimento</h3>
+<p>Gestores e administradores veem tickets aguardando, em atendimento e encerrados, tempo médio da primeira resposta, satisfação e volume por fila. A autorização é aplicada no frontend e novamente na API.</p>
+<p><img src="assets/technical-guide/04-atendimento-metricas-demo.png" alt="Métricas com dados demonstrativos"></p>
+<p><em>Figura 4 — Métricas demonstrativas; valores não representam a produção.</em></p>
+<h3>3.4 Indicadores do supermercado</h3>
+<p>O agente cloud envia lotes diários de vendas, itens vendidos e entradas de estoque. O backend valida versão, assinatura, nonce, timestamp, checksum e chave de idempotência antes de gravar. O painel oferece séries temporais, ticket médio, produtos, estoque e consulta gerencial auditada.</p>
+<p><img src="assets/technical-guide/05-indicadores-negocio-demo.png" alt="Indicadores com dados demonstrativos"></p>
+<p><em>Figura 5 — Dados comerciais sintéticos usados apenas para documentação.</em></p>
+<h3>3.5 Administração do WhatsApp</h3>
+<p>Somente <code>admin</code> e <code>gestor</code> acessam status, telefone conectado, QR e comandos de conexão. O QR abaixo é deliberadamente inválido e contém apenas um marcador de documentação.</p>
+<p><img src="assets/technical-guide/06-whatsapp-administracao-demo.png" alt="Painel de WhatsApp demonstrativo"></p>
+<p><em>Figura 6 — Fluxo visual de conexão; não é uma sessão real do WhatsApp.</em></p>
+<h3>3.6 Uso móvel</h3>
+<p>No mobile, a barra lateral vira drawer, a lista e a conversa ocupam a largura completa em estados alternados e existe ação explícita para voltar à lista. O teste visual executado em 390 px confirmou <code>scrollWidth=390</code>, sem overflow horizontal.</p>
+<p><img src="assets/technical-guide/07-inbox-mobile-demo.png" alt="Inbox mobile com dados demonstrativos"></p>
+<p><em>Figura 7 — Conversa em viewport móvel, usando o build auditado.</em></p>
+<h2>4. Fluxos críticos</h2>
+<h3>4.1 Mensagem recebida pelo WhatsApp/Baileys</h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant Cliente
+    participant Baileys
+    participant Router as Roteador de negócio
+    participant Upsert as Ticket upsert
+    participant DB as Supabase
+    participant Bot as Bot supermercado
+    participant UI as Inbox
+
+    Cliente-&gt;&gt;Baileys: mensagem ou mídia
+    Baileys-&gt;&gt;Router: telefone, texto e identificador
+    Router-&gt;&gt;Router: decide acesso gerencial ou suporte
+    Router-&gt;&gt;Upsert: evento autenticado interno
+    Upsert-&gt;&gt;DB: verifica contato bloqueado e duplicidade
+    Upsert-&gt;&gt;DB: cria contato + novo protocolo, se necessário
+    Upsert-&gt;&gt;DB: persiste mensagem inbound
+    Upsert-&gt;&gt;Bot: classifica intenção/fila
+    Bot-&gt;&gt;DB: atualiza triagem, fila e SLA
+    Upsert--&gt;&gt;UI: Socket.IO na sala da organização
+    Bot--&gt;&gt;Cliente: resposta automática confirmada
+</code></pre>
+<p>Regras importantes:</p>
+<ul>
+<li>mensagens de grupo, broadcast, protocolo e ruído do Baileys são ignoradas;</li>
+<li>mensagens anteriores ao momento da conexão não disparam respostas retroativas;</li>
+<li><code>external_id</code> evita duplicidade;</li>
+<li>um contato bloqueado não cria ticket nem alimenta automação;</li>
+<li>depois de um ticket encerrado, uma nova mensagem cria novo protocolo; o ticket antigo não é reaberto;</li>
+<li>mídia recebida acima de 16 MB é recusada;</li>
+<li>a triagem usa filas do preset de supermercado e encaminha ao humano quando falta configuração, sem inventar informação.</li>
+</ul>
+<h3>4.2 Mensagem enviada pelo atendente</h3>
+<pre><code class="language-mermaid">sequenceDiagram
+    participant UI as Inbox
+    participant API
+    participant WA as WhatsApp/Twilio
+    participant DB as Supabase
+    participant RT as Socket.IO/Webhook
+
+    UI-&gt;&gt;API: POST mensagem + cookie
+    API-&gt;&gt;DB: valida conversa dentro do tenant
+    API-&gt;&gt;DB: verifica contato bloqueado
+    API-&gt;&gt;WA: envia texto assinado pelo atendente
+    alt entrega confirmada
+        WA--&gt;&gt;API: externalId
+        API-&gt;&gt;DB: persiste mensagem
+        API--&gt;&gt;RT: message.created / ticket.updated
+        API--&gt;&gt;UI: 201
+    else falha ou canal indisponível
+        API--&gt;&gt;UI: 503 sanitizado
+        UI-&gt;&gt;UI: remove otimista e mostra erro
+    end
+</code></pre>
+<p>A persistência ocorre somente depois da confirmação externa. Isso impede que o histórico declare como enviada uma mensagem que nunca saiu.</p>
+<h3>4.3 Upload de imagem</h3>
+<ol>
+<li>exige sessão válida, conversa do mesmo tenant e contato não bloqueado;</li>
+<li>aceita JPEG, PNG, WebP ou GIF, até 8 MB;</li>
+<li>envia ao Cloudinary;</li>
+<li>entrega a URL pelo WhatsApp/Twilio;</li>
+<li>persiste a mensagem somente após confirmação;</li>
+<li>se a entrega falhar, remove o upload órfão;</li>
+<li>a leitura posterior exige <code>publicId</code> + <code>conversationId</code> e confirma que a mídia pertence à organização autenticada.</li>
+</ol>
+<h3>4.4 Ciclo de vida do ticket</h3>
+<table>
+<thead>
+<tr>
+<th>Estado</th>
+<th>Significado</th>
+<th>Transição típica</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>pendente_cliente</code></td>
+<td>Bot ainda coleta informação</td>
+<td>mensagem/seleção do cliente</td>
+</tr>
+<tr>
+<td><code>aguardando</code></td>
+<td>Pronto para uma fila humana</td>
+<td>conclusão da triagem</td>
+</tr>
+<tr>
+<td><code>em_atendimento</code></td>
+<td>Atendente assumiu ou respondeu</td>
+<td><code>POST /assign</code> ou envio</td>
+</tr>
+<tr>
+<td><code>encerrado</code></td>
+<td>Atendimento finalizado</td>
+<td><code>POST /close</code></td>
+</tr>
+</tbody></table>
+<p>Fechar o ticket preserva mensagens e mídia. Exclusão de mídia deve obedecer uma política de retenção separada; ela não é mais vinculada ao fechamento operacional.</p>
+<h2>5. Autenticação e autorização</h2>
+<table>
+<thead>
+<tr>
+<th>Sigla</th>
+<th>Mecanismo</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>P</strong></td>
+<td>Público ou idempotente, sem dado sensível</td>
+</tr>
+<tr>
+<td><strong>U</strong></td>
+<td>Cookie de sessão operacional; tenant obtido do JWT</td>
+</tr>
+<tr>
+<td><strong>G</strong></td>
+<td>Cookie operacional + papel <code>admin</code> ou <code>gestor</code></td>
+</tr>
+<tr>
+<td><strong>A</strong></td>
+<td>Cookie operacional + papel <code>admin</code></td>
+</tr>
+<tr>
+<td><strong>M</strong></td>
+<td>Cookie master separado, usado somente em <code>/mavo</code></td>
+</tr>
+<tr>
+<td><strong>H</strong></td>
+<td>Credencial do agente + HMAC, timestamp, nonce e versão</td>
+</tr>
+<tr>
+<td><strong>W</strong></td>
+<td>Webhook: bearer token ou assinatura do provedor</td>
+</tr>
+</tbody></table>
+<p>Princípios aplicados:</p>
+<ul>
+<li>autorização real sempre no backend;</li>
+<li>a organização nunca é aceita de um payload de usuário operacional;</li>
+<li>Socket.IO verifica JWT e revalida <code>/api/me</code> antes de entrar na sala <code>organization:&lt;id&gt;</code>;</li>
+<li>o gestor não pode criar, promover, alterar ou remover administradores;</li>
+<li>a última conta admin ativa e o próprio acesso administrativo são protegidos;</li>
+<li>respostas rápidas globais só podem ser alteradas por gestor/admin;</li>
+<li>QR e diagnóstico do WhatsApp não são expostos a atendentes;</li>
+<li>endpoints de mídia confirmam vínculo com tenant e conversa;</li>
+<li>CORS usa allowlist explícita e rejeita preflight ou requisição com origem indevida.</li>
+</ul>
+<h2>6. Catálogo de rotas</h2>
+<h3>6.1 Sessão, saúde e assistência</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Acesso</th>
+<th>Função</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>POST</td>
+<td><code>/api/auth/login</code></td>
+<td>P</td>
+<td>Autentica usuário, aplica rate limit e cria cookie</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/auth/logout</code></td>
+<td>P</td>
+<td>Limpa o cookie operacional</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/me</code></td>
+<td>P/U</td>
+<td>Retorna usuário da sessão ou <code>null</code> para o probe da SPA</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/health</code></td>
+<td>P</td>
+<td>Liveness: API, banco, Redis, WhatsApp e versão</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/readiness</code></td>
+<td>P</td>
+<td>Readiness do banco e Redis; retorna 503 se indisponível</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/ai/support-assist</code></td>
+<td>U</td>
+<td>Sugestão/resumo por IA, com rate limit e timeout</td>
+</tr>
+</tbody></table>
+<h3>6.2 Atendimento</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Acesso</th>
+<th>Função</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GET</td>
+<td><code>/api/conversations</code></td>
+<td>U</td>
+<td>Lista conversas, contatos, ticket e mensagens do tenant</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/conversations/:id/assign</code></td>
+<td>U</td>
+<td>Assume ticket e registra primeira resposta</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/conversations/:id/close</code></td>
+<td>U</td>
+<td>Encerra ticket e opcionalmente envia pesquisa</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/conversations/:id/messages</code></td>
+<td>U</td>
+<td>Envia e persiste texto após confirmação do canal</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/conversations/:id/messages/upload</code></td>
+<td>U</td>
+<td>Valida, envia e persiste imagem</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/conversations/:id/typing</code></td>
+<td>U</td>
+<td>Publica presença de digitação na sala do tenant</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/contacts</code></td>
+<td>U</td>
+<td>Lista contatos e última interação</td>
+</tr>
+<tr>
+<td>PATCH</td>
+<td><code>/api/contacts/:id</code></td>
+<td>U</td>
+<td>Atualiza nome, telefone, bloqueio e nota interna</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/contacts/:id/start-conversation</code></td>
+<td>U</td>
+<td>Cria ou obtém conversa aberta</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/media/signed</code></td>
+<td>U</td>
+<td>Redireciona para mídia assinada após checagem de posse</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/queues</code></td>
+<td>U</td>
+<td>Lista filas</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/queues</code></td>
+<td>G</td>
+<td>Cria fila</td>
+</tr>
+<tr>
+<td>PATCH</td>
+<td><code>/api/queues/:id</code></td>
+<td>G</td>
+<td>Atualiza fila, SLA, cor e estado</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/queues/supermarket-preset</code></td>
+<td>G</td>
+<td>Aplica preset de filas do supermercado</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/quick-replies</code></td>
+<td>U</td>
+<td>Lista respostas rápidas</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/quick-replies</code></td>
+<td>G</td>
+<td>Cria resposta rápida global</td>
+</tr>
+<tr>
+<td>PATCH</td>
+<td><code>/api/quick-replies/:id</code></td>
+<td>G</td>
+<td>Atualiza resposta rápida</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/api/quick-replies/:id</code></td>
+<td>G</td>
+<td>Remove resposta rápida</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/dashboard/metrics</code></td>
+<td>G</td>
+<td>Métricas gerenciais de atendimento</td>
+</tr>
+</tbody></table>
+<h3>6.3 Administração operacional</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Acesso</th>
+<th>Função</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GET</td>
+<td><code>/api/admin/users</code></td>
+<td>A</td>
+<td>Lista equipe ativa</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/admin/users</code></td>
+<td>A</td>
+<td>Cria usuário</td>
+</tr>
+<tr>
+<td>PATCH</td>
+<td><code>/api/admin/users/:id</code></td>
+<td>A</td>
+<td>Atualiza usuário sem permitir lockout do último admin</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/api/admin/users/:id</code></td>
+<td>A</td>
+<td>Desativa usuário</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/admin/system-status</code></td>
+<td>G</td>
+<td>Status sanitizado de serviços, agentes e versão</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/admin/agents</code></td>
+<td>G</td>
+<td>Lista instalações do agente cloud</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/admin/agents/provision</code></td>
+<td>A</td>
+<td>Provisiona agente e revela segredo uma vez</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/admin/agents/:id/rotate-credential</code></td>
+<td>A</td>
+<td>Rotaciona credencial</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/admin/agents/:id/revoke</code></td>
+<td>A</td>
+<td>Revoga agente</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/admin/business-access</code></td>
+<td>A</td>
+<td>Lista acessos gerenciais</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/admin/business-access</code></td>
+<td>A</td>
+<td>Cria acesso/PIN gerencial</td>
+</tr>
+<tr>
+<td>PATCH</td>
+<td><code>/api/admin/business-access/:id</code></td>
+<td>A</td>
+<td>Atualiza acesso</td>
+</tr>
+<tr>
+<td>DELETE</td>
+<td><code>/api/admin/business-access/:id</code></td>
+<td>A</td>
+<td>Revoga acesso</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/admin/business-access/:id/reset-pin</code></td>
+<td>A</td>
+<td>Redefine PIN</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/admin/business-access/:id/revoke-sessions</code></td>
+<td>A</td>
+<td>Revoga sessões ativas</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/admin/business-access/:id/unlock</code></td>
+<td>A</td>
+<td>Remove bloqueio por tentativas</td>
+</tr>
+</tbody></table>
+<h3>6.4 WhatsApp e integrações</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Acesso</th>
+<th>Função</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GET</td>
+<td><code>/api/whatsapp/status</code></td>
+<td>G</td>
+<td>Estado, QR, persistência e diagnóstico</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/whatsapp/connect</code></td>
+<td>G</td>
+<td>Inicializa/reconecta Baileys</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/whatsapp/disconnect</code></td>
+<td>G</td>
+<td>Encerra a sessão de forma controlada</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/webhooks/twilio</code></td>
+<td>W</td>
+<td>Recebe mensagens/status com assinatura Twilio</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/webhooks/n8n/ticket-upsert</code></td>
+<td>W</td>
+<td>Upsert idempotente, triagem e roteamento</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/webhooks/cerebro/reply</code></td>
+<td>W</td>
+<td>Resposta automática do Cérebro com bearer token</td>
+</tr>
+</tbody></table>
+<h3>6.5 Agente cloud e inteligência de negócio</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Acesso</th>
+<th>Função</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>GET</td>
+<td><code>/api/agent/v1/config</code></td>
+<td>H</td>
+<td>Entrega configuração e próximo intervalo</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/agent/v1/heartbeat</code></td>
+<td>H</td>
+<td>Atualiza vida, versão e status do agente</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/agent/v1/sync/sales-daily</code></td>
+<td>H</td>
+<td>Ingestão idempotente de vendas diárias</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/agent/v1/sync/product-sales</code></td>
+<td>H</td>
+<td>Ingestão idempotente de vendas por produto</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/agent/v1/sync/inventory-entries</code></td>
+<td>H</td>
+<td>Ingestão idempotente de entradas de estoque</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/business/analytics</code></td>
+<td>G</td>
+<td>Agregações por período, produto e dia</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/business/query</code></td>
+<td>G</td>
+<td>Consulta gerencial com auditoria e rate limit</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/business/audit</code></td>
+<td>A</td>
+<td>Auditoria das consultas e acessos</td>
+</tr>
+</tbody></table>
+<h3>6.6 Console master Mavo</h3>
+<table>
+<thead>
+<tr>
+<th>Método</th>
+<th>Rota</th>
+<th>Acesso</th>
+<th>Função</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>POST</td>
+<td><code>/api/mavo/auth/login</code></td>
+<td>P</td>
+<td>Login master separado, com bloqueio por IP</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/mavo/auth/logout</code></td>
+<td>P</td>
+<td>Limpa cookie master</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/mavo/overview</code></td>
+<td>M</td>
+<td>Visão de saúde e pendências de configuração</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/mavo/actions/sync-supermarket</code></td>
+<td>M</td>
+<td>Reaplica preset do supermercado</td>
+</tr>
+</tbody></table>
+<p>Páginas do backend: <code>/mavo</code> é o console master; <code>/</code>, <code>/login</code>, <code>/dashboard</code> e <code>/dashboard/queues</code> redirecionam para o frontend canônico em produção.</p>
+<h2>7. Banco de dados</h2>
+<h3>7.1 Tabelas</h3>
+<table>
+<thead>
+<tr>
+<th>Domínio</th>
+<th>Tabelas</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Tenant e usuários</td>
+<td><code>organizations</code>, <code>users</code>, <code>audit_logs</code>, <code>business_hours</code>, <code>channels</code></td>
+</tr>
+<tr>
+<td>Atendimento</td>
+<td><code>contacts</code>, <code>queues</code>, <code>conversations</code>, <code>tickets</code>, <code>messages</code>, <code>quick_replies</code></td>
+</tr>
+<tr>
+<td>Acesso gerencial</td>
+<td><code>business_access_users</code>, <code>business_access_sessions</code>, <code>business_access_audit</code>, <code>business_whatsapp_events</code>, <code>business_query_audit</code></td>
+</tr>
+<tr>
+<td>Agente cloud</td>
+<td><code>agent_installations</code>, <code>agent_credentials</code>, <code>agent_nonces</code>, <code>agent_sync_batches</code>, <code>agent_audit_events</code></td>
+</tr>
+<tr>
+<td>Analytics</td>
+<td><code>business_sales_daily</code>, <code>business_product_sales_daily</code>, <code>business_inventory_entries_daily</code></td>
+</tr>
+<tr>
+<td>WhatsApp</td>
+<td><code>whatsapp_auth_state</code></td>
+</tr>
+<tr>
+<td>Migrações</td>
+<td><code>mavo_schema_migrations</code></td>
+</tr>
+</tbody></table>
+<h3>7.2 Isolamento</h3>
+<p>As tabelas de negócio carregam <code>organization_id</code>. As migrations ativam RLS e criam políticas baseadas em <code>mavo_current_organization_id()</code>. A aplicação também filtra explicitamente por organização em selects e updates, oferecendo defesa em profundidade.</p>
+<p><code>whatsapp_auth_state</code> guarda somente conteúdo cifrado com AES-256-GCM. A chave de produção vem de <code>WHATSAPP_AUTH_ENCRYPTION_KEY</code>, com fallback de derivação estável do JWT apenas para compatibilidade de rollout. Trocar a chave com sessão existente torna o estado ilegível e exige novo QR.</p>
+<h3>7.3 Migrações</h3>
+<p>Ordem atual:</p>
+<ol>
+<li><code>202607230000_base_support_schema.sql</code></li>
+<li><code>202607230001_business_access.sql</code></li>
+<li><code>202607230002_agent_cloud.sql</code></li>
+<li><code>202607230003_business_analytics.sql</code></li>
+<li><code>202607230004_rls_policies.sql</code></li>
+<li><code>202607230005_indexes.sql</code></li>
+<li><code>202607240006_whatsapp_auth_state.sql</code></li>
+<li><code>202607240007_protect_last_admin.sql</code></li>
+</ol>
+<p><code>npm run db:migrate</code> usa checksum e não reaplica arquivos já registrados. Nunca edite uma migration aplicada; crie a próxima.</p>
+<h2>8. Configuração de ambiente</h2>
+<h3>8.1 Obrigatórias em produção</h3>
+<table>
+<thead>
+<tr>
+<th>Grupo</th>
+<th>Variáveis</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Banco</td>
+<td><code>DB_PROVIDER=supabase</code>, <code>DATABASE_URL_RUNTIME</code>, <code>DATABASE_URL_MIGRATIONS</code>, <code>PG_SSL=true</code></td>
+</tr>
+<tr>
+<td>Sessão</td>
+<td><code>JWT_SECRET</code> com pelo menos 32 caracteres, <code>SESSION_COOKIE_NAME</code>, <code>SESSION_COOKIE_SAME_SITE</code></td>
+</tr>
+<tr>
+<td>Rede</td>
+<td><code>FRONTEND_URL</code>, <code>MAVO_ALLOWED_ORIGINS</code>, <code>MAVO_API_PUBLIC_URL</code></td>
+</tr>
+<tr>
+<td>Redis</td>
+<td><code>REDIS_URL</code>, <code>MAVO_QUEUE_ENV</code></td>
+</tr>
+<tr>
+<td>Tenant</td>
+<td><code>DEFAULT_ORG_ID</code>, <code>WILLTALK_WEBHOOK_ORGANIZATION_ID</code></td>
+</tr>
+<tr>
+<td>WhatsApp QR</td>
+<td><code>WHATSAPP_PROVIDER=unofficial</code>, <code>WHATSAPP_AUTH_STORE=database</code>, <code>WHATSAPP_AUTH_ENCRYPTION_KEY</code>, <code>WHATSAPP_SESSION_NAME</code></td>
+</tr>
+<tr>
+<td>Agente</td>
+<td><code>MAVO_AGENT_CREDENTIAL_ENCRYPTION_KEY</code> com 32 bytes em base64</td>
+</tr>
+<tr>
+<td>Master</td>
+<td><code>MAVO_MASTER_EMAIL</code>, <code>MAVO_MASTER_PASSWORD</code> ou hash</td>
+</tr>
+</tbody></table>
+<h3>8.2 Dados reais da loja</h3>
+<p>Preencher <code>SUPERMARKET_NAME</code>, endereço, link do mapa, horários, ofertas, pedidos, delivery e telefone. Quando um campo está ausente, o bot encaminha a uma pessoa. Consulte <a href="BOT-SUPERMERCADO.md">BOT-SUPERMERCADO.md</a>.</p>
+<h3>8.3 Opcionais</h3>
+<ul>
+<li><code>TWILIO_*</code>: fallback oficial;</li>
+<li><code>CLOUDINARY_*</code>: upload de mídia;</li>
+<li><code>MAVO_AI_BASE_URL</code> e <code>MAVO_AI_TOKEN</code>: assistência externa;</li>
+<li><code>VISION_*</code>: análise de imagem;</li>
+<li><code>CEREBRO_*</code>: orquestração e auto-reply.</li>
+</ul>
+<p>Nenhum segredo deve usar prefixo <code>VITE_</code>; tudo que começa com esse prefixo entra no bundle público.</p>
+<h2>9. Deploy no Render</h2>
+<p>O Blueprint está em <code>render.yaml</code> e executa:</p>
+<pre><code class="language-text">npm ci --include=dev
+npm run typecheck
+npm test
+npm run lint
+npm run build
+npm run db:migrate
+npm run db:bootstrap:production
+npm run db:verify
+</code></pre>
+<p>O bootstrap garante a organização padrão de modo idempotente. <code>db:verify</code> falha quando faltam tabelas ou RLS; a existência da organização padrão deixa de bloquear o primeiro deploy porque o bootstrap roda antes.</p>
+<p>O frontend executa typecheck e build Vite. Os dois serviços recebem headers de segurança, incluindo HSTS, CSP, <code>frame-ancestors &#39;none&#39;</code>, <code>nosniff</code>, Referrer Policy, Permissions Policy e COOP.</p>
+<p>Consulte <a href="DEPLOY-SUPABASE-RENDER.md">DEPLOY-SUPABASE-RENDER.md</a> para o passo a passo.</p>
+<h3>9.1 Limite do plano gratuito</h3>
+<p>O plano atual é adequado para homologação ou produção controlada, mas não oferece SLA de varejo:</p>
+<ul>
+<li>o web service pode hibernar;</li>
+<li>o bot fica offline durante hibernação/restart;</li>
+<li>Redis gratuito não é persistente;</li>
+<li>workers rodam dentro da API;</li>
+<li>não há disco persistente;</li>
+<li>a sessão do WhatsApp sobrevive porque está cifrada no Supabase.</li>
+</ul>
+<p>Para operação 24x7, usar instância paga sempre ativa, Redis persistente e worker separado. Um monitor externo reduz cold start, mas não substitui SLA.</p>
+<h2>10. Segurança</h2>
+<p>Controles implementados na revisão:</p>
+<ul>
+<li>CORS allowlist e preflight fail-closed;</li>
+<li>headers CSP/HSTS/anti-frame;</li>
+<li>cookie HttpOnly e validação de sessão no servidor;</li>
+<li>RBAC em todas as rotas sensíveis;</li>
+<li>proteção contra elevação de gestor para admin;</li>
+<li>preservação obrigatória de ao menos um admin ativo;</li>
+<li>rate limit em login, IA, agente e consultas;</li>
+<li>assinatura HMAC com nonce e tolerância de relógio para agente;</li>
+<li>assinatura Twilio e bearer tokens comparados em tempo constante;</li>
+<li>limites de payload e comprimento de campos;</li>
+<li>tamanho e MIME de uploads;</li>
+<li>mensagens persistidas somente após confirmação externa;</li>
+<li>URLs de mídia assinadas somente após verificação de posse;</li>
+<li>erros públicos sanitizados;</li>
+<li>logs estruturados sem PIN, senha, token, e-mail ou telefone em auditoria sanitizada;</li>
+<li>RLS e filtros explícitos de tenant;</li>
+<li>dependências críticas corrigidas por upgrades/overrides.</li>
+</ul>
+<h3>10.1 Exceção conhecida do audit</h3>
+<p>O audit do frontend aponta a advisory de React Router para <strong>RSC Mode</strong>. Esta aplicação é uma SPA Vite em modo declarativo e não usa RSC, framework mode, server actions ou loaders no servidor; portanto o vetor não é aplicável ao runtime atual. A versão permanece em 7.18.x porque ela contém as correções de open redirect das versões anteriores. A exceção deve ser reavaliada em todo upgrade ou se o frontend migrar para RSC.</p>
+<h2>11. Observabilidade e operação</h2>
+<table>
+<thead>
+<tr>
+<th>Verificação</th>
+<th>Endpoint/ação</th>
+<th>Resultado saudável</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Liveness</td>
+<td><code>GET /api/health</code></td>
+<td>HTTP 200, banco conectado</td>
+</tr>
+<tr>
+<td>Readiness</td>
+<td><code>GET /api/readiness</code></td>
+<td>HTTP 200, banco e Redis conectados</td>
+</tr>
+<tr>
+<td>Sistema</td>
+<td><code>GET /api/admin/system-status</code></td>
+<td>serviços e agentes sem erro</td>
+</tr>
+<tr>
+<td>WhatsApp</td>
+<td><code>GET /api/whatsapp/status</code></td>
+<td><code>ready</code>; <code>qr</code> exige leitura</td>
+</tr>
+<tr>
+<td>Banco</td>
+<td><code>npm run db:verify</code></td>
+<td>sem tabela/RLS ausente</td>
+</tr>
+<tr>
+<td>Blueprint</td>
+<td><code>npm run render:validate</code></td>
+<td>schema válido</td>
+</tr>
+<tr>
+<td>Logs</td>
+<td>Render API</td>
+<td>sem loop de reconnect, 5xx ou falha de migration</td>
+</tr>
+</tbody></table>
+<p>O shutdown trata <code>SIGTERM</code>/<code>SIGINT</code>, fecha workers e Redis e chama <code>end()</code> no socket Baileys. O timeout do processo é o último fallback.</p>
+<h2>12. Testes e evidências da revisão</h2>
+<table>
+<thead>
+<tr>
+<th>Etapa</th>
+<th>Resultado em 24/07/2026</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Testes Node</td>
+<td>70 aprovados, 0 falhas</td>
+</tr>
+<tr>
+<td>TypeScript backend</td>
+<td>aprovado</td>
+</tr>
+<tr>
+<td>TypeScript frontend</td>
+<td>aprovado</td>
+</tr>
+<tr>
+<td>ESLint</td>
+<td>0 erros, 0 warnings</td>
+</tr>
+<tr>
+<td>Build Next.js</td>
+<td>aprovado; 39 páginas/rotas geradas</td>
+</tr>
+<tr>
+<td>Build Vite</td>
+<td>aprovado; chunks e assets gerados</td>
+</tr>
+<tr>
+<td>Blueprint Render</td>
+<td>válido</td>
+</tr>
+<tr>
+<td>Audit produção backend</td>
+<td>0 vulnerabilidades</td>
+</tr>
+<tr>
+<td>Audit frontend</td>
+<td>advisory RSC não aplicável, documentada acima</td>
+</tr>
+<tr>
+<td>Visual desktop</td>
+<td>login, Inbox, métricas, negócio e WhatsApp inspecionados</td>
+</tr>
+<tr>
+<td>Visual mobile</td>
+<td>390 px, sem overflow horizontal</td>
+</tr>
+</tbody></table>
+<p>Os testes de regressão cobrem: falha de entrega antes da persistência, limite e cleanup de upload, isolamento de mídia, protocolo novo após encerramento, bloqueio nos três canais, restrição do QR, shutdown Baileys, proteção de administradores e métricas gerenciais.</p>
+<p>As capturas podem ser reproduzidas com <code>scripts/generate-doc-screenshots.mjs</code>, usando Chrome com CDP e um frontend local. O script intercepta somente a execução de documentação e usa fixtures sintéticas.</p>
+<h2>13. Runbook</h2>
+<h3>WhatsApp mostra <code>qr</code></h3>
+<ol>
+<li>entrar no frontend como admin/gestor;</li>
+<li>abrir <strong>Painel</strong>;</li>
+<li>no celular: WhatsApp → Aparelhos conectados → Conectar aparelho;</li>
+<li>ler o QR;</li>
+<li>aguardar <code>ready</code>;</li>
+<li>enviar mensagem real de teste e confirmar Inbox + resposta.</li>
+</ol>
+<h3>Health 503</h3>
+<ol>
+<li>abrir logs do Render;</li>
+<li>validar <code>DATABASE_URL_RUNTIME</code>, <code>PG_SSL=true</code> e pooler;</li>
+<li>validar <code>REDIS_URL</code>;</li>
+<li>executar <code>npm run db:verify</code> contra o mesmo banco;</li>
+<li>não rodar seed destrutivo nem apagar migrations.</li>
+</ol>
+<h3>Mensagem não sai</h3>
+<ol>
+<li>consultar status do WhatsApp;</li>
+<li>confirmar contato não bloqueado e telefone normalizado;</li>
+<li>verificar Cloudinary para imagem;</li>
+<li>procurar 503 e request id nos logs;</li>
+<li>nunca inserir manualmente uma mensagem “enviada” para mascarar falha.</li>
+</ol>
+<h3>Bot responde informação errada ou transfere demais</h3>
+<ol>
+<li>conferir <code>SUPERMARKET_*</code>;</li>
+<li>revisar filas/preset;</li>
+<li>conferir horário comercial;</li>
+<li>validar se <code>SUPERMARKET_BOT_ENABLED=true</code>;</li>
+<li>manter fallback de IA desligado até ter base confiável.</li>
+</ol>
+<h3>Agente não sincroniza</h3>
+<ol>
+<li>conferir heartbeat e versão no painel;</li>
+<li>validar relógio da máquina;</li>
+<li>conferir Agent ID, segredo e versão da chave;</li>
+<li>verificar nonce reutilizado e <code>Idempotency-Key</code>;</li>
+<li>rotacionar credencial somente se houver suspeita de vazamento.</li>
+</ol>
+<h2>14. Backup, retenção e recuperação</h2>
+<ul>
+<li>habilitar backups/PITR compatíveis com o plano do Supabase;</li>
+<li>testar restauração em projeto separado, nunca sobre produção;</li>
+<li>definir retenção de mensagens e mídia com o responsável pelo negócio/LGPD;</li>
+<li>não apagar mídia ao fechar tickets;</li>
+<li>guardar as chaves de cifra em cofre de secrets;</li>
+<li>documentar a troca planejada de chaves; troca sem migração revoga dados cifrados;</li>
+<li>exportar periodicamente configurações de filas, horários e usuários administrativos.</li>
+</ul>
+<p>RPO e RTO devem ser definidos pelo contratante. O código não substitui uma política de backup da infraestrutura.</p>
+<h2>15. Checklist antes de liberar a loja</h2>
+<ul>
+<li><input disabled="" type="checkbox"> Deploy de API e frontend no mesmo commit.</li>
+<li><input disabled="" type="checkbox"> <code>/api/health</code> e <code>/api/readiness</code> em HTTP 200.</li>
+<li><input disabled="" type="checkbox"> Organização padrão existente e <code>db:verify</code> aprovado.</li>
+<li><input disabled="" type="checkbox"> Conta admin real validada e segunda conta admin de contingência criada.</li>
+<li><input disabled="" type="checkbox"> <code>SUPERMARKET_*</code> preenchidas com dados confirmados pela loja.</li>
+<li><input disabled="" type="checkbox"> Filas, SLAs e horários revisados pelo gerente.</li>
+<li><input disabled="" type="checkbox"> QR do WhatsApp lido e status <code>ready</code>.</li>
+<li><input disabled="" type="checkbox"> Teste inbound, outbound, imagem, bloqueio e encerramento concluído.</li>
+<li><input disabled="" type="checkbox"> Novo contato após encerramento cria novo protocolo.</li>
+<li><input disabled="" type="checkbox"> Agente cloud sincroniza e indicadores batem com uma amostra do ERP.</li>
+<li><input disabled="" type="checkbox"> Cloudinary, Twilio e IA validados somente se habilitados.</li>
+<li><input disabled="" type="checkbox"> Backup e restauração testados.</li>
+<li><input disabled="" type="checkbox"> Monitoramento, alertas e responsável de plantão definidos.</li>
+<li><input disabled="" type="checkbox"> Plano Render compatível com disponibilidade 24x7.</li>
+<li><input disabled="" type="checkbox"> Aviso de privacidade, retenção e base legal LGPD aprovados.</li>
+</ul>
+<h2>16. Arquivos de referência</h2>
+<ul>
+<li><code>render.yaml</code> — infraestrutura declarativa;</li>
+<li><code>.env.example</code> e <code>frontend/.env.example</code> — contrato de configuração;</li>
+<li><code>supabase/migrations/</code> — schema versionado;</li>
+<li><code>lib/config/runtime-env.cjs</code> — validação fail-fast;</li>
+<li><code>lib/supabase-repo.ts</code> — repositório multi-tenant;</li>
+<li><code>lib/whatsapp-client.ts</code> — integração Baileys;</li>
+<li><code>app/api/</code> — rotas descritas neste catálogo;</li>
+<li><a href="agent-cloud-api.md">agent-cloud-api.md</a> — protocolo do agente;</li>
+<li><a href="security-business-access.md">security-business-access.md</a> — acesso gerencial;</li>
+<li><a href="business-whatsapp-flow.md">business-whatsapp-flow.md</a> — roteamento pelo WhatsApp;</li>
+<li><a href="BOT-SUPERMERCADO.md">BOT-SUPERMERCADO.md</a> — comportamento da Mavi;</li>
+<li><a href="DEPLOY-SUPABASE-RENDER.md">DEPLOY-SUPABASE-RENDER.md</a> — instalação e deploy.</li>
+</ul>
+
+</body>
+</html>

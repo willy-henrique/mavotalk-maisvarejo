@@ -25,6 +25,8 @@ const App: React.FC = () => {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   const [session, setSession] = useState<AuthState | null>(AuthService.getSession());
+  const [authChecked, setAuthChecked] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -33,11 +35,14 @@ const App: React.FC = () => {
   const [whatsappProvider, setWhatsappProvider] = useState<string>('');
 
   useEffect(() => {
-    AuthService.refreshSession().then((refreshed) => setSession(refreshed));
+    AuthService.refreshSession()
+      .then((refreshed) => setSession(refreshed))
+      .catch(() => setSession(null))
+      .finally(() => setAuthChecked(true));
   }, []);
 
   useEffect(() => {
-    if (!session?.isAuthenticated) return;
+    if (!session?.isAuthenticated || session.user?.role === UserRole.AGENT) return;
     const fetchStatus = async () => {
       try {
         const res = await apiFetch('/api/whatsapp/status', { method: 'GET' });
@@ -53,7 +58,7 @@ const App: React.FC = () => {
     fetchStatus();
     const t = setInterval(fetchStatus, 10000);
     return () => clearInterval(t);
-  }, [session?.isAuthenticated]);
+  }, [session?.isAuthenticated, session?.user?.role]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,6 +79,14 @@ const App: React.FC = () => {
     await AuthService.logout();
     setSession(null);
   };
+
+  if (!authChecked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300">
+        <span className="animate-pulse font-semibold">Validando sessão...</span>
+      </div>
+    );
+  }
 
   if (!session?.isAuthenticated || !session.user) {
     return (
@@ -132,36 +145,40 @@ const App: React.FC = () => {
 
   return (
       <div className="flex h-screen w-full bg-slate-100 dark:bg-slate-800 overflow-hidden min-w-0 transition-colors">
-        <Sidebar user={session.user} />
+        {sidebarOpen && (
+          <button
+            type="button"
+            aria-label="Fechar menu"
+            onClick={() => setSidebarOpen(false)}
+            className="fixed inset-0 z-50 bg-black/50 md:hidden"
+          />
+        )}
+        <Sidebar
+          user={session.user}
+          mobileOpen={sidebarOpen}
+          onNavigate={() => setSidebarOpen(false)}
+        />
 
         <main className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-50 dark:bg-slate-800/95 transition-colors relative z-0">
-          <header className="h-16 bg-blue-600 dark:bg-[#1e3a5f] text-white px-6 flex items-center justify-between shrink-0 shadow-lg transition-colors">
-            <div className="flex items-center gap-4 min-w-0">
+          <header className="h-16 bg-blue-600 dark:bg-[#1e3a5f] text-white px-3 sm:px-6 flex items-center justify-between shrink-0 shadow-lg transition-colors">
+            <div className="flex items-center gap-2 sm:gap-4 min-w-0">
               <button
                 type="button"
-                className="p-2 rounded-lg hover:bg-white/10 transition-colors shrink-0"
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors shrink-0 md:hidden"
                 aria-label="Menu"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
                   <path fillRule="evenodd" d="M3 6.75A.75.75 0 013.75 6h16.5a.75.75 0 010 1.5H3.75A.75.75 0 013 6.75zM3 12a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75A.75.75 0 013 12zm0 5.25a.75.75 0 01.75-.75h16.5a.75.75 0 010 1.5H3.75a.75.75 0 01-.75-.75z" clipRule="evenodd" />
                 </svg>
               </button>
-              <p className="text-sm font-semibold truncate">
+              <p className="hidden sm:block text-sm font-semibold truncate">
                 Olá {session.user.name?.split(' ')[0] || 'Usuário'}, seja bem-vindo ao Mavo Talk!{' '}
                 <span className="text-white/80 font-normal">(Ativo)</span>
               </p>
+              <p className="sm:hidden text-sm font-bold truncate">Mavo Talk</p>
             </div>
             <div className="flex items-center gap-1">
-              <button type="button" className="p-2.5 rounded-lg hover:bg-white/10 transition-colors" aria-label="Notificações">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                  <path fillRule="evenodd" d="M5.25 9a6.75 6.75 0 0113.5 0v.75c0 2.123.8 4.057 2.118 5.52a.75.75 0 01-.297 1.206c-1.544.57-3.16.99-4.831 1.243a3.75 3.75 0 11-7.48 0 24.585 24.585 0 01-4.831-1.244.75.75 0 01-.298-1.206A8.217 8.217 0 005.25 9.75V9zm4.502 8.9a2.25 2.25 0 104.496 0 25.057 25.057 0 01-4.496 0z" clipRule="evenodd" />
-                </svg>
-              </button>
-              <button type="button" className="p-2.5 rounded-lg hover:bg-white/10 transition-colors" aria-label="Conversas">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                  <path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97-1.94.284-3.916.455-5.922.505a.803.803 0 00-.921.921 11.447 11.447 0 01.505 5.922c.292 1.978 2.024 3.348 3.97 3.348h6.02c1.946 0 3.678-1.37 3.97-3.348.284-1.94.455-3.916.505-5.922a.803.803 0 00-.921-.921 11.447 11.447 0 01-5.922-.505C18.318 18.37 16.586 17 14.63 17h-6.02c-1.946 0-3.678 1.37-3.97 3.348a11.464 11.464 0 01-.505 5.922.803.803 0 00.921.921 11.446 11.446 0 005.922.505c1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946 1.37 3.678 3.348 3.97C17.183 21.822 19.57 22 22 22s4.817-.178 7.152-.52c1.978-.292 3.348-2.024 3.348-3.97v-6.02c0-1.946-1.37-3.678-3.348-3.97a11.464 11.464 0 01-.505-5.922.803.803 0 00-.921-.921 11.446 11.446 0 01-5.922-.505C18.318 5.63 16.586 7 14.63 7h-6.02C6.664 7 5.932 5.67 5.646 3.672A49.19 49.19 0 015.073 2.25H4.752a.75.75 0 00-.612.52 48.518 48.518 0 01-.292 2.001z" clipRule="evenodd" />
-                </svg>
-              </button>
               <button
                 type="button"
                 onClick={toggleTheme}
@@ -179,16 +196,18 @@ const App: React.FC = () => {
                   </svg>
                 )}
               </button>
-              <div
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg ${
-                  whatsappProvider === 'twilio' || whatsappStatus === 'ready' ? 'bg-emerald-500/20 text-emerald-200' : 'bg-white/10 text-white/80'
-                }`}
-              >
-                <div className={`w-2 h-2 rounded-full ${whatsappProvider === 'twilio' || whatsappStatus === 'ready' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                <span className="text-xs font-semibold">
-                  {whatsappProvider === 'twilio' || whatsappStatus === 'ready' ? 'WhatsApp ativo' : whatsappStatus === 'qr' || whatsappStatus === 'initializing' ? 'Conectando...' : 'Desconectado'}
-                </span>
-              </div>
+              {session.user.role !== UserRole.AGENT && (
+                <div
+                  className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg ${
+                    whatsappProvider === 'twilio' || whatsappStatus === 'ready' ? 'bg-emerald-500/20 text-emerald-200' : 'bg-white/10 text-white/80'
+                  }`}
+                >
+                  <div className={`w-2 h-2 rounded-full ${whatsappProvider === 'twilio' || whatsappStatus === 'ready' ? 'bg-emerald-400' : 'bg-amber-400'}`} />
+                  <span className="text-xs font-semibold">
+                    {whatsappProvider === 'twilio' || whatsappStatus === 'ready' ? 'WhatsApp ativo' : whatsappStatus === 'qr' || whatsappStatus === 'initializing' ? 'Conectando...' : 'Desconectado'}
+                  </span>
+                </div>
+              )}
               <button
                 onClick={handleLogout}
                 className="p-2.5 rounded-lg hover:bg-white/10 text-white/80 hover:text-white transition-colors"
@@ -213,12 +232,12 @@ const App: React.FC = () => {
             <Route path="/business/sincronizacao" element={session.user.role === UserRole.ADMIN ? <AgentsManagement /> : <Navigate to="/business" replace />} />
             <Route path="/business/auditoria" element={session.user.role === UserRole.ADMIN ? <BusinessAudit /> : <Navigate to="/business" replace />} />
             <Route path="/contacts" element={<Contacts />} />
-            <Route path="/admin/usuarios" element={<UserManagement />} />
-            <Route path="/admin/tipos" element={<TicketTypeManagement />} />
-            <Route path="/admin/respostas-rapidas" element={<QuickReplyManagement />} />
+            <Route path="/admin/usuarios" element={session.user.role === UserRole.ADMIN ? <UserManagement /> : <Navigate to="/inbox" replace />} />
+            <Route path="/admin/tipos" element={session.user.role === UserRole.ADMIN ? <TicketTypeManagement /> : <Navigate to="/inbox" replace />} />
+            <Route path="/admin/respostas-rapidas" element={session.user.role === UserRole.ADMIN ? <QuickReplyManagement /> : <Navigate to="/inbox" replace />} />
             <Route path="/admin/acessos-gerenciais" element={session.user.role === UserRole.ADMIN ? <BusinessAccessManagement /> : <Navigate to="/inbox" replace />} />
             <Route path="/admin/agentes" element={session.user.role === UserRole.ADMIN ? <AgentsManagement /> : <Navigate to="/inbox" replace />} />
-            <Route path="/painel" element={<Painel />} />
+            <Route path="/painel" element={session.user.role === UserRole.AGENT ? <Navigate to="/inbox" replace /> : <Painel />} />
             <Route path="*" element={<Navigate to="/inbox" replace />} />
           </Routes>
           </React.Suspense>

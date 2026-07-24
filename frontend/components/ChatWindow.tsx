@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Ticket, Message, User, TicketStatus } from '../types';
-import { GeminiService } from '../services/geminiService';
 import { mockTicketTypes } from '../services/mockData';
 
 interface ChatWindowProps {
@@ -15,7 +14,6 @@ interface ChatWindowProps {
 const ChatWindow: React.FC<ChatWindowProps> = ({ ticket, messages, onSendMessage, onPullTicket, currentUser }) => {
   const [inputValue, setInputValue] = useState('');
   const [isInternal, setIsInternal] = useState(false);
-  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

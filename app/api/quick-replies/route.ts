@@ -15,7 +15,7 @@ export async function POST(request: Request) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
 
-  const denied = requireRole(["admin", "gestor", "atendente"], auth.session.role);
+  const denied = requireRole(["admin", "gestor"], auth.session.role);
   if (denied) return denied;
 
   const body = await request.json();

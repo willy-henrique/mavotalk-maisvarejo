@@ -7,6 +7,7 @@ import {
   listQueues,
   findMessageByExternalId,
   getOrCreateContactAndOpenConversation,
+  isContactBlocked,
   resolveOrganizationByChannel,
   updateConversationById,
   updateTicketByConversation,
@@ -53,6 +54,10 @@ function emptyTwiML() {
 export async function POST(request: Request) {
   const requestId = requestIdFrom(request);
   const n8nOnlyMode = String(process.env.WILLTALK_N8N_ONLY || "").toLowerCase() === "true";
+  const contentLength = Number(request.headers.get("content-length") || 0);
+  if (contentLength > 1_048_576) {
+    return NextResponse.json({ error: "Payload excedeu o limite", requestId }, { status: 413 });
+  }
   const rawBody = await request.text();
   const params = new URLSearchParams(rawBody);
 
@@ -84,8 +89,8 @@ export async function POST(request: Request) {
 
   const from = normalizePhone(params.get("From") || "");
   const to = normalizePhone(params.get("To") || "");
-  const body = (params.get("Body") || "").trim();
-  const profileName = params.get("ProfileName") || "Cliente";
+  const body = (params.get("Body") || "").trim().slice(0, 20_000);
+  const profileName = (params.get("ProfileName") || "Cliente").slice(0, 160);
   const mediaUrl = params.get("MediaUrl0");
   const mediaType = params.get("MediaContentType0");
   const messageSid = params.get("MessageSid") || undefined;
@@ -120,6 +125,10 @@ export async function POST(request: Request) {
     return businessRouting.reply
       ? withXml(twimlMessage(businessRouting.reply))
       : emptyTwiML();
+  }
+
+  if (await isContactBlocked(organizationId, from)) {
+    return emptyTwiML();
   }
 
   // Bot-first / Cérebro v3: mesma triagem do não-oficial — delega ao ticket-upsert (sem TwiML de resposta).

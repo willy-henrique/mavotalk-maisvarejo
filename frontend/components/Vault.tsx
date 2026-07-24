@@ -13,7 +13,7 @@ export type RemoteAccessEntry = {
 
 const PLATFORMS = ['AnyDesk', 'TeamViewer', 'RDP', 'Outro'];
 
-const Vault: React.FC<{ tickets: Ticket[] }> = ({ tickets }) => {
+const Vault: React.FC<{ tickets: Ticket[] }> = () => {
   const [entries, setEntries] = useState<RemoteAccessEntry[]>(mockRemoteAccess);
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, boolean>>({});
   const [showAdd, setShowAdd] = useState(false);

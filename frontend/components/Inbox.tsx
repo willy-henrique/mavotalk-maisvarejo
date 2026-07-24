@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Ticket, Message, User, TicketStatus, TicketPriority } from '../types';
+import { Ticket, Message, User, TicketStatus } from '../types';
 import ChatWindow from './ChatWindow';
 import TicketDetailPanel from './TicketDetailPanel';
 import { Icons } from '../constants';

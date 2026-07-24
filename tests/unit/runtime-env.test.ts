@@ -141,3 +141,19 @@ test("worker falha fechado sem Redis em produção", () => {
     /Configuração do worker inválida/,
   );
 });
+
+test("provedor WhatsApp inválido falha antes de iniciar produção", () => {
+  assert.throws(
+    () =>
+      validateApiEnvironment({
+        NODE_ENV: "production",
+        DB_PROVIDER: "supabase",
+        DATABASE_URL_RUNTIME: databaseUrl,
+        REDIS_URL: "rediss://default:secret@example.test:6379",
+        JWT_SECRET: "x".repeat(32),
+        MAVO_ALLOWED_ORIGINS: "https://app.example.test",
+        WHATSAPP_PROVIDER: "desconhecido",
+      }),
+    /WHATSAPP_PROVIDER/,
+  );
+});

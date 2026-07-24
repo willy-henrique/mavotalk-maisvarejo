@@ -28,7 +28,7 @@ export async function GET() {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
 
-  const denied = requireRole(["admin", "gestor"], auth.session.role);
+  const denied = requireRole(["admin"], auth.session.role);
   if (denied) return denied;
 
   const users = await listUsers(auth.session.organizationId);
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
 
-  const denied = requireRole(["admin", "gestor"], auth.session.role);
+  const denied = requireRole(["admin"], auth.session.role);
   if (denied) return denied;
 
   const body = await request.json();

@@ -68,7 +68,7 @@ export async function uploadBase64ToCloudinary(base64Data: string, mimeType?: st
 }
 
 /** Gera URL assinada (validação de acesso). */
-export function generateSignedUrl(publicId: string, _expiresInSeconds = 3600): string {
+export function generateSignedUrl(publicId: string): string {
   if (!cloudName || !apiKey || !apiSecret) return "";
   return cloudinary.url(publicId, { sign_url: true, secure: true });
 }

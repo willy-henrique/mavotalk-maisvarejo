@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { User } from '../types';
-import { Icons } from '../constants';
 import { apiFetch, apiPatch, apiPost, getApiBaseUrl, getApiUrl, getSocketUrl } from '../services/api';
 
 type ConversationStatus = 'aguardando' | 'em_atendimento' | 'pendente_cliente' | 'encerrado';
@@ -33,13 +32,6 @@ type ApiConversation = {
   messages: ApiMessage[];
 };
 
-const statusToLabel: Record<string, string> = {
-  aguardando: 'AGUARDANDO',
-  em_atendimento: 'ATENDENDO',
-  pendente_cliente: 'PENDENTE',
-  encerrado: 'FINALIZADO',
-};
-
 interface InboxConversationsProps {
   currentUser: User;
 }
@@ -57,13 +49,13 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const [searchParams, setSearchParams] = useSearchParams();
   const [conversations, setConversations] = useState<ApiConversation[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<ConversationStatus>('em_atendimento');
   const [tabAbertas, setTabAbertas] = useState<'abertas' | 'resolvidos'>('abertas');
   /** Filtro por status dentro de "Abertas": null = todos, 'em_atendimento' | 'aguardando' */
   const [statusFilter, setStatusFilter] = useState<'em_atendimento' | 'aguardando' | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState('');
   const [assigning, setAssigning] = useState(false);
   const [closing, setClosing] = useState(false);
   const [editContactOpen, setEditContactOpen] = useState(false);
@@ -93,7 +85,8 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
         // Só seleciona automaticamente na carga inicial da tela.
         if (!didInitRef.current) {
           const firstOpen = data.conversations.find((c) => c.status !== 'encerrado');
-          if (!selectedIdRef.current && firstOpen) {
+          const desktopLayout = window.matchMedia('(min-width: 768px)').matches;
+          if (!selectedIdRef.current && firstOpen && desktopLayout) {
             setSelectedId(firstOpen.id);
           }
           didInitRef.current = true;
@@ -255,11 +248,13 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
           : c,
       ),
     );
+    setSendError('');
     setSending(true);
     try {
       await apiPost(`/api/conversations/${selectedId}/messages`, { content: text });
     } catch (err) {
       console.error(err);
+      setSendError(err instanceof Error ? err.message : 'Nao foi possivel enviar o link.');
       setConversations((prev) =>
         prev.map((c) =>
           c.id === selectedId
@@ -287,16 +282,17 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
         body: formData,
       });
       if (res.ok) {
+        setSendError('');
         await fetchConversations(false);
       } else {
         const data = await res.json().catch(() => ({}));
         const msg = (data as { error?: string }).error || 'Erro ao enviar imagem';
         console.error(msg);
-        alert(msg);
+        setSendError(msg);
       }
     } catch (err) {
       console.error(err);
-      alert('Falha ao enviar imagem. Verifique a configuração do serviço de mídia no backend.');
+      setSendError('Falha ao enviar imagem. Verifique a conexao do WhatsApp.');
     } finally {
       setUploadingImage(false);
     }
@@ -335,9 +331,12 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     const conversationFromUrl = searchParams.get('conversation');
     if (conversationFromUrl) {
       setSelectedId(conversationFromUrl);
-      setFilter('em_atendimento');
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    setSendError('');
+  }, [selectedId]);
 
   // Na aba Abertas, não manter conversa encerrada selecionada — só em Resolvidos
   useEffect(() => {
@@ -449,6 +448,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     const text = messageInput.trim();
     if (!selectedId || !text || sending) return;
     setMessageInput('');
+    setSendError('');
     const optId = `opt-${Date.now()}`;
     setConversations((prev) =>
       prev.map((c) =>
@@ -473,6 +473,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
       await apiPost(`/api/conversations/${selectedId}/messages`, { content: text });
     } catch (err) {
       console.error(err);
+      setSendError(err instanceof Error ? err.message : 'Nao foi possivel enviar a mensagem.');
       setConversations((prev) =>
         prev.map((c) =>
           c.id === selectedId
@@ -500,7 +501,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
 
   return (
     <div className="flex flex-1 overflow-hidden min-h-0 min-w-0 bg-slate-50 dark:bg-slate-800/95 transition-colors">
-      <div className="w-80 lg:w-[22rem] flex flex-col border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 shrink-0 min-h-0 overflow-hidden transition-colors">
+      <div className={`${selected ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-[22rem] flex-col border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 shrink-0 min-h-0 overflow-hidden transition-colors`}>
         <div className="p-4 border-b border-slate-200 dark:border-slate-700">
           <div className="flex items-center gap-1 mb-4">
             <button
@@ -591,6 +592,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
               return (
                 <div
                   key={c.id}
+                  data-conversation-id={c.id}
                   role="button"
                   tabIndex={0}
                   onClick={() => setSelectedId(c.id)}
@@ -680,7 +682,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col bg-slate-100 dark:bg-slate-800/50 min-w-0 min-h-0 overflow-hidden transition-colors">
+      <div className={`${selected ? 'flex' : 'hidden md:flex'} flex-1 flex-col bg-slate-100 dark:bg-slate-800/50 min-w-0 min-h-0 overflow-hidden transition-colors`}>
         {!selected ? (
           <div className="flex-1 flex items-center justify-center p-12">
             <div className="text-center max-w-sm">
@@ -695,9 +697,19 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
           </div>
         ) : (
           <>
-            <header className="px-8 py-5 bg-white dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between shrink-0 transition-colors">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 text-sm font-bold shrink-0 overflow-hidden">
+            <header className="px-2.5 sm:px-8 py-3 sm:py-5 bg-white dark:bg-slate-900/80 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2 shrink-0 transition-colors">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+                <button
+                  type="button"
+                  onClick={() => setSelectedId(null)}
+                  aria-label="Voltar para conversas"
+                  className="md:hidden shrink-0 p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                    <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.56l3.22 3.22a.75.75 0 11-1.06 1.06l-4.5-4.5a.75.75 0 010-1.06l4.5-4.5a.75.75 0 011.06 1.06L5.56 9.25h10.69A.75.75 0 0117 10z" clipRule="evenodd" />
+                  </svg>
+                </button>
+                <div className="hidden sm:flex w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 items-center justify-center text-slate-600 dark:text-slate-300 text-sm font-bold shrink-0 overflow-hidden">
                   {selected.contact?.avatarUrl ? (
                     <img
                       src={selected.contact.avatarUrl}
@@ -708,14 +720,14 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                     (selected.contact?.name || selected.contact?.phoneNumber || '?')[0].toUpperCase()
                   )}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <h2 className="font-bold text-slate-800 dark:text-slate-100 truncate">
                     {selected.contact?.name || selected.contact?.phoneNumber || 'Contato'}
                   </h2>
-                  <div className="flex items-center gap-2 flex-wrap text-xs">
-                    <p className="text-slate-500 dark:text-slate-400">{selected.contact?.phoneNumber}</p>
+                  <div className="min-w-0 text-xs">
+                    <p className="text-slate-500 dark:text-slate-400 truncate">{selected.contact?.phoneNumber}</p>
                     {selected.ticket && (selected.ticket as { assignee?: { name: string } }).assignee?.name && (
-                      <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
+                      <span className="block text-xs text-blue-600 dark:text-blue-400 font-medium truncate">
                         Atendido por: {(selected.ticket as { assignee: { name: string } }).assignee.name}
                       </span>
                     )}
@@ -737,15 +749,15 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                   </svg>
                 </button>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                 {selected.status === 'aguardando' && (
                   <button
                     type="button"
                     onClick={handleAssign}
                     disabled={assigning}
-                    className="bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-blue-700 disabled:opacity-50"
+                    className="bg-blue-600 text-white px-3 sm:px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold hover:bg-blue-700 disabled:opacity-50"
                   >
-                    {assigning ? 'Assumindo...' : 'Puxar Atendimento'}
+                    {assigning ? 'Assumindo...' : <><span className="sm:hidden">Puxar</span><span className="hidden sm:inline">Puxar Atendimento</span></>}
                   </button>
                 )}
                 {selected.status === 'em_atendimento' && (
@@ -753,14 +765,14 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                     type="button"
                     onClick={handleCloseConversation}
                     disabled={closing}
-                    className="bg-slate-700 text-white px-6 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 disabled:opacity-50"
+                    className="bg-slate-700 text-white px-3 sm:px-6 py-2.5 rounded-xl text-xs sm:text-sm font-bold hover:bg-slate-800 disabled:opacity-50"
                   >
-                    {closing ? 'Finalizando...' : 'Finalizar chamado'}
+                    {closing ? 'Finalizando...' : <><span className="sm:hidden">Finalizar</span><span className="hidden sm:inline">Finalizar chamado</span></>}
                   </button>
                 )}
               </div>
             </header>
-            <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-3 min-h-0 flex flex-col">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 space-y-3 min-h-0 flex flex-col">
               {[...(selected.messages || [])].sort(
                 (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
               ).map((m) => (
@@ -769,7 +781,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                   className={`flex ${m.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
+                    className={`max-w-[90%] sm:max-w-[80%] rounded-2xl px-4 py-2 text-sm ${
                       m.direction === 'outbound'
                         ? 'bg-blue-600 text-white'
                         : 'bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100'
@@ -781,13 +793,13 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                       </audio>
                     ) : m.type === 'image' && (m.cloudinaryPublicId || m.mediaUrl) ? (
                       <a
-                        href={m.cloudinaryPublicId ? getApiUrl(`/api/media/signed?publicId=${encodeURIComponent(m.cloudinaryPublicId)}`) : m.mediaUrl || '#'}
+                        href={m.cloudinaryPublicId ? getApiUrl(`/api/media/signed?publicId=${encodeURIComponent(m.cloudinaryPublicId)}&conversationId=${encodeURIComponent(selected.id)}`) : m.mediaUrl || '#'}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="block"
                       >
                         <img
-                          src={m.cloudinaryPublicId ? getApiUrl(`/api/media/signed?publicId=${encodeURIComponent(m.cloudinaryPublicId)}`) : m.mediaUrl || ''}
+                          src={m.cloudinaryPublicId ? getApiUrl(`/api/media/signed?publicId=${encodeURIComponent(m.cloudinaryPublicId)}&conversationId=${encodeURIComponent(selected.id)}`) : m.mediaUrl || ''}
                           alt=""
                           className="max-w-full rounded-lg max-h-64 object-contain"
                         />
@@ -844,9 +856,14 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
               <div ref={messagesEndRef} />
             </div>
             {selected.status !== 'encerrado' ? (
-              <form onSubmit={handleSendMessage} className="p-4 bg-white dark:bg-slate-900/80 border-t border-slate-200 dark:border-slate-700 shrink-0 transition-colors">
-                <div className="flex gap-2 relative">
-                  <label className="shrink-0 flex items-center justify-center w-12 h-12 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer disabled:opacity-50 text-slate-500 dark:text-slate-400" title="Enviar imagem">
+              <form onSubmit={handleSendMessage} className="p-2 sm:p-4 bg-white dark:bg-slate-900/80 border-t border-slate-200 dark:border-slate-700 shrink-0 transition-colors">
+                {sendError && (
+                  <div role="alert" className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
+                    {sendError}
+                  </div>
+                )}
+                <div className="flex gap-1.5 sm:gap-2 relative">
+                  <label className="shrink-0 flex items-center justify-center w-10 h-11 sm:w-12 sm:h-12 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer disabled:opacity-50 text-slate-500 dark:text-slate-400" title="Enviar imagem">
                     <input
                       type="file"
                       accept="image/*"
@@ -863,7 +880,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                     onClick={() => setLinkModalOpen(true)}
                     disabled={sending}
                     title="Anexar link de documento"
-                    className="shrink-0 flex items-center justify-center w-12 h-12 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-500 dark:text-slate-400"
+                    className="shrink-0 flex items-center justify-center w-10 h-11 sm:w-12 sm:h-12 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-500 dark:text-slate-400"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
                       <path d="M12.232 4.232a2.5 2.5 0 013.536 3.536l-1.225 1.224a.75.75 0 001.061 1.06l1.224-1.224a4 4 0 00-5.656-5.656l-3 3a4 4 0 00.225 5.865.75.75 0 00.977-1.138 2.5 2.5 0 01-.142-3.667l3-3z" />
@@ -878,7 +895,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                       onChange={handleMessageInputChange}
                       onBlur={handleMessageInputBlur}
                       onKeyDown={handleMessageKeyDown}
-                      placeholder="Digite a mensagem ou / para respostas rápidas"
+                      placeholder="Mensagem..."
                       className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-blue-500 outline-none"
                     />
                     {quickReplyOpen && filteredQuickReplies.length > 0 && (
