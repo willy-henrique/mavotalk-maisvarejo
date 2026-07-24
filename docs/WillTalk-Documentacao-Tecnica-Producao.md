@@ -53,7 +53,7 @@ flowchart LR
 | WhatsApp | Baileys | QR, recepção, envio e triagem sem Chromium |
 | Fallback | Twilio | Canal oficial opcional, webhook assinado e redundância de envio |
 | Filas | BullMQ/Redis | Webhooks, SLA e limpeza controlada de mídia |
-| Mídia | Cloudinary | Armazenamento e URLs assinadas verificadas contra organização e conversa |
+| Mídia | Cloudinary | Armazenamento; a rota da UI verifica organização e conversa antes de redirecionar |
 | Agente cloud | HMAC-SHA256 + AES-GCM | Ingestão de vendas, produtos, estoque e heartbeat |
 
 ## 3. Interfaces do sistema
@@ -178,7 +178,9 @@ A persistência ocorre somente depois da confirmação externa. Isso impede que 
 4. entrega a URL pelo WhatsApp/Twilio;
 5. persiste a mensagem somente após confirmação;
 6. se a entrega falhar, remove o upload órfão;
-7. a leitura posterior exige `publicId` + `conversationId` e confirma que a mídia pertence à organização autenticada.
+7. a leitura posterior pela UI exige `publicId` + `conversationId` e confirma que a mídia pertence à organização autenticada.
+
+Os uploads atuais ainda usam o delivery type público padrão do Cloudinary. A checagem da API impede enumeração pela aplicação, mas uma URL de origem já conhecida continua funcionando como bearer link. Não usar o fluxo atual para documentos de identidade ou outros anexos altamente sensíveis até migrar os assets para `authenticated` com URL temporária, ou servir o conteúdo por proxy autenticado sem retornar `media_url`.
 
 ### 4.4 Ciclo de vida do ticket
 
@@ -422,7 +424,7 @@ Controles implementados na revisão:
 - limites de payload e comprimento de campos;
 - tamanho e MIME de uploads;
 - mensagens persistidas somente após confirmação externa;
-- URLs de mídia assinadas somente após verificação de posse;
+- rota de mídia com verificação de tenant e conversa antes do redirecionamento;
 - erros públicos sanitizados;
 - logs estruturados sem PIN, senha, token, e-mail ou telefone em auditoria sanitizada;
 - RLS e filtros explícitos de tenant;
@@ -431,6 +433,15 @@ Controles implementados na revisão:
 ### 10.1 Exceção conhecida do audit
 
 O audit do frontend aponta a advisory de React Router para **RSC Mode**. Esta aplicação é uma SPA Vite em modo declarativo e não usa RSC, framework mode, server actions ou loaders no servidor; portanto o vetor não é aplicável ao runtime atual. A versão permanece em 7.18.x porque ela contém as correções de open redirect das versões anteriores. A exceção deve ser reavaliada em todo upgrade ou se o frontend migrar para RSC.
+
+### 10.2 Risco residual de mídia
+
+O endpoint `/api/media/signed` confirma que o `publicId` pertence à conversa e à organização da sessão. Entretanto, os uploads existentes usam o delivery type `upload` do Cloudinary, e a assinatura atual não fornece expiração real para o asset de origem. Tratar a URL como segredo compartilhável e:
+
+1. proibir anexos altamente sensíveis no go-live atual;
+2. migrar novos uploads para assets `authenticated` e URLs temporárias, testando Baileys, Twilio e visão;
+3. deixar de expor `media_url` quando houver `cloudinary_public_id`;
+4. avaliar migração dos assets históricos e política de retenção com o responsável LGPD.
 
 ## 11. Observabilidade e operação
 
@@ -534,6 +545,7 @@ RPO e RTO devem ser definidos pelo contratante. O código não substitui uma pol
 - [ ] Novo contato após encerramento cria novo protocolo.
 - [ ] Agente cloud sincroniza e indicadores batem com uma amostra do ERP.
 - [ ] Cloudinary, Twilio e IA validados somente se habilitados.
+- [ ] Upload de documentos sensíveis bloqueado até o Cloudinary usar assets autenticados ou proxy.
 - [ ] Backup e restauração testados.
 - [ ] Monitoramento, alertas e responsável de plantão definidos.
 - [ ] Plano Render compatível com disponibilidade 24x7.

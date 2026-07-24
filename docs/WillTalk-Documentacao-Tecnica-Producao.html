@@ -193,7 +193,7 @@
 <tr>
 <td>Mídia</td>
 <td>Cloudinary</td>
-<td>Armazenamento e URLs assinadas verificadas contra organização e conversa</td>
+<td>Armazenamento; a rota da UI verifica organização e conversa antes de redirecionar</td>
 </tr>
 <tr>
 <td>Agente cloud</td>
@@ -290,8 +290,9 @@
 <li>entrega a URL pelo WhatsApp/Twilio;</li>
 <li>persiste a mensagem somente após confirmação;</li>
 <li>se a entrega falhar, remove o upload órfão;</li>
-<li>a leitura posterior exige <code>publicId</code> + <code>conversationId</code> e confirma que a mídia pertence à organização autenticada.</li>
+<li>a leitura posterior pela UI exige <code>publicId</code> + <code>conversationId</code> e confirma que a mídia pertence à organização autenticada.</li>
 </ol>
+<p>Os uploads atuais ainda usam o delivery type público padrão do Cloudinary. A checagem da API impede enumeração pela aplicação, mas uma URL de origem já conhecida continua funcionando como bearer link. Não usar o fluxo atual para documentos de identidade ou outros anexos altamente sensíveis até migrar os assets para <code>authenticated</code> com URL temporária, ou servir o conteúdo por proxy autenticado sem retornar <code>media_url</code>.</p>
 <h3>4.4 Ciclo de vida do ticket</h3>
 <table>
 <thead>
@@ -941,7 +942,7 @@ npm run db:verify
 <li>limites de payload e comprimento de campos;</li>
 <li>tamanho e MIME de uploads;</li>
 <li>mensagens persistidas somente após confirmação externa;</li>
-<li>URLs de mídia assinadas somente após verificação de posse;</li>
+<li>rota de mídia com verificação de tenant e conversa antes do redirecionamento;</li>
 <li>erros públicos sanitizados;</li>
 <li>logs estruturados sem PIN, senha, token, e-mail ou telefone em auditoria sanitizada;</li>
 <li>RLS e filtros explícitos de tenant;</li>
@@ -949,6 +950,14 @@ npm run db:verify
 </ul>
 <h3>10.1 Exceção conhecida do audit</h3>
 <p>O audit do frontend aponta a advisory de React Router para <strong>RSC Mode</strong>. Esta aplicação é uma SPA Vite em modo declarativo e não usa RSC, framework mode, server actions ou loaders no servidor; portanto o vetor não é aplicável ao runtime atual. A versão permanece em 7.18.x porque ela contém as correções de open redirect das versões anteriores. A exceção deve ser reavaliada em todo upgrade ou se o frontend migrar para RSC.</p>
+<h3>10.2 Risco residual de mídia</h3>
+<p>O endpoint <code>/api/media/signed</code> confirma que o <code>publicId</code> pertence à conversa e à organização da sessão. Entretanto, os uploads existentes usam o delivery type <code>upload</code> do Cloudinary, e a assinatura atual não fornece expiração real para o asset de origem. Tratar a URL como segredo compartilhável e:</p>
+<ol>
+<li>proibir anexos altamente sensíveis no go-live atual;</li>
+<li>migrar novos uploads para assets <code>authenticated</code> e URLs temporárias, testando Baileys, Twilio e visão;</li>
+<li>deixar de expor <code>media_url</code> quando houver <code>cloudinary_public_id</code>;</li>
+<li>avaliar migração dos assets históricos e política de retenção com o responsável LGPD.</li>
+</ol>
 <h2>11. Observabilidade e operação</h2>
 <table>
 <thead>
@@ -1116,6 +1125,7 @@ npm run db:verify
 <li><input disabled="" type="checkbox"> Novo contato após encerramento cria novo protocolo.</li>
 <li><input disabled="" type="checkbox"> Agente cloud sincroniza e indicadores batem com uma amostra do ERP.</li>
 <li><input disabled="" type="checkbox"> Cloudinary, Twilio e IA validados somente se habilitados.</li>
+<li><input disabled="" type="checkbox"> Upload de documentos sensíveis bloqueado até o Cloudinary usar assets autenticados ou proxy.</li>
 <li><input disabled="" type="checkbox"> Backup e restauração testados.</li>
 <li><input disabled="" type="checkbox"> Monitoramento, alertas e responsável de plantão definidos.</li>
 <li><input disabled="" type="checkbox"> Plano Render compatível com disponibilidade 24x7.</li>
