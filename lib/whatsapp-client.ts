@@ -46,6 +46,11 @@ import {
   shouldAutoReconnectWhatsapp,
 } from "@/lib/whatsapp-auth-config";
 import { createWhatsappAuthState } from "@/lib/whatsapp-auth-state";
+import {
+  classifyWhatsappInitializationError,
+  type WhatsappDiagnosticCode,
+  type WhatsappInitializationStage,
+} from "@/lib/whatsapp-diagnostics";
 
 type WhatsappStatus = "idle" | "initializing" | "qr" | "ready" | "disconnected" | "error";
 
@@ -57,6 +62,8 @@ type WhatsappState = {
   authStore: "database" | "filesystem";
   sessionPersistent: boolean;
   authPersistenceHealthy: boolean;
+  initializationStage: WhatsappInitializationStage | null;
+  diagnosticCode: WhatsappDiagnosticCode | null;
 };
 
 type KnownError = { message?: string };
@@ -82,6 +89,8 @@ function getState(): WhatsappState {
       authStore: configuredWhatsappAuthStore(),
       sessionPersistent: configuredWhatsappAuthPersistence(),
       authPersistenceHealthy: true,
+      initializationStage: null,
+      diagnosticCode: null,
     };
   }
   return global.__waState;
@@ -773,6 +782,8 @@ export function getPublicWhatsappStatus() {
     authStore: state.authStore,
     sessionPersistent: state.sessionPersistent,
     authPersistenceHealthy: state.authPersistenceHealthy,
+    initializationStage: state.initializationStage,
+    diagnosticCode: state.diagnosticCode,
   };
 }
 
@@ -806,6 +817,11 @@ export async function initWhatsappClient() {
   const state = getState();
   state.status = "initializing";
   state.lastError = null;
+  state.initializationStage = "auth-store";
+  state.diagnosticCode = null;
+  if (state.authStore === "database") {
+    state.authPersistenceHealthy = false;
+  }
   global.__waManualDisconnect = false;
   if (global.__waReconnectTimer) {
     clearTimeout(global.__waReconnectTimer);
@@ -835,8 +851,10 @@ export async function initWhatsappClient() {
       state.authStore = auth.store;
       state.sessionPersistent = auth.persistent;
       state.authPersistenceHealthy = true;
+      state.initializationStage = "version-lookup";
       const { version } = await fetchLatestBaileysVersion();
 
+      state.initializationStage = "socket";
       const sock = makeWASocket({
         version,
         auth: authState,
@@ -948,11 +966,20 @@ export async function initWhatsappClient() {
       });
 
       global.__waClient = sock;
+      state.initializationStage = null;
       return state;
     } catch (error) {
       state.status = "error";
       state.lastError = String((error as KnownError)?.message || error);
       state.connectedPhone = null;
+      const failedStage = state.initializationStage || "socket";
+      state.diagnosticCode = classifyWhatsappInitializationError(
+        failedStage,
+        error,
+      );
+      if (failedStage === "auth-store") {
+        state.authPersistenceHealthy = false;
+      }
       global.__waClient = undefined;
       logger.error({ err: error }, "Failed to initialize WhatsApp client");
       throw error;
