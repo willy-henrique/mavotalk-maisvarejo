@@ -131,7 +131,7 @@ barreira para conexões não privilegiadas. A service role nunca é exposta à S
 
 ## Compatibilidade preservada
 
-Login por cookie JWT, inbox, QR Code, `whatsapp-web.js`, Twilio, Cloudinary,
+Login por cookie JWT, inbox, QR Code, Baileys, Twilio, Cloudinary,
 filas, respostas rápidas, encerramento, satisfação, webhooks e integração com
 Mavo AI continuam nos fluxos existentes. Nomes internos `WILLTALK_*` necessários
 à compatibilidade não foram renomeados cegamente; a marca visível é Mavo Talk.

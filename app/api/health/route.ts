@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { checkDatabaseConnection } from "@/lib/db";
 import { checkRedisConnection } from "@/lib/redis";
+import { getPublicWhatsappStatus } from "@/lib/whatsapp-client";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export async function GET() {
       environment: process.env.NODE_ENV || "development",
       database: database ? "connected" : "unavailable",
       redis: redis ? "connected" : "unavailable",
+      whatsapp: getPublicWhatsappStatus(),
       version:
         process.env.APP_VERSION ||
         process.env.RENDER_GIT_COMMIT?.slice(0, 12) ||

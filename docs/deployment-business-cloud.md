@@ -7,10 +7,10 @@ flowchart TD
   SPA[Render Static Site<br/>mavo-talk-web] -->|HTTPS/WSS| API[Render Web Service<br/>mavo-talk-api]
   API --> SUPA[(Supabase PostgreSQL)]
   API --> KV[(Render Key Value)]
-  API --> DISK[(Persistent Disk /var/data)]
   WORKER[Render Background Worker] --> KV
   WORKER --> SUPA
-  DISK --> WA[LocalAuth whatsapp-web.js]
+  API --> WA[Baileys]
+  WA -->|auth state AES-GCM| SUPA
 ```
 
 `render.yaml` não cria Render PostgreSQL. Todos os serviços computacionais e o
@@ -53,7 +53,6 @@ sessão/transação. Não execute `db:seed:development` em produção.
 - `numInstances: 1`;
 - `npm run start`, escutando `0.0.0.0:$PORT`;
 - HTTP, Next.js e Socket.IO no mesmo servidor;
-- disco de 1 GB em `/var/data`;
 - health check `/api/health`;
 - migration aditiva e verificação no pre-deploy.
 
@@ -84,19 +83,20 @@ Variáveis:
 
 ```text
 WHATSAPP_PROVIDER=unofficial
-WHATSAPP_AUTH_PATH=/var/data/wwebjs_auth
+WHATSAPP_AUTH_STORE=database
+WHATSAPP_AUTH_ENCRYPTION_KEY=<segredo com pelo menos 32 caracteres>
 WHATSAPP_SESSION_NAME=mavo-talk-production
 WHATSAPP_AUTO_CONNECT=true
 ```
 
-Somente caminhos sob `/var/data` persistem. Não execute o cliente no worker e
-não conecte duas instâncias à mesma sessão. O primeiro acesso exibe QR Code no
-Painel. A sessão deve sobreviver a restart/redeploy, mas um deploy com disco tem
-breve indisponibilidade e não oferece zero downtime.
+O auth state é cifrado com AES-256-GCM e persistido no Supabase. Não execute o
+cliente no worker e não conecte duas instâncias à mesma sessão. O primeiro
+acesso exibe QR Code no Painel. A sessão sobrevive a restart/redeploy, embora
+uma única instância ainda tenha breve indisponibilidade durante o deploy.
 
-Se houver corrupção, preserve snapshot do disco, revogue a sessão no aparelho e
-remova somente o diretório específico da sessão durante janela de manutenção.
-Nunca apague `/var/data` inteiro automaticamente.
+Se houver corrupção, revogue a sessão no aparelho e remova somente os registros
+da organização e `session_name` afetados durante uma janela de manutenção.
+Nunca trunque a tabela inteira.
 
 ## Variáveis obrigatórias
 
@@ -175,8 +175,8 @@ Credenciais:
 
 WhatsApp:
 
-- não substituir o disco no rollback;
-- manter o mesmo `WHATSAPP_AUTH_PATH`;
+- manter o mesmo `WHATSAPP_AUTH_ENCRYPTION_KEY` no rollback;
+- não conectar duas instâncias à mesma `WHATSAPP_SESSION_NAME`;
 - se a sessão se perder, reautenticar por QR e registrar a janela.
 
 ## Desenvolvimento local

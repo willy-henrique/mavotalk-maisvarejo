@@ -3,8 +3,8 @@
 #
 # ATENÇÃO — este Blueprint usa exclusivamente instâncias GRATUITAS. Isso impõe
 # limites reais, documentados em docs/DEPLOY-SUPABASE-RENDER.md:
-#   - sem disco persistente: a sessão do WhatsApp por QR Code é perdida a cada
-#     restart/deploy (WHATSAPP_ALLOW_EPHEMERAL_SESSION=true assume esse risco);
+#   - a sessão do WhatsApp é cifrada e persistida no Supabase, sem depender do
+#     filesystem efêmero da instância;
 #   - o serviço web hiberna após 15 min sem tráfego e leva ~1 min para acordar;
 #   - Background Worker não tem plano gratuito, então as filas rodam dentro do
 #     processo web via MAVO_INLINE_WORKER=true;
@@ -77,9 +77,9 @@ services:
         value: "true"
       - key: WORKER_CONCURRENCY
         value: "2"
-      # Baileys (WhatsApp via QR) como canal principal: sem Chromium, roda de boa
-      # nos 512 MB do plano gratuito. Twilio fica configurado como fallback
-      # automático (ver sendTriageMessageToWhatsApp em lib/whatsapp-client.ts).
+      # Baileys (WhatsApp via QR) como canal principal: sem Chromium. Twilio
+      # fica configurado como fallback automático.
+      # Ver sendTriageMessageToWhatsApp em lib/whatsapp-client.ts.
       - key: WHATSAPP_PROVIDER
         value: unofficial
       - key: TWILIO_ACCOUNT_SID
@@ -92,11 +92,15 @@ services:
         value: https://mavo-talk-api.onrender.com
       - key: WHATSAPP_AUTH_PATH
         value: /tmp/whatsapp_auth
+      - key: WHATSAPP_AUTH_STORE
+        value: database
+      - key: WHATSAPP_AUTH_ENCRYPTION_KEY
+        generateValue: true
       - key: WHATSAPP_SESSION_NAME
         value: mavo-talk-production
-      # Sem disco no plano gratuito: a sessão não sobrevive a restart.
+      # Somente usado pelo fallback filesystem.
       - key: WHATSAPP_ALLOW_EPHEMERAL_SESSION
-        value: "true"
+        value: "false"
       - key: WHATSAPP_AUTO_CONNECT
         value: "true"
       - key: DEFAULT_ORG_ID

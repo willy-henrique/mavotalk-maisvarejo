@@ -17,11 +17,17 @@ O Blueprint atual usa **exclusivamente instâncias gratuitas**. Leia a seção d
 
 Consequências que você precisa aceitar:
 
-1. **A sessão do WhatsApp por QR Code não sobrevive a deploys nem a restarts.** Sem disco, o auth state do Baileys grava em `/tmp` e perde tudo. Será preciso reler o QR. O Blueprint assume esse risco explicitamente com `WHATSAPP_ALLOW_EPHEMERAL_SESSION=true`.
+1. **O processo do WhatsApp para durante restart/hibernação**, mas a sessão não
+   é perdida: o Blueprint usa `WHATSAPP_AUTH_STORE=database`, cifra o auth state
+   com AES-256-GCM e o persiste no Supabase. O QR só precisa ser lido novamente
+   quando a sessão é revogada/deslogada.
 2. **A hibernação derruba o bot.** Um bot de WhatsApp precisa estar sempre no ar. Veja a seção 7 para o keep-alive.
 3. Jobs enfileirados podem ser perdidos quando o Key Value reinicia. Hoje só `media-cleanup` faz trabalho real (remoção no Cloudinary); os demais são de observabilidade.
 
-Quando houver orçamento, o caminho de saída é: web `starter` + disco de 1 GB + worker `starter` + Key Value `starter` (~US$24/mês). Isso elimina os pontos acima. Diferente do `whatsapp-web.js` (que dependia de um Chromium completo e estourava os 512 MB do free), o provedor `unofficial` hoje usa a Baileys — biblioteca sem navegador embutido, leve o suficiente para rodar tranquila no plano gratuito.
+Quando houver orçamento, migre a API, o worker e o Key Value para planos pagos
+para eliminar hibernação e dar durabilidade às filas. O auth state do WhatsApp
+continua no Supabase e não exige disco. O provedor `unofficial` usa Baileys, sem
+navegador ou Chromium embutido.
 
 ## 1. Criar e preparar o Supabase
 
@@ -139,9 +145,16 @@ A primeira mensagem após a hibernação sofre o atraso do cold start (~1 min).
 
 ### WhatsApp por QR Code (Baileys)
 
-É o padrão do Blueprint (`unofficial`), implementado com a Baileys — sem Chromium, cabe de boa nos 512 MB do free. A limitação real que sobra é a falta de disco persistente: conecte manualmente pelo painel após cada deploy/restart (a sessão é perdida). Para uso sério, o caminho é uma instância paga com disco de 1 GB montado em `/var/data`, com `WHATSAPP_AUTH_PATH=/var/data/whatsapp_auth` e `WHATSAPP_ALLOW_EPHEMERAL_SESSION` removido — assim a sessão sobrevive a deploys.
+É o padrão do Blueprint (`unofficial`), implementado com Baileys e sem
+Chromium. A sessão é persistida na tabela `whatsapp_auth_state`, isolada por
+organização e nome de sessão. Todos os valores são cifrados na aplicação antes
+de chegar ao banco. `WHATSAPP_AUTH_ENCRYPTION_KEY` é gerada pelo Blueprint e
+nunca deve ser trocada ou removida enquanto existir uma sessão ativa.
 
-Se o WhatsApp desconectar (queda de rede, restart do processo), o serviço tenta reconectar sozinho a cada poucos segundos usando as credenciais salvas — só é preciso reler o QR quando a sessão é deslogada de fato (ex.: removida pelo celular) ou quando o disco é ephemeral e o processo reinicia.
+Se o WhatsApp desconectar por queda de rede ou restart, o serviço tenta
+reconectar usando as credenciais do Supabase. Se a sessão for deslogada de fato
+(por exemplo, removida pelo celular), o estado inválido é apagado e o painel
+passa a exigir um novo QR.
 
 Como `sendTriageMessageToWhatsApp` tenta o `unofficial` primeiro e cai para o Twilio automaticamente se não estiver pronto, vale configurar as duas credenciais (Baileys conectado pelo QR + Twilio configurado) para ter redundância sem custo extra.
 
@@ -153,7 +166,8 @@ O plano gratuito dá 750 horas-instância por mês e um mês tem ~730 horas, ent
 https://SEU-DOMINIO/api/health
 ```
 
-Isso não elimina o restart por deploy nem a perda da sessão do WhatsApp — só evita a hibernação por ociosidade.
+Isso não elimina a breve indisponibilidade de um restart, mas a sessão do
+WhatsApp permanece cifrada no Supabase.
 
 ## 8. Checklist de entrada em produção
 
@@ -173,7 +187,11 @@ Isso não elimina o restart por deploy nem a perda da sessão do WhatsApp — s�
 
 - **Health 503 / banco offline:** revise `DATABASE_URL_RUNTIME`, senha, host do pooler e `PG_SSL=true`.
 - **Build falha em `db:migrate`:** confira `DATABASE_URL_MIGRATIONS`. Migration já aplicada e alterada também aborta — crie uma migration nova em vez de editar a antiga.
-- **Boot falha com `WHATSAPP_AUTH_PATH`:** em instância sem disco, `WHATSAPP_ALLOW_EPHEMERAL_SESSION=true` e caminho absoluto (`/tmp/whatsapp_auth`) são obrigatórios.
+- **Boot falha com `WHATSAPP_AUTH_ENCRYPTION_KEY`:** mantenha
+  `WHATSAPP_AUTH_STORE=database` e uma chave com pelo menos 32 caracteres. Não
+  gere outra chave sobre dados já persistidos.
+- **Tabela `whatsapp_auth_state` ausente:** confirme que
+  `npm run db:migrate` aplicou `202607240006_whatsapp_auth_state.sql`.
 - **WhatsApp não reconecta sozinho após ficar `disconnected`:** confira o `lastError` em `/api/whatsapp/status` — se a sessão foi deslogada (`loggedOut`), é preciso ler um novo QR pelo painel; qualquer outro motivo tenta reconectar automaticamente em poucos segundos.
 - **Primeira requisição do dia demora ~1 min:** hibernação. Veja a seção 7.
 - **Login master não configurado:** preencha `MAVO_MASTER_EMAIL`, `MAVO_MASTER_PASSWORD` e `JWT_SECRET`, depois faça redeploy.

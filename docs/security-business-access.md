@@ -122,8 +122,9 @@ assinatura completa ou resultado financeiro detalhado.
 
 ## Riscos residuais aceitos no MVP
 
-- `whatsapp-web.js` é um canal não oficial e requer sessão local/disco;
-- o disco força uma instância e deploy com breve interrupção;
+- Baileys é um canal não oficial e requer uma sessão protegida; o auth state é
+  cifrado na aplicação e persistido no Supabase;
+- a sessão deve ter uma única instância proprietária por vez;
 - policies RLS são uma segunda barreira, mas o backend direto ainda usa papel
   privilegiado para autenticação do agente;
 - eventuais exportações históricas do Firestore precisam ser tratadas fora do

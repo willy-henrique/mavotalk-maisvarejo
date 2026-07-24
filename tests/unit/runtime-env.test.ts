@@ -39,6 +39,7 @@ test("ambiente da API valida chave de cifra e disco persistente", () => {
         "base64",
       ),
       WHATSAPP_PROVIDER: "unofficial",
+      WHATSAPP_AUTH_STORE: "filesystem",
       WHATSAPP_AUTH_PATH: "/var/data/wwebjs_auth",
       RENDER_DISK_PATH: "/var/data",
       RENDER: "true",
@@ -56,6 +57,7 @@ test("ambiente da API valida chave de cifra e disco persistente", () => {
         MAVO_AGENT_API_ENABLED: "true",
         MAVO_AGENT_CREDENTIAL_ENCRYPTION_KEY: "não-é-uma-chave",
         WHATSAPP_PROVIDER: "unofficial",
+        WHATSAPP_AUTH_STORE: "filesystem",
         WHATSAPP_AUTH_PATH: "/tmp/wwebjs_auth",
         RENDER_DISK_PATH: "/var/data",
         RENDER: "true",
@@ -73,6 +75,7 @@ test("sessão efêmera do WhatsApp exige opt-in explícito no Render", () => {
     JWT_SECRET: "x".repeat(32),
     MAVO_ALLOWED_ORIGINS: "https://app.example.test",
     WHATSAPP_PROVIDER: "unofficial",
+    WHATSAPP_AUTH_STORE: "filesystem",
     WHATSAPP_AUTH_PATH: "/tmp/wwebjs_auth",
     RENDER: "true",
   };
@@ -99,6 +102,31 @@ test("sessão efêmera do WhatsApp exige opt-in explícito no Render", () => {
       }),
     /WHATSAPP_AUTH_PATH/,
     "o opt-in não dispensa caminho absoluto",
+  );
+});
+
+test("sessão WhatsApp no banco exige chave forte e dispensa disco", () => {
+  const databaseStore: NodeJS.ProcessEnv = {
+    NODE_ENV: "production",
+    DB_PROVIDER: "supabase",
+    DATABASE_URL_RUNTIME: databaseUrl,
+    REDIS_URL: "rediss://default:secret@example.test:6379",
+    JWT_SECRET: "x".repeat(32),
+    MAVO_ALLOWED_ORIGINS: "https://app.example.test",
+    WHATSAPP_PROVIDER: "unofficial",
+    WHATSAPP_AUTH_STORE: "database",
+    WHATSAPP_AUTH_ENCRYPTION_KEY: "k".repeat(32),
+    RENDER: "true",
+  };
+
+  assert.doesNotThrow(() => validateApiEnvironment(databaseStore));
+  assert.throws(
+    () =>
+      validateApiEnvironment({
+        ...databaseStore,
+        WHATSAPP_AUTH_ENCRYPTION_KEY: "curta",
+      }),
+    /WHATSAPP_AUTH_ENCRYPTION_KEY/,
   );
 });
 

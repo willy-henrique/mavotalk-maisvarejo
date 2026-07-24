@@ -1,7 +1,6 @@
 import qrcode from "qrcode";
 import twilio from "twilio";
 import makeWASocket, {
-  useMultiFileAuthState,
   fetchLatestBaileysVersion,
   downloadMediaMessage,
   getContentType,
@@ -41,6 +40,12 @@ import {
   resolvePhoneJid,
   whatsappPhoneFromJid,
 } from "@/lib/whatsapp-addressing";
+import {
+  configuredWhatsappAuthPersistence,
+  configuredWhatsappAuthStore,
+  shouldAutoReconnectWhatsapp,
+} from "@/lib/whatsapp-auth-config";
+import { createWhatsappAuthState } from "@/lib/whatsapp-auth-state";
 
 type WhatsappStatus = "idle" | "initializing" | "qr" | "ready" | "disconnected" | "error";
 
@@ -49,6 +54,9 @@ type WhatsappState = {
   qrDataUrl: string | null;
   lastError: string | null;
   connectedPhone: string | null;
+  authStore: "database" | "filesystem";
+  sessionPersistent: boolean;
+  authPersistenceHealthy: boolean;
 };
 
 type KnownError = { message?: string };
@@ -59,6 +67,9 @@ declare global {
   var __waInitPromise: Promise<WhatsappState> | undefined;
   var __waDestroyPromise: Promise<void> | undefined;
   var __waUnhandledRejectionHooked: boolean | undefined;
+  var __waManualDisconnect: boolean | undefined;
+  var __waReconnectTimer: NodeJS.Timeout | undefined;
+  var __waAuthResetPromise: Promise<void> | undefined;
 }
 
 function getState(): WhatsappState {
@@ -68,6 +79,9 @@ function getState(): WhatsappState {
       qrDataUrl: null,
       lastError: null,
       connectedPhone: null,
+      authStore: configuredWhatsappAuthStore(),
+      sessionPersistent: configuredWhatsappAuthPersistence(),
+      authPersistenceHealthy: true,
     };
   }
   return global.__waState;
@@ -745,6 +759,23 @@ export function getWhatsappState() {
   return getState();
 }
 
+export function getPublicWhatsappStatus() {
+  const provider = process.env.WHATSAPP_PROVIDER || "twilio";
+  const state = getState();
+  return {
+    provider,
+    status: state.status,
+    ready: provider === "unofficial" ? state.status === "ready" : true,
+    actionRequired:
+      provider === "unofficial" &&
+      (["qr", "disconnected", "error"].includes(state.status) ||
+        !state.authPersistenceHealthy),
+    authStore: state.authStore,
+    sessionPersistent: state.sessionPersistent,
+    authPersistenceHealthy: state.authPersistenceHealthy,
+  };
+}
+
 /** Aguarda o cliente unofficial ficar pronto (ex.: após `initWhatsappClient`). */
 export async function waitForWhatsappReady(maxMs: number): Promise<boolean> {
   const deadline = Date.now() + maxMs;
@@ -775,11 +806,35 @@ export async function initWhatsappClient() {
   const state = getState();
   state.status = "initializing";
   state.lastError = null;
+  global.__waManualDisconnect = false;
+  if (global.__waReconnectTimer) {
+    clearTimeout(global.__waReconnectTimer);
+    global.__waReconnectTimer = undefined;
+  }
 
   const initPromise = (async () => {
     try {
-      const authPath = process.env.WHATSAPP_AUTH_PATH || ".wwebjs_auth";
-      const { state: authState, saveCreds } = await useMultiFileAuthState(authPath);
+      if (global.__waAuthResetPromise) {
+        const pendingReset = global.__waAuthResetPromise;
+        try {
+          await pendingReset;
+        } finally {
+          if (global.__waAuthResetPromise === pendingReset) {
+            global.__waAuthResetPromise = undefined;
+          }
+        }
+      }
+      const auth = await createWhatsappAuthState({
+        organizationId: DEFAULT_ORGANIZATION_ID,
+        sessionName:
+          process.env.WHATSAPP_SESSION_NAME || "mavo-talk-production",
+        authPath: process.env.WHATSAPP_AUTH_PATH,
+        diskPath: process.env.RENDER_DISK_PATH,
+      });
+      const { state: authState, saveCreds } = auth;
+      state.authStore = auth.store;
+      state.sessionPersistent = auth.persistent;
+      state.authPersistenceHealthy = true;
       const { version } = await fetchLatestBaileysVersion();
 
       const sock = makeWASocket({
@@ -791,7 +846,25 @@ export async function initWhatsappClient() {
         syncFullHistory: false,
       });
 
-      sock.ev.on("creds.update", saveCreds);
+      sock.ev.on("creds.update", () => {
+        void saveCreds()
+          .then(() => {
+            state.authPersistenceHealthy = true;
+            if (
+              state.lastError === "Falha ao persistir a sessão do WhatsApp"
+            ) {
+              state.lastError = null;
+            }
+          })
+          .catch((error) => {
+            state.authPersistenceHealthy = false;
+            state.lastError = "Falha ao persistir a sessão do WhatsApp";
+            logger.error(
+              { err: error },
+              "Failed to persist WhatsApp credentials",
+            );
+          });
+      });
 
       sock.ev.on("connection.update", (update) => {
         const { connection, lastDisconnect, qr } = update;
@@ -804,6 +877,7 @@ export async function initWhatsappClient() {
         }
 
         if (connection === "open") {
+          global.__waManualDisconnect = false;
           state.status = "ready";
           state.qrDataUrl = null;
           state.lastError = null;
@@ -825,14 +899,34 @@ export async function initWhatsappClient() {
             global.__waClient = undefined;
           }
 
-          if (!loggedOut) {
-            setTimeout(() => {
+          if (
+            shouldAutoReconnectWhatsapp(
+              loggedOut,
+              Boolean(global.__waManualDisconnect),
+            )
+          ) {
+            global.__waReconnectTimer = setTimeout(() => {
+              global.__waReconnectTimer = undefined;
               void initWhatsappClient().catch((err) => {
                 logger.error({ err }, "Failed to auto-reconnect WhatsApp client");
               });
-            }, RECONNECT_DELAY_MS).unref();
+            }, RECONNECT_DELAY_MS);
+            global.__waReconnectTimer.unref();
           } else {
-            logger.warn("WhatsApp session logged out; reconnect requires a new QR Code");
+            if (loggedOut) {
+              const resetPromise = auth.clearSession();
+              global.__waAuthResetPromise = resetPromise;
+              void resetPromise.catch((error) => {
+                state.authPersistenceHealthy = false;
+                logger.error(
+                  { err: error },
+                  "Failed to clear logged-out WhatsApp auth state",
+                );
+              });
+              logger.warn(
+                "WhatsApp session logged out; stored state cleared and a new QR Code is required",
+              );
+            }
           }
         }
       });
@@ -878,7 +972,18 @@ export async function destroyWhatsappClient() {
   }
 
   const destroyPromise = (async () => {
-    if (!global.__waClient) return;
+    global.__waManualDisconnect = true;
+    if (global.__waReconnectTimer) {
+      clearTimeout(global.__waReconnectTimer);
+      global.__waReconnectTimer = undefined;
+    }
+    if (!global.__waClient) {
+      const state = getState();
+      state.status = "disconnected";
+      state.qrDataUrl = null;
+      state.connectedPhone = null;
+      return;
+    }
     try {
       global.__waClient.end(undefined);
     } catch (error) {

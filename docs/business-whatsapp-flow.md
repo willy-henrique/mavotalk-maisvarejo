@@ -2,7 +2,7 @@
 
 ## Ponto de decisão
 
-A decisão gerencial ocorre nos três caminhos de entrada — `whatsapp-web.js`,
+A decisão gerencial ocorre nos três caminhos de entrada — Baileys,
 Twilio e ticket-upsert — antes de contato, conversa ou ticket.
 
 ```mermaid

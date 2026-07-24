@@ -15,6 +15,7 @@ const requiredTables = [
   "business_product_sales_daily",
   "business_inventory_entries_daily",
   "business_query_audit",
+  "whatsapp_auth_state",
 ];
 
 const pool = createMigrationPool();

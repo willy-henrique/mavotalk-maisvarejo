@@ -13,7 +13,8 @@ Configuração e homologação: [`docs/BOT-SUPERMERCADO.md`](docs/BOT-SUPERMERCA
 ## Painel master e produção
 
 - `/mavo`: painel administrativo master com login isolado, saúde do Supabase, integrações, indicadores, filas, usuários, horários, configuração da Mavi e auditoria.
-- `/api/health`: health check da aplicação e do banco para o Render.
+- `/api/health`: health check da aplicação, banco, Redis e estado sanitizado do
+  canal WhatsApp para o Render.
 - `render.yaml`: Blueprint de produção com secrets e variáveis necessárias.
 
 Guia completo: [`docs/DEPLOY-SUPABASE-RENDER.md`](docs/DEPLOY-SUPABASE-RENDER.md).
@@ -24,7 +25,7 @@ Guia completo: [`docs/DEPLOY-SUPABASE-RENDER.md`](docs/DEPLOY-SUPABASE-RENDER.md
 - Supabase PostgreSQL como banco oficial
 - React 19 + Vite na SPA principal em `frontend/`
 - WhatsApp por provider configuravel:
-  - `unofficial` via `whatsapp-web.js` (QR Code)
+  - `unofficial` via Baileys (QR Code e auth state cifrado no Supabase)
   - `twilio` via webhook
 - Cloudinary (midias imagem/documento)
 - Socket.IO (tempo real)
@@ -124,7 +125,7 @@ Formato enviado:
 
 Com `WILLTALK_N8N_ONLY=true`:
 
-- **WhatsApp não oficial (`whatsapp-web.js`)**: cada mensagem inbound chama internamente `POST /api/webhooks/n8n/ticket-upsert` (loopback) com Bearer `WILLTALK_WEBHOOK_TOKEN`. A triagem e as respostas ao cliente saem desta rota.
+- **WhatsApp não oficial (Baileys)**: cada mensagem inbound chama internamente `POST /api/webhooks/n8n/ticket-upsert` (loopback) com Bearer `WILLTALK_WEBHOOK_TOKEN`. A triagem e as respostas ao cliente saem desta rota.
 - **Twilio**: no mesmo modo, o webhook Twilio não devolve TwiML de menu; também delega ao `ticket-upsert` (respostas vão pelo canal configurado em `WHATSAPP_PROVIDER` dentro do Mavo Talk).
 
 Rota usada (também pode ser chamada pelo n8n com o mesmo contrato):
