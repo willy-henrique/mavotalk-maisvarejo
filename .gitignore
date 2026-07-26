@@ -25,6 +25,7 @@
 *.pem
 .wwebjs_auth/
 .wwebjs_cache/
+.whatsapp_auth/
 
 # debug
 npm-debug.log*

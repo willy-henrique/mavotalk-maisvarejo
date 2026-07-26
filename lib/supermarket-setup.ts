@@ -18,7 +18,6 @@ export type SupermarketPresetResult = {
 };
 
 export function isSupermarketQueuePresetApplied(queues: QueueLike[]): boolean {
-  const presetOptions = new Set(SUPERMARKET_QUEUE_PRESET.map((item) => item.menuOption));
   const presetMatches = SUPERMARKET_QUEUE_PRESET.every((preset) => {
     const queue = queues.find((item) => Number(item.menuOption) === preset.menuOption);
     return Boolean(
@@ -38,7 +37,7 @@ export async function applySupermarketQueuePreset(
   const existing = await listQueues(organizationId);
   let created = 0;
   let updated = 0;
-  let paused = 0;
+  const paused = 0;
 
   for (const preset of SUPERMARKET_QUEUE_PRESET) {
     const current = existing.find((queue) => Number(queue.menuOption) === preset.menuOption);
