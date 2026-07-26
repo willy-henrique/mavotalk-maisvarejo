@@ -27,16 +27,16 @@ const TAB_BY_PATH: Record<string, string> = {
 
 const menuItems = [
   { id: 'inbox', label: 'Inbox', icon: Icons.Inbox, path: '/inbox', role: 'ANY' as const },
-  { id: 'dashboard', label: 'Atendimento', icon: Icons.Chart, path: '/dashboard', role: 'METRICS' as const },
+  { id: 'dashboard', label: 'Visão da operação', icon: Icons.Chart, path: '/dashboard', role: 'METRICS' as const },
   { id: 'business', label: 'Indicadores do negócio', icon: Icons.Chart, path: '/business', role: 'METRICS' as const },
   { id: 'contacts', label: 'Contatos', icon: Icons.Users, path: '/contacts', role: 'ANY' as const },
-  { id: 'painel', label: 'Painel', icon: Icons.QrCode, path: '/painel', role: 'PAINEL' as const },
+  { id: 'painel', label: 'Conexão WhatsApp', icon: Icons.QrCode, path: '/painel', role: 'PAINEL' as const },
   { id: 'business_sync', label: 'Sincronização', icon: Icons.Settings, path: '/business/sincronizacao', role: UserRole.ADMIN },
   { id: 'business_audit', label: 'Auditoria gerencial', icon: Icons.Settings, path: '/business/auditoria', role: UserRole.ADMIN },
   { id: 'admin_business_access', label: 'Acessos gerenciais', icon: Icons.Users, path: '/admin/acessos-gerenciais', role: UserRole.ADMIN },
   { id: 'admin_agents', label: 'Agentes cloud', icon: Icons.Settings, path: '/admin/agentes', role: UserRole.ADMIN },
   { id: 'admin_users', label: 'Equipe', icon: Icons.Users, path: '/admin/usuarios', role: UserRole.ADMIN },
-  { id: 'admin_types', label: 'Tipos de Ticket', icon: Icons.Settings, path: '/admin/tipos', role: UserRole.ADMIN },
+  { id: 'admin_types', label: 'Filas e automações', icon: Icons.Settings, path: '/admin/tipos', role: UserRole.ADMIN },
   { id: 'admin_quick_replies', label: 'Respostas Rápidas', icon: Icons.Settings, path: '/admin/respostas-rapidas', role: UserRole.ADMIN },
 ];
 
@@ -62,11 +62,11 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
 
   return (
     <aside
-      className={`${collapsed ? 'md:w-20' : 'md:w-64'} w-64 fixed inset-y-0 left-0 md:relative md:inset-auto ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex flex-col transition-all duration-300 z-[60] shadow-xl dark:shadow-2xl shrink-0 border-r border-slate-200 dark:border-slate-800`}
+      className={`${collapsed ? 'md:w-20' : 'md:w-64'} w-64 fixed inset-y-0 left-0 md:relative md:inset-auto ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} bg-white/95 dark:bg-slate-950/95 text-slate-600 dark:text-slate-400 flex flex-col transition-all duration-300 z-[60] shadow-2xl dark:shadow-black/30 shrink-0 border-r border-slate-200/80 dark:border-slate-800 backdrop-blur-xl`}
     >
       <div className="p-4 flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80">
         <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
-          <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-blue-500/20">
+          <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-blue-500/20">
             <Icons.Inbox className="w-6 h-6" />
           </div>
           {!collapsed && (
@@ -130,7 +130,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
       </nav>
 
       <div className={`p-4 border-t border-slate-200 dark:border-slate-800 ${collapsed ? 'flex justify-center' : ''}`}>
-        <div className={`flex items-center gap-3 p-3 rounded-2xl bg-slate-100 dark:bg-slate-800/30 border border-slate-200 dark:border-slate-700/50 ${collapsed ? 'justify-center' : ''}`}>
+        <div className={`flex items-center gap-3 p-3 rounded-2xl bg-slate-100/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 ${collapsed ? 'justify-center' : ''}`}>
           <div
             className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-200 shrink-0 border-2 border-blue-200 dark:border-blue-800 shadow-sm flex items-center justify-center text-xs font-black"
             aria-label={`Usuário ${user.name}`}

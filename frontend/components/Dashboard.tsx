@@ -1,13 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { apiGet } from '../services/api';
 
 type SupportMetrics = {
@@ -16,11 +8,7 @@ type SupportMetrics = {
   totalEncerrado: number;
   firstResponseAverageMinutes: number | null;
   satisfactionAverage: number | null;
-  volumeByDemand: Array<{
-    queueName: string;
-    colorHex: string;
-    total: number;
-  }>;
+  volumeByDemand: Array<{ queueName: string; colorHex: string; total: number }>;
 };
 
 const Dashboard: React.FC = () => {
@@ -28,78 +16,39 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    let mounted = true;
-    apiGet<{ metrics: SupportMetrics }>('/api/dashboard/metrics')
-      .then((data) => mounted && setMetrics(data.metrics))
-      .catch((reason) => mounted && setError(reason instanceof Error ? reason.message : 'Falha ao carregar métricas'))
-      .finally(() => mounted && setLoading(false));
-    return () => {
-      mounted = false;
-    };
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await apiGet<{ metrics: SupportMetrics }>('/api/dashboard/metrics');
+      setMetrics(response.metrics);
+      setError('');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Métricas indisponíveis.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  if (loading) {
-    return <div className="flex-1 p-8 text-slate-500 dark:text-slate-400">Carregando métricas de atendimento...</div>;
-  }
-  if (error || !metrics) {
-    return (
-      <div className="flex-1 p-8 bg-slate-50 dark:bg-slate-800/95">
-        <div className="rounded-xl border border-rose-200 bg-rose-50 p-5 text-rose-700">{error || 'Métricas indisponíveis.'}</div>
-      </div>
-    );
-  }
+  useEffect(() => { void load(); }, [load]);
 
-  const cards = [
-    { label: 'Aguardando', value: metrics.totalAguardando },
-    { label: 'Em atendimento', value: metrics.totalAtendimento },
-    { label: 'Encerrados', value: metrics.totalEncerrado },
-    {
-      label: 'Primeira resposta',
-      value: metrics.firstResponseAverageMinutes == null ? 'Sem dados' : `${metrics.firstResponseAverageMinutes} min`,
-    },
-    {
-      label: 'Satisfação',
-      value: metrics.satisfactionAverage == null ? 'Sem dados' : `${metrics.satisfactionAverage.toFixed(2)} / 5`,
-    },
-  ];
+  const cards = metrics ? [
+    { label: 'Aguardando', value: metrics.totalAguardando, accent: 'bg-amber-500', hint: 'Conversas que precisam de uma primeira ação' },
+    { label: 'Em atendimento', value: metrics.totalAtendimento, accent: 'bg-blue-500', hint: 'Conversas em andamento pela equipe' },
+    { label: 'Resolvidos', value: metrics.totalEncerrado, accent: 'bg-emerald-500', hint: 'Conversas encerradas no período' },
+    { label: '1ª resposta', value: metrics.firstResponseAverageMinutes == null ? '—' : `${metrics.firstResponseAverageMinutes} min`, accent: 'bg-violet-500', hint: 'Média até o primeiro retorno' },
+    { label: 'Satisfação', value: metrics.satisfactionAverage == null ? '—' : `${metrics.satisfactionAverage.toFixed(1)} / 5`, accent: 'bg-rose-500', hint: 'Avaliação média recebida' },
+  ] : [];
 
   return (
-    <div className="p-6 md:p-8 overflow-y-auto flex-1 bg-slate-50 dark:bg-slate-800/95 transition-colors">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">Métricas de atendimento</h1>
-        <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-          Chamados, filas, SLA e satisfação. Dados gerenciais de vendas ficam na área Negócio.
-        </p>
+    <div className="flex-1 overflow-y-auto bg-slate-50 p-5 dark:bg-slate-800/95 sm:p-8">
+      <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
+        <div><p className="text-sm text-slate-500 dark:text-slate-400">Acompanhe o ritmo da operação e distribua a atenção onde ela é necessária.</p></div>
+        <button type="button" onClick={() => void load()} disabled={loading} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">{loading ? 'Atualizando...' : 'Atualizar dados'}</button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
-        {cards.map((card) => (
-          <div key={card.label} className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-xl p-5 shadow-sm">
-            <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">{card.label}</p>
-            <p className="text-2xl font-black text-slate-800 dark:text-slate-100 mt-2">{card.value}</p>
-          </div>
-        ))}
-      </div>
+      {error && <div role="alert" className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200"><span>{error}</span><button type="button" onClick={() => void load()} className="whitespace-nowrap rounded-lg bg-white px-3 py-2 text-xs font-black text-rose-700 shadow-sm dark:bg-slate-900 dark:text-rose-200">Tentar novamente</button></div>}
 
-      <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-700 rounded-xl p-6 shadow-sm">
-        <h2 className="font-bold text-slate-800 dark:text-slate-100 mb-5">Volume por fila</h2>
-        {metrics.volumeByDemand.length === 0 ? (
-          <div className="py-16 text-center text-slate-500">Ainda não há tickets para exibir.</div>
-        ) : (
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={metrics.volumeByDemand}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="queueName" tick={{ fontSize: 11 }} />
-                <YAxis allowDecimals={false} />
-                <Tooltip />
-                <Bar dataKey="total" name="Tickets" fill="#2563eb" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </div>
+      {loading && !metrics ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{Array.from({ length: 5 }, (_, index) => <div key={index} className="h-36 rounded-3xl skeleton" />)}</div> : metrics && <><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{cards.map((card) => <article key={card.label} className="group rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-700 dark:bg-slate-900"><div className={`mb-5 h-2 w-12 rounded-full ${card.accent}`} /><p className="text-[10px] font-black uppercase tracking-[.16em] text-slate-400">{card.label}</p><p className="mt-2 text-3xl font-black tracking-tight text-slate-900 dark:text-white">{card.value}</p><p className="mt-3 text-xs leading-5 text-slate-500 dark:text-slate-400">{card.hint}</p></article>)}</section><section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-6"><div className="mb-6 flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-black text-slate-900 dark:text-white">Distribuição por fila</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Identifique onde a demanda está concentrada.</p></div><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{metrics.volumeByDemand.reduce((total, item) => total + item.total, 0)} tickets</span></div>{metrics.volumeByDemand.length === 0 ? <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-slate-300 text-sm text-slate-500 dark:border-slate-700">Ainda não há tickets para exibir neste painel.</div> : <div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={metrics.volumeByDemand} margin={{ top: 8, right: 8, left: -20, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, .25)" /><XAxis dataKey="queueName" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis allowDecimals={false} axisLine={false} tickLine={false} /><Tooltip cursor={{ fill: 'rgba(37, 99, 235, .06)' }} contentStyle={{ borderRadius: 16, border: '1px solid #e2e8f0' }} /><Bar dataKey="total" name="Tickets" fill="#2563eb" radius={[8, 8, 2, 2]} /></BarChart></ResponsiveContainer></div>}</section></>}
     </div>
   );
 };

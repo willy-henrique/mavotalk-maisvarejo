@@ -2,8 +2,10 @@ export function canonicalFrontendLocation(
   pathname: string,
   environment: NodeJS.ProcessEnv = process.env,
 ): string | null {
-  if (environment.NODE_ENV !== "production") return null;
-  const configured = String(environment.FRONTEND_URL || "")
+  const configured = String(
+    environment.FRONTEND_URL ||
+      (environment.NODE_ENV === "production" ? "" : "http://localhost:5173"),
+  )
     .split(",")[0]
     .trim();
   if (!configured) return null;

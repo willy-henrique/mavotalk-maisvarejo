@@ -30,14 +30,18 @@ export async function apiFetch(
   options: RequestInit = {}
 ): Promise<Response> {
   const url = getApiUrl(path);
-  return fetch(url, {
+  const response = await fetch(url, {
     ...options,
     credentials: 'include',
     headers: {
-      'Content-Type': 'application/json',
+      ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...options.headers,
     },
   });
+  if (response.status === 401 && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('mavo:session-expired'));
+  }
+  return response;
 }
 
 async function parseJsonOrThrow(res: Response, path: string): Promise<unknown> {

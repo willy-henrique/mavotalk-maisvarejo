@@ -81,7 +81,6 @@ export interface Ticket {
   lastMessageAt: Date;
   slaDeadline: Date;
   isBotActive: boolean;
-  // Added missing properties used in TicketDetailPanel and Dashboard
   category?: string;
   tags: string[];
 }

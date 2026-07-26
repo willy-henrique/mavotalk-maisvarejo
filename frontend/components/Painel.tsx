@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { apiFetch } from '../services/api';
+import { apiFetch, getApiUrl } from '../services/api';
 import { AuthService } from '../services/authService';
 import { UserRole } from '../types';
 
@@ -27,6 +27,7 @@ const Painel: React.FC = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const canAccess = AuthService.canAccessPainel();
 
   const fetchStatus = useCallback(async () => {
@@ -40,11 +41,14 @@ const Painel: React.FC = () => {
     }
     setProvider(data.provider);
     setWaState(data.state);
+    setLastUpdated(new Date());
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchStatus();
+    void fetchStatus();
+    const interval = window.setInterval(() => void fetchStatus(), 10000);
+    return () => window.clearInterval(interval);
   }, [fetchStatus]);
 
   const handleConnect = async () => {
@@ -104,24 +108,25 @@ const Painel: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 overflow-auto bg-slate-50 min-h-full">
-      {/* Header Área Admin */}
-      <div className="bg-slate-900 text-white px-8 py-6 border-b border-slate-700">
-        <div className="max-w-4xl flex flex-wrap items-center gap-3">
-          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 text-xs font-bold uppercase tracking-wider">
+    <div className="min-h-full flex-1 overflow-auto bg-slate-50 p-5 dark:bg-slate-800/95 sm:p-8">
+      <div className="mx-auto max-w-5xl">
+      <div className="mb-6 overflow-hidden rounded-3xl bg-slate-950 p-6 text-white shadow-xl shadow-slate-950/10 sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+          <span className="inline-flex items-center gap-2 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-300">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
             </svg>
             Área do administrador
           </span>
-          <h1 className="text-2xl font-black tracking-tight">Painel Mavo Talk</h1>
+          <h2 className="mt-4 text-2xl font-black tracking-tight">Central de conexão</h2>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">Conecte o WhatsApp, acompanhe o estado da sessão e acesse as configurações que sustentam a operação.</p>
+          </div>
+          <button type="button" onClick={() => void fetchStatus()} className="rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/15">Atualizar status</button>
         </div>
-        <p className="max-w-4xl mt-2 text-slate-400 text-sm">
-          Conexão WhatsApp e configurações restritas a administradores e gestores.
-        </p>
       </div>
 
-      <div className="p-8 max-w-2xl">
+      <div className="max-w-3xl">
         {error && (
           <div className="mb-6 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-sm">
             {error}
@@ -134,16 +139,17 @@ const Painel: React.FC = () => {
           </div>
         )}
 
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="bg-slate-100 px-6 py-3 border-b border-slate-200">
-            <h2 className="text-sm font-bold text-slate-600 uppercase tracking-wider">Conexão WhatsApp</h2>
-            <p className="text-slate-500 text-xs mt-0.5">
+        <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          <div className="border-b border-slate-200 bg-slate-50 px-6 py-4 dark:border-slate-700 dark:bg-slate-800/70">
+            <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-sm font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">Conexão WhatsApp</h2>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               Provider: <span className="font-semibold text-slate-700">{provider}</span>
             </p>
+            </div><span className={`rounded-full px-3 py-1.5 text-xs font-black ${waState?.status === 'ready' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200'}`}>{waState?.status === 'ready' ? 'Conectado' : 'Ação necessária'}</span></div>
           </div>
           <div className="p-6">
-            <p className="text-slate-800 font-semibold mb-4">
-              Status: <span className="text-slate-600 font-normal">{waState?.status ?? 'idle'}</span>
+            <p className="mb-4 text-slate-800 dark:text-slate-100 font-semibold">
+              Status: <span className="font-normal text-slate-600 dark:text-slate-300">{waState?.status ?? 'idle'}</span>
             </p>
             {waState?.connectedPhone && (
               <p className="text-slate-600 text-sm mb-4">
@@ -196,7 +202,7 @@ const Painel: React.FC = () => {
 
         {isAdmin && (
           <div className="mt-8">
-            <h2 className="text-lg font-bold text-slate-800 mb-4">Configurações Administrativas</h2>
+            <h2 className="mb-4 text-lg font-black text-slate-800 dark:text-white">Configurações administrativas</h2>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <button
                 type="button"
@@ -222,9 +228,19 @@ const Painel: React.FC = () => {
                 <span className="font-bold text-slate-800 block">Respostas Rápidas</span>
                 <span className="text-sm text-slate-500">Atalhos e variáveis globais</span>
               </button>
+              <button
+                type="button"
+                onClick={() => { window.location.href = getApiUrl('/mavo'); }}
+                className="p-4 rounded-2xl border border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300 text-left transition-all dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800"
+              >
+                <span className="font-bold text-slate-800 dark:text-slate-100 block">Configuração do Mavo</span>
+                <span className="text-sm text-slate-500">Ofertas, horários, localização e bot</span>
+              </button>
             </div>
           </div>
         )}
+        {lastUpdated && <p className="mt-6 text-xs text-slate-400">Atualizado às {lastUpdated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</p>}
+      </div>
       </div>
     </div>
   );

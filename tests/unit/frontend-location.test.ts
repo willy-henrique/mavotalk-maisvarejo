@@ -14,12 +14,12 @@ test("direciona as telas duplicadas do backend ao frontend canônico", () => {
   );
 });
 
-test("preserva a interface local do Next durante desenvolvimento", () => {
+test("usa a SPA canônica também durante desenvolvimento", () => {
   assert.equal(
     canonicalFrontendLocation("/", {
       NODE_ENV: "development",
-      FRONTEND_URL: "http://localhost:4001",
+      FRONTEND_URL: "http://localhost:5173",
     }),
-    null,
+    "http://localhost:5173/",
   );
 });
