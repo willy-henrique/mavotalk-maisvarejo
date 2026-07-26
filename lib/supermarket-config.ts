@@ -9,8 +9,8 @@ export type SupermarketQueuePresetItem = {
 
 /**
  * Modelo oficial de atendimento para supermercados.
- * As opções 1–3 resolvem dúvidas recorrentes sem ocupar um atendente.
- * As opções 4–7 preservam contexto e encaminham para a fila responsável.
+ * As opções 1–2 resolvem dúvidas recorrentes sem ocupar um atendente.
+ * As opções seguintes preservam contexto e encaminham para a fila responsável.
  */
 export const SUPERMARKET_QUEUE_PRESET: readonly SupermarketQueuePresetItem[] = [
   {
@@ -31,14 +31,6 @@ export const SUPERMARKET_QUEUE_PRESET: readonly SupermarketQueuePresetItem[] = [
   },
   {
     menuOption: 3,
-    name: "Entregas e pedidos",
-    colorHex: "#8B5CF6",
-    defaultSlaMins: 10,
-    emoji: "🛵",
-    mode: "self-service",
-  },
-  {
-    menuOption: 4,
     name: "Produtos e disponibilidade",
     colorHex: "#14B8A6",
     defaultSlaMins: 15,
@@ -46,7 +38,7 @@ export const SUPERMARKET_QUEUE_PRESET: readonly SupermarketQueuePresetItem[] = [
     mode: "assisted",
   },
   {
-    menuOption: 5,
+    menuOption: 4,
     name: "Açougue, padaria e hortifruti",
     colorHex: "#22C55E",
     defaultSlaMins: 15,
@@ -54,7 +46,7 @@ export const SUPERMARKET_QUEUE_PRESET: readonly SupermarketQueuePresetItem[] = [
     mode: "assisted",
   },
   {
-    menuOption: 6,
+    menuOption: 5,
     name: "Trocas, devoluções e pagamentos",
     colorHex: "#EAB308",
     defaultSlaMins: 20,
@@ -62,7 +54,7 @@ export const SUPERMARKET_QUEUE_PRESET: readonly SupermarketQueuePresetItem[] = [
     mode: "assisted",
   },
   {
-    menuOption: 7,
+    menuOption: 6,
     name: "Falar com um atendente",
     colorHex: "#EF4444",
     defaultSlaMins: 10,

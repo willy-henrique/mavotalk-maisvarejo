@@ -1,11 +1,22 @@
 "use client";
 
+// A URL de ofertas vem do Cloudinary configurado pela organização; como o
+// host é dinâmico, usamos img para não exigir allowlist de domínios no build.
+/* eslint-disable @next/next/no-img-element */
+
 import { FormEvent, useState } from "react";
 import { Icon, MavoBrand } from "@/components/mavo-brand";
 import type { MavoMasterSession } from "@/lib/mavo-master-auth";
 import type { MavoSystemOverview } from "@/lib/mavo-system-overview";
 
 const weekdayNames = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado"];
+const defaultBusinessHours = weekdayNames.map((_, weekday) => ({
+  weekday,
+  startTime: weekday === 0 ? "08:00" : "07:00",
+  endTime: weekday === 0 ? "14:00" : "21:00",
+  timezone: "America/Sao_Paulo",
+  isActive: weekday !== 0,
+}));
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat("pt-BR").format(value);
@@ -128,6 +139,21 @@ export function MavoAdminPanel({
   const [overview, setOverview] = useState(initialOverview);
   const [busy, setBusy] = useState<"refresh" | "sync" | "logout" | null>(null);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [settingsBusy, setSettingsBusy] = useState<"save" | "upload" | null>(null);
+  const [settingsDraft, setSettingsDraft] = useState(() => ({
+    enabled: initialOverview.supermarket.enabled,
+    botName: initialOverview.supermarket.botName,
+    storeName: initialOverview.supermarket.storeName,
+    address: initialOverview.supermarket.address || "",
+    mapsUrl: initialOverview.supermarket.mapsUrl || "",
+    weekdayHours: initialOverview.supermarket.hours[0] || "",
+    sundayHours: initialOverview.supermarket.hours[1] || "",
+    offersUrl: initialOverview.supermarket.offersUrl || "",
+    offersText: initialOverview.supermarket.offersText || "",
+    phone: initialOverview.supermarket.phone || "",
+    aiFallbackEnabled: initialOverview.supermarket.aiFallbackEnabled,
+  }));
+  const [hoursDraft, setHoursDraft] = useState(() => defaultBusinessHours.map((fallback) => initialOverview.businessHours.find((item) => item.weekday === fallback.weekday) || fallback));
 
   async function refresh(showFeedback = false) {
     setBusy("refresh");
@@ -160,6 +186,66 @@ export function MavoAdminPanel({
     } catch (error) {
       setFeedback({ type: "error", text: error instanceof Error ? error.message : "Falha na sincronização." });
       setBusy(null);
+    }
+  }
+
+  async function saveSupermarketSettings(event: FormEvent) {
+    event.preventDefault();
+    setSettingsBusy("save");
+    try {
+      const response = await fetch("/api/admin/supermarket-settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...settingsDraft, businessHours: hoursDraft }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error || "Não foi possível salvar as configurações.");
+      setOverview((current) => ({
+        ...current,
+        businessHours: payload.businessHours || current.businessHours,
+        supermarket: { ...current.supermarket, ...payload.settings },
+      }));
+      setHoursDraft(payload.businessHours || hoursDraft);
+      setFeedback({ type: "success", text: "Configurações do bot salvas com sucesso." });
+    } catch (error) {
+      setFeedback({ type: "error", text: error instanceof Error ? error.message : "Falha ao salvar configurações." });
+    } finally {
+      setSettingsBusy(null);
+    }
+  }
+
+  async function uploadOfferImage(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setSettingsBusy("upload");
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const response = await fetch("/api/admin/supermarket-settings/offers-image", { method: "POST", body: form });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error || "Não foi possível enviar a imagem.");
+      setOverview((current) => ({ ...current, supermarket: { ...current.supermarket, ...payload.settings } }));
+      setFeedback({ type: "success", text: "Imagem das ofertas publicada." });
+    } catch (error) {
+      setFeedback({ type: "error", text: error instanceof Error ? error.message : "Falha ao enviar imagem." });
+    } finally {
+      setSettingsBusy(null);
+    }
+  }
+
+  async function removeOfferImage() {
+    setSettingsBusy("upload");
+    try {
+      const response = await fetch("/api/admin/supermarket-settings/offers-image", { method: "DELETE" });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error || "Não foi possível remover a imagem.");
+      setOverview((current) => ({ ...current, supermarket: { ...current.supermarket, ...payload.settings } }));
+      setFeedback({ type: "success", text: "Imagem das ofertas removida." });
+    } catch (error) {
+      setFeedback({ type: "error", text: error instanceof Error ? error.message : "Falha ao remover imagem." });
+    } finally {
+      setSettingsBusy(null);
     }
   }
 
@@ -264,7 +350,7 @@ export function MavoAdminPanel({
           </article>
 
           <article className="master-card queue-overview-card">
-            <div className="master-card-title"><div><span>Distribuição</span><h2>Filas do atendimento</h2></div><button type="button" onClick={syncSupermarket} disabled={Boolean(busy)}>{busy === "sync" ? "Sincronizando..." : "Sincronizar menu"}</button></div>
+            <div className="master-card-title"><div><span>Distribuição</span><h2>Filas do atendimento</h2></div><div className="master-card-actions"><a href="/dashboard/queues">Editar filas</a><button type="button" onClick={syncSupermarket} disabled={Boolean(busy)}>{busy === "sync" ? "Sincronizando..." : "Sincronizar menu"}</button></div></div>
             <div className="master-queue-overview">
               {overview.queues.length ? overview.queues.map((queue) => (
                 <div key={queue.id} className={!queue.isActive ? "inactive" : ""}>
@@ -278,21 +364,44 @@ export function MavoAdminPanel({
         </section>
 
         <section className="master-section supermarket-admin" id="supermarket">
-          <div className="master-section-heading"><div><span>Bot de supermercado</span><h2>{overview.supermarket.botName} · {overview.supermarket.storeName}</h2><p>Configuração pública usada nas respostas automáticas.</p></div><span className={`master-feature-chip ${overview.supermarket.enabled ? "on" : "off"}`}><i />{overview.supermarket.enabled ? "Bot ativo" : "Bot desativado"}</span></div>
-          <div className="supermarket-admin-grid">
-            <div className="supermarket-config-list">
-              <div><span>Endereço</span><strong>{overview.supermarket.address || "Não configurado"}</strong></div>
-              <div><span>Horários</span><strong>{overview.supermarket.hours.join(" · ") || "Não configurado"}</strong></div>
-              <div><span>Telefone</span><strong>{overview.supermarket.phone || "Não configurado"}</strong></div>
-              <div><span>Ofertas</span><strong>{overview.supermarket.offersUrl || "Fallback humano"}</strong></div>
-              <div><span>Pedidos</span><strong>{overview.supermarket.orderUrl || "Fallback humano"}</strong></div>
-              <div><span>Triagem</span><strong>{overview.supermarket.autoApplyPreset ? "Filas automáticas" : "Filas manuais"} · IA {overview.supermarket.aiFallbackEnabled ? "ativa" : "segura/desativada"}</strong></div>
+          <div className="master-section-heading"><div><span>Conteúdo e automação</span><h2>Configure o Mavo para sua loja</h2><p>Edite o que o cliente recebe no WhatsApp sem alterar código ou variáveis do servidor.</p></div><span className={`master-feature-chip ${overview.supermarket.enabled ? "on" : "off"}`}><i />{overview.supermarket.enabled ? "Bot ativo" : "Bot desativado"}</span></div>
+          <form className="master-bot-form" onSubmit={saveSupermarketSettings}>
+            <div className="master-config-card">
+              <div className="master-config-card-heading"><Icon name="store" /><div><strong>Identidade da loja</strong><span>Esses dados aparecem nas respostas automáticas.</span></div></div>
+              <div className="master-config-grid">
+                <label className="master-config-field"><span>Nome do assistente</span><input value={settingsDraft.botName} onChange={(event) => setSettingsDraft((value) => ({ ...value, botName: event.target.value }))} maxLength={80} /></label>
+                <label className="master-config-field"><span>Nome do supermercado</span><input value={settingsDraft.storeName} onChange={(event) => setSettingsDraft((value) => ({ ...value, storeName: event.target.value }))} maxLength={160} /></label>
+                <label className="master-config-field wide"><span>Endereço</span><input value={settingsDraft.address} onChange={(event) => setSettingsDraft((value) => ({ ...value, address: event.target.value }))} maxLength={300} placeholder="Rua, número, bairro e cidade" /></label>
+                <label className="master-config-field"><span>Link do mapa</span><input type="url" value={settingsDraft.mapsUrl} onChange={(event) => setSettingsDraft((value) => ({ ...value, mapsUrl: event.target.value }))} placeholder="https://maps.google.com/..." /></label>
+                <label className="master-config-field"><span>Telefone</span><input value={settingsDraft.phone} onChange={(event) => setSettingsDraft((value) => ({ ...value, phone: event.target.value }))} placeholder="(00) 0000-0000" /></label>
+              </div>
             </div>
-            <div className={`supermarket-readiness ${overview.supermarket.missingFields.length ? "attention" : "ready"}`}>
-              <span><Icon name={overview.supermarket.missingFields.length ? "activity" : "check"} size={22} /></span>
-              <div><strong>{overview.supermarket.missingFields.length ? "Configuração incompleta" : "Pronto para produção"}</strong><p>{overview.supermarket.missingFields.length ? `Preencha no Render: ${overview.supermarket.missingFields.join(", ")}. Até lá, a Mavi transfere esses casos para uma pessoa.` : "Todos os dados essenciais da loja estão disponíveis para a Mavi."}</p></div>
+
+            <div className="master-config-card offer-config-card">
+              <div className="master-config-card-heading"><Icon name="sparkle" /><div><strong>1 · Ofertas e promoções</strong><span>Publique o encarte do dia com texto, link e imagem.</span></div></div>
+              <div className="master-offer-layout">
+                <div className="master-config-grid">
+                  <label className="master-config-field wide"><span>Mensagem das ofertas</span><textarea value={settingsDraft.offersText} onChange={(event) => setSettingsDraft((value) => ({ ...value, offersText: event.target.value }))} rows={5} maxLength={4000} placeholder="Ex.: Café, arroz e produtos de limpeza com descontos especiais hoje." /></label>
+                  <label className="master-config-field wide"><span>Link do encarte (opcional)</span><input type="url" value={settingsDraft.offersUrl} onChange={(event) => setSettingsDraft((value) => ({ ...value, offersUrl: event.target.value }))} placeholder="https://..." /></label>
+                </div>
+                <div className="master-offer-upload">
+                  {overview.supermarket.offersImageUrl ? <img src={overview.supermarket.offersImageUrl} alt="Prévia das ofertas" /> : <div className="master-offer-empty"><Icon name="sparkle" size={24} /><span>Nenhum encarte publicado</span></div>}
+                  <label className="master-upload-button"><Icon name="plus" size={15} />{settingsBusy === "upload" ? "Enviando..." : "Escolher imagem"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadOfferImage} disabled={Boolean(settingsBusy)} /></label>
+                  {overview.supermarket.offersImageUrl ? <button type="button" className="master-remove-button" onClick={removeOfferImage} disabled={Boolean(settingsBusy)}>Remover imagem</button> : null}
+                </div>
+              </div>
             </div>
-          </div>
+
+            <div className="master-config-card">
+              <div className="master-config-card-heading"><Icon name="clock" /><div><strong>2 · Horários e localização</strong><span>Controle os horários reais usados na triagem fora do expediente.</span></div></div>
+              <div className="master-hours-editor">
+                {hoursDraft.map((item) => <label key={item.weekday}><span>{weekdayNames[item.weekday]}</span><input type="time" value={item.startTime} disabled={!item.isActive} onChange={(event) => setHoursDraft((rows) => rows.map((row) => row.weekday === item.weekday ? { ...row, startTime: event.target.value } : row))} /><b>até</b><input type="time" value={item.endTime} disabled={!item.isActive} onChange={(event) => setHoursDraft((rows) => rows.map((row) => row.weekday === item.weekday ? { ...row, endTime: event.target.value } : row))} /><button type="button" onClick={() => setHoursDraft((rows) => rows.map((row) => row.weekday === item.weekday ? { ...row, isActive: !row.isActive } : row))}>{item.isActive ? "Aberto" : "Fechado"}</button></label>)}
+              </div>
+            </div>
+
+            <div className="master-config-footer"><label className="master-check"><input type="checkbox" checked={settingsDraft.enabled} onChange={(event) => setSettingsDraft((value) => ({ ...value, enabled: event.target.checked }))} /><span>Bot Mavo ativo</span></label><label className="master-check"><input type="checkbox" checked={settingsDraft.aiFallbackEnabled} onChange={(event) => setSettingsDraft((value) => ({ ...value, aiFallbackEnabled: event.target.checked }))} /><span>Usar IA para mensagens não reconhecidas</span></label><button type="submit" className="master-save-button" disabled={settingsBusy !== null}>{settingsBusy === "save" ? "Salvando..." : "Salvar configurações"}</button></div>
+          </form>
+          <div className="supermarket-readiness ready"><span><Icon name="check" size={22} /></span><div><strong>Menu restante configurável</strong><p>Produtos e disponibilidade, setores frescos, trocas e atendimento humano são administrados em Demandas e filas. “Entregas e pedidos” foi removido do menu do cliente.</p></div></div>
         </section>
 
         <section className="master-two-columns" id="access">

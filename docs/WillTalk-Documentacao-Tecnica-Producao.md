@@ -563,5 +563,5 @@ RPO e RTO devem ser definidos pelo contratante. O código não substitui uma pol
 - [agent-cloud-api.md](agent-cloud-api.md) — protocolo do agente;
 - [security-business-access.md](security-business-access.md) — acesso gerencial;
 - [business-whatsapp-flow.md](business-whatsapp-flow.md) — roteamento pelo WhatsApp;
-- [BOT-SUPERMERCADO.md](BOT-SUPERMERCADO.md) — comportamento da Mavi;
+- [BOT-SUPERMERCADO.md](BOT-SUPERMERCADO.md) — comportamento do Mavo;
 - [DEPLOY-SUPABASE-RENDER.md](DEPLOY-SUPABASE-RENDER.md) — instalação e deploy.

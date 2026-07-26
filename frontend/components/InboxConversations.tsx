@@ -66,6 +66,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [quickReplyOpen, setQuickReplyOpen] = useState(false);
   const [quickReplyIndex, setQuickReplyIndex] = useState(0);
+  const [listSearch, setListSearch] = useState('');
   const [uploadingImage, setUploadingImage] = useState(false);
   const [typingAgent, setTypingAgent] = useState<{ name: string } | null>(null);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
@@ -317,12 +318,26 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   // Em "Abertas", mostramos apenas tickets realmente em fila ou em atendimento.
   // Conversas em triagem (status 'pendente_cliente') ficam escondidas até o cliente escolher a opção.
   const openStatuses: ConversationStatus[] = ['aguardando', 'em_atendimento'];
+  const lastMessage = (c: ApiConversation) => {
+    const msgs = [...(c.messages || [])].sort(
+      (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
+    );
+    return msgs[msgs.length - 1];
+  };
+  const normalizedListSearch = listSearch.trim().toLowerCase();
   const filtered =
-    tabAbertas === 'abertas'
+    (tabAbertas === 'abertas'
       ? conversations
           .filter((c) => openStatuses.includes(c.status))
           .filter((c) => (statusFilter ? c.status === statusFilter : true))
-      : conversations.filter((c) => c.status === 'encerrado');
+      : conversations.filter((c) => c.status === 'encerrado'))
+      .filter((c) => {
+        if (!normalizedListSearch) return true;
+        const last = lastMessage(c);
+        return [c.contact?.name, c.contact?.phoneNumber, c.queue?.name, last?.content, c.id]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedListSearch));
+      });
   const selected = conversations.find((c) => c.id === selectedId);
   const countAtendendo = conversations.filter((c) => c.status === 'em_atendimento').length;
   const countAguardando = conversations.filter((c) => c.status === 'aguardando').length;
@@ -492,17 +507,15 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     return `${Math.floor(diff / 60)}h ${diff % 60}m`;
   };
 
-  const lastMessage = (c: ApiConversation) => {
-    const msgs = [...(c.messages || [])].sort(
-      (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
-    );
-    return msgs[msgs.length - 1];
-  };
-
   return (
     <div className="flex flex-1 overflow-hidden min-h-0 min-w-0 bg-slate-50 dark:bg-slate-800/95 transition-colors">
       <div className={`${selected ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-[22rem] flex-col border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 shrink-0 min-h-0 overflow-hidden transition-colors`}>
         <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div><p className="text-[10px] font-black uppercase tracking-[.18em] text-blue-600 dark:text-blue-400">Operação</p><h1 className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">Caixa de entrada</h1><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Acompanhe e distribua os atendimentos.</p></div>
+            <button type="button" onClick={() => void fetchConversations(false)} className="shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800" title="Atualizar conversas" aria-label="Atualizar conversas"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path fillRule="evenodd" d="M15.312 5.312a8 8 0 1 0 1.883 8.237.75.75 0 0 0-1.436-.433A6.5 6.5 0 1 1 14.25 7.25V5.5a.75.75 0 0 0-1.5 0V9a.75.75 0 0 0 .75.75H17a.75.75 0 0 0 0-1.5h-1.688V5.312Z" clipRule="evenodd" /></svg></button>
+          </div>
+          <label className="relative block mb-4"><span className="sr-only">Pesquisar conversas</span><input value={listSearch} onChange={(event) => setListSearch(event.target.value)} placeholder="Buscar por nome, telefone ou mensagem" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 py-2.5 pl-9 pr-3 text-xs text-slate-800 dark:text-white outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400"><path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.447 9.785l2.634 2.634a.75.75 0 1 0 1.06-1.06l-2.633-2.634A5.5 5.5 0 0 0 9 3.5ZM5 9a4 4 0 1 1 8 0 4 4 0 0 1-8 0Z" clipRule="evenodd" /></svg></label>
           <div className="flex items-center gap-1 mb-4">
             <button
               type="button"
@@ -538,16 +551,14 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
               type="button"
               className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             >
-              NOVO
+              {filtered.length} {tabAbertas === 'abertas' ? 'abertas' : 'resolvidas'}
             </button>
-            <button type="button" className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-800 dark:hover:text-white transition-colors" aria-label="Notificações">
+            <button type="button" onClick={() => setListSearch('')} className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-800 dark:hover:text-white transition-colors" aria-label="Limpar busca" title="Limpar busca">
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
                 <path fillRule="evenodd" d="M5.25 9a6.75 6.75 0 0113.5 0v.75c0 2.123.8 4.057 2.118 5.52a.75.75 0 01-.297 1.206c-1.544.57-3.16.99-4.831 1.243a3.75 3.75 0 11-7.48 0 24.585 24.585 0 01-4.831-1.244.75.75 0 01-.298-1.206A8.217 8.217 0 005.25 9.75V9z" clipRule="evenodd" />
               </svg>
             </button>
-            <select className="flex-1 min-w-0 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium focus:ring-2 focus:ring-blue-500 outline-none">
-              <option>Filas</option>
-            </select>
+            <span className="flex-1 min-w-0 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 text-xs font-medium">Atualização em tempo real</span>
           </div>
           <div className="flex items-center gap-3 mt-3">
             <button

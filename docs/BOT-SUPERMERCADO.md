@@ -1,18 +1,17 @@
-# Bot de supermercado — Mavi
+# Bot de supermercado — Mavo
 
-A Mavi é a assistente virtual do Mavo Talk para atendimento de supermercado no WhatsApp. O fluxo foi desenhado para resolver dúvidas recorrentes rapidamente e transferir para uma pessoa quando preço, estoque, pedido ou análise financeira exigirem confirmação.
+O Mavo é o assistente virtual do Mavo Talk para atendimento de supermercado no WhatsApp. O fluxo foi desenhado para resolver dúvidas recorrentes rapidamente e transferir para uma pessoa quando preço, estoque ou análise financeira exigirem confirmação.
 
 ## Jornada do cliente
 
-1. **Ofertas e promoções** — entrega o link do encarte.
+1. **Ofertas e promoções** — entrega o texto, link e/ou imagem publicados no painel.
 2. **Horários e localização** — informa funcionamento, endereço, mapa e telefone.
-3. **Entregas e pedidos** — explica a operação e direciona para compra; problemas em pedidos viram atendimento humano.
-4. **Produtos e disponibilidade** — coleta produto, marca e tamanho antes de encaminhar.
-5. **Açougue, padaria e hortifruti** — coleta setor, item, quantidade ou encomenda.
-6. **Trocas, devoluções e pagamentos** — coleta um resumo e número de comprovante, sem pedir dados bancários sensíveis.
-7. **Falar com um atendente** — transfere diretamente para a equipe.
+3. **Produtos e disponibilidade** — coleta produto, marca e tamanho antes de encaminhar.
+4. **Açougue, padaria e hortifruti** — coleta setor, item, quantidade ou encomenda.
+5. **Trocas, devoluções e pagamentos** — coleta um resumo e número de comprovante, sem pedir dados bancários sensíveis.
+6. **Falar com um atendente** — transfere diretamente para a equipe.
 
-O cliente também pode escrever frases como “tem café de 500 g?”, “meu pedido não chegou”, “qual o horário?” ou “quero falar com o gerente”. A Mavi identifica essas intenções sem obrigar a navegação por números.
+O cliente também pode escrever frases como “tem café de 500 g?”, “qual o horário?” ou “quero falar com o gerente”. O Mavo identifica essas intenções sem obrigar a navegação por números.
 
 ## Regras de segurança e operação
 
@@ -27,7 +26,7 @@ O cliente também pode escrever frases como “tem café de 500 g?”, “meu pe
 
 Copie as variáveis de supermercado de `.env.example` para o `.env` e preencha os dados reais da loja. Reinicie o Mavo Talk depois de alterar o arquivo.
 
-Com `SUPERMARKET_BOT_ENABLED=true` e `SUPERMARKET_AUTO_APPLY_PRESET=true`, o primeiro atendimento sincroniza automaticamente as sete filas. A operação é idempotente: filas 1–7 são atualizadas e filas fora do modelo são pausadas, não apagadas.
+Com `SUPERMARKET_BOT_ENABLED=true` e `SUPERMARKET_AUTO_APPLY_PRESET=true`, o primeiro atendimento sincroniza automaticamente as seis filas. A operação é idempotente: filas 1–6 são mantidas e filas fora do modelo são pausadas, não apagadas.
 
 Também é possível reaplicar manualmente em **Demandas e filas → Aplicar menu de supermercado**. Apenas administradores e gestores podem executar essa ação.
 
@@ -41,7 +40,7 @@ Nesse caso, aplique o modelo pelo painel antes de habilitar o bot.
 
 ## IA opcional
 
-O padrão seguro é `SUPERMARKET_AI_FALLBACK_ENABLED=false`: mensagens desconhecidas mostram o menu novamente. Ao definir `true`, intenções que a Mavi não reconhecer seguem para o fluxo de IA/Cérebro já configurado no projeto.
+O padrão seguro é `SUPERMARKET_AI_FALLBACK_ENABLED=false`: mensagens desconhecidas mostram o menu novamente. Ao definir `true`, intenções que o Mavo não reconhecer seguem para o fluxo de IA/Cérebro já configurado no projeto.
 
 ## Roteiro rápido de homologação
 
@@ -52,7 +51,7 @@ Use `WILLTALK_DRY_RUN_WHATSAPP=true` para testar sem enviar mensagens reais. Val
 - `2` — deve mostrar horário e localização;
 - `tem café de 500 g?` — deve pedir marca/tamanho e preparar a fila de produtos;
 - uma segunda mensagem com os detalhes — deve concluir a transferência;
-- `meu pedido não chegou` — deve ir direto para Entregas e pedidos;
+- dúvidas sobre compras ou comprovantes — devem seguir para a equipe humana, sem uma opção de delivery no menu;
 - `falar com atendente` — deve entrar na fila de atendimento humano;
 - `0` — deve voltar ao menu.
 

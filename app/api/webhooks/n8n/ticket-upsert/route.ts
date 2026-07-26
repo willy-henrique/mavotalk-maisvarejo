@@ -17,7 +17,8 @@ import { emitRealtime } from "@/lib/realtime";
 import { invokeCerebroOrchestrator } from "@/lib/cerebro-orchestrator-client";
 import { analyzeImageForSupport } from "@/lib/image-vision";
 import { logger } from "@/lib/logger";
-import { decideSupermarketBot, isSupermarketBotEnabled } from "@/lib/supermarket-bot";
+import { decideSupermarketBot } from "@/lib/supermarket-bot";
+import { getSupermarketBotConfigForOrganization } from "@/lib/supermarket-settings";
 import {
   applySupermarketQueuePreset,
   isSupermarketQueuePresetApplied,
@@ -637,11 +638,12 @@ export async function POST(request: Request) {
   );
 
   const businessOpen = await isOpenBusinessHour(new Date(), organizationId);
+  const supermarketConfig = await getSupermarketBotConfigForOrganization(organizationId);
 
   // ── TRIAGE LOGIC (SUPERMARKET-FIRST) ──────────────────────────────
   let allQueues = await listQueues(organizationId);
   let supermarketQueuesReady = false;
-  if (isSupermarketBotEnabled()) {
+  if (supermarketConfig.enabled) {
     supermarketQueuesReady = isSupermarketQueuePresetApplied(allQueues);
     if (!supermarketQueuesReady && SUPERMARKET_AUTO_APPLY_PRESET) {
       try {
@@ -679,6 +681,7 @@ export async function POST(request: Request) {
   let action: DecisionAction = conversation.isNew ? "created" : "updated";
   let shouldReply = false;
   let replyText: string | null = null;
+  let replyMediaUrl: string | null = null;
   let replyDelivered: boolean | null = null;
   let triageCompleted = Boolean(conversation.triageCompleted);
   let menuAttempts = Number(conversation.menuAttempts || 0);
@@ -697,6 +700,7 @@ export async function POST(request: Request) {
         triageCompleted: Boolean(conversation.triageCompleted),
         currentQueueMenuOption: currentQueue ? Number(currentQueue.menuOption) : null,
         businessOpen,
+        config: supermarketConfig,
       })
     : null;
 
@@ -735,6 +739,7 @@ export async function POST(request: Request) {
 
     shouldReply = Boolean(supermarketDecision.replyText);
     replyText = supermarketDecision.replyText;
+    replyMediaUrl = supermarketDecision.mediaUrl || null;
     if (
       replyText &&
       supermarketDecision.appendOutOfHours &&
@@ -882,6 +887,7 @@ export async function POST(request: Request) {
       replyText,
       organizationId,
       String(conversation.id),
+      replyMediaUrl,
     );
   }
 
@@ -1013,13 +1019,15 @@ async function sendReplyToWhatsApp(
   text: string,
   organizationId: string,
   conversationId: string,
+  mediaUrl?: string | null,
 ): Promise<boolean> {
   const dryRun = String(process.env.WILLTALK_DRY_RUN_WHATSAPP || "").toLowerCase() === "true";
   if (dryRun) {
     const externalId = `dryrun-${Date.now()}`;
     await addOutboundMessage(organizationId, conversationId, text, externalId, {
       skipStatusUpdate: true,
-      type: "text",
+      type: mediaUrl ? "image" : "text",
+      mediaUrl: mediaUrl || null,
     });
     emitRealtime(organizationId, "message.created", {
       conversationId,
@@ -1036,11 +1044,13 @@ async function sendReplyToWhatsApp(
     const { externalId, channel } = await sendTriageMessageToWhatsApp(normalizedPhone, text, {
       skipRateLimit: true,
       fromBot: true,
+      mediaUrl: mediaUrl || undefined,
     });
 
     await addOutboundMessage(organizationId, conversationId, text, externalId || undefined, {
       skipStatusUpdate: true,
-      type: "text",
+      type: mediaUrl ? "image" : "text",
+      mediaUrl: mediaUrl || null,
     });
 
     emitRealtime(organizationId, "message.created", {

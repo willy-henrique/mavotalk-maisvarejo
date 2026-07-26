@@ -46,6 +46,19 @@ model Organization {
   slaPolicies   SlaPolicy[]
   businessHours BusinessHour[]
   auditLogs     AuditLog[]
+  botEnabled    Boolean?
+  botName       String?
+  storeName     String?
+  botAddress    String?
+  botMapsUrl    String?
+  botWeekdayHours String?
+  botSundayHours String?
+  botOffersUrl  String?
+  botOffersText String?
+  botOffersImageUrl String?
+  botOffersImagePublicId String?
+  botPhone      String?
+  botAiFallbackEnabled Boolean?
 }
 
 model User {

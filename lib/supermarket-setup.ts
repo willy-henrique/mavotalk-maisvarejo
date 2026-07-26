@@ -23,16 +23,12 @@ export function isSupermarketQueuePresetApplied(queues: QueueLike[]): boolean {
     const queue = queues.find((item) => Number(item.menuOption) === preset.menuOption);
     return Boolean(
       queue &&
-        queue.isActive !== false &&
-        queue.name === preset.name &&
-        queue.colorHex.toUpperCase() === preset.colorHex.toUpperCase() &&
-        Number(queue.defaultSlaMins) === preset.defaultSlaMins,
+        queue.isActive !== false,
     );
   });
-  const noUnexpectedActiveQueue = queues.every(
-    (queue) => queue.isActive === false || presetOptions.has(Number(queue.menuOption)),
-  );
-  return presetMatches && noUnexpectedActiveQueue;
+  // Filas adicionais criadas pelo administrador também são válidas. O preset
+  // garante apenas a base do supermercado e nunca desativa personalizações.
+  return presetMatches;
 }
 
 export async function applySupermarketQueuePreset(
@@ -47,18 +43,17 @@ export async function applySupermarketQueuePreset(
   for (const preset of SUPERMARKET_QUEUE_PRESET) {
     const current = existing.find((queue) => Number(queue.menuOption) === preset.menuOption);
     const payload = {
-      name: preset.name,
+      // O preset cria a estrutura inicial; depois disso o administrador pode
+      // personalizar nome, cor e SLA sem ser sobrescrito por cada mensagem.
+      name: current?.name || preset.name,
       menuOption: preset.menuOption,
-      colorHex: preset.colorHex,
-      defaultSlaMins: preset.defaultSlaMins,
+      colorHex: current?.colorHex || preset.colorHex,
+      defaultSlaMins: current?.defaultSlaMins || preset.defaultSlaMins,
       isActive: true,
     };
 
     if (current) {
       const changed =
-        current.name !== preset.name ||
-        current.colorHex.toUpperCase() !== preset.colorHex.toUpperCase() ||
-        Number(current.defaultSlaMins) !== preset.defaultSlaMins ||
         current.isActive === false;
       if (changed) {
         await updateQueue(organizationId, String(current.id), payload);
@@ -67,14 +62,6 @@ export async function applySupermarketQueuePreset(
     } else {
       await createQueue(organizationId, payload);
       created += 1;
-    }
-  }
-
-  const presetOptions = new Set(SUPERMARKET_QUEUE_PRESET.map((item) => item.menuOption));
-  for (const queue of existing) {
-    if (!presetOptions.has(Number(queue.menuOption)) && queue.isActive !== false) {
-      await updateQueue(organizationId, String(queue.id), { isActive: false });
-      paused += 1;
     }
   }
 

@@ -45,11 +45,10 @@ async function main() {
   const demands = [
     { menuOption: 1, name: "Ofertas e promoções", colorHex: "#F97316", defaultSlaMins: 5 },
     { menuOption: 2, name: "Horários e localização", colorHex: "#3B82F6", defaultSlaMins: 5 },
-    { menuOption: 3, name: "Entregas e pedidos", colorHex: "#8B5CF6", defaultSlaMins: 10 },
-    { menuOption: 4, name: "Produtos e disponibilidade", colorHex: "#14B8A6", defaultSlaMins: 15 },
-    { menuOption: 5, name: "Açougue, padaria e hortifruti", colorHex: "#22C55E", defaultSlaMins: 15 },
-    { menuOption: 6, name: "Trocas, devoluções e pagamentos", colorHex: "#EAB308", defaultSlaMins: 20 },
-    { menuOption: 7, name: "Falar com um atendente", colorHex: "#EF4444", defaultSlaMins: 10 },
+    { menuOption: 3, name: "Produtos e disponibilidade", colorHex: "#14B8A6", defaultSlaMins: 15 },
+    { menuOption: 4, name: "Açougue, padaria e hortifruti", colorHex: "#22C55E", defaultSlaMins: 15 },
+    { menuOption: 5, name: "Trocas, devoluções e pagamentos", colorHex: "#EAB308", defaultSlaMins: 20 },
+    { menuOption: 6, name: "Falar com um atendente", colorHex: "#EF4444", defaultSlaMins: 10 },
   ];
 
   for (const demand of demands) {

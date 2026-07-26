@@ -60,6 +60,19 @@ CREATE TABLE IF NOT EXISTS queues (
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bot_enabled BOOLEAN;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bot_name TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS store_name TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bot_address TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bot_maps_url TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bot_weekday_hours TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bot_sunday_hours TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bot_offers_url TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bot_offers_text TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bot_offers_image_url TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bot_offers_image_public_id TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bot_phone TEXT;
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS bot_ai_fallback_enabled BOOLEAN;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_queues_org_menu_option
   ON queues (organization_id, menu_option);
 

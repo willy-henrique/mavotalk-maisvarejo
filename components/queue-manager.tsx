@@ -19,6 +19,8 @@ export function QueueManager() {
   const [submitting, setSubmitting] = useState(false);
   const [applyingPreset, setApplyingPreset] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Queue | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "error" | "success"; text: string } | null>(null);
 
   async function loadQueues() {
@@ -88,6 +90,29 @@ export function QueueManager() {
     }
   }
 
+  async function saveQueue(event: FormEvent) {
+    event.preventDefault();
+    if (!editing || savingEdit) return;
+    setSavingEdit(true);
+    setFeedback(null);
+    try {
+      const response = await fetch(`/api/queues/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: editing.name, menuOption: editing.menuOption, colorHex: editing.colorHex, defaultSlaMins: editing.defaultSlaMins }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error || "Não foi possível salvar a fila.");
+      setEditing(null);
+      setFeedback({ type: "success", text: "Fila atualizada com sucesso." });
+      await loadQueues();
+    } catch (error) {
+      setFeedback({ type: "error", text: error instanceof Error ? error.message : "Falha ao salvar a fila." });
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   async function applySupermarketPreset() {
     if (applyingPreset) return;
     const confirmed = window.confirm(
@@ -107,12 +132,12 @@ export function QueueManager() {
       setQueues(payload.queues || []);
       setFeedback({
         type: "success",
-        text: `Menu da Mavi pronto: ${SUPERMARKET_QUEUE_PRESET.length} opções configuradas.`,
+        text: `Menu do Mavo pronto: ${SUPERMARKET_QUEUE_PRESET.length} opções configuradas.`,
       });
     } catch (error) {
       setFeedback({
         type: "error",
-        text: error instanceof Error ? error.message : "Falha ao configurar o menu da Mavi.",
+        text: error instanceof Error ? error.message : "Falha ao configurar o menu do Mavo.",
       });
     } finally {
       setApplyingPreset(false);
@@ -270,16 +295,11 @@ export function QueueManager() {
                     <div><strong>{queue.name}</strong><span className={`queue-state ${queue.isActive ? "active" : "paused"}`}><i />{queue.isActive ? "Ativa" : "Pausada"}</span></div>
                     <p><Icon name="clock" size={14} /> Primeira resposta em até <strong>{queue.defaultSlaMins} minutos</strong></p>
                   </div>
-                  <button
-                    type="button"
-                    className={`toggle-switch ${queue.isActive ? "on" : ""}`}
-                    onClick={() => toggleQueue(queue)}
-                    disabled={Boolean(togglingId)}
-                    aria-label={`${queue.isActive ? "Pausar" : "Ativar"} demanda ${queue.name}`}
-                    aria-pressed={queue.isActive}
-                  >
-                    <span />
-                  </button>
+                  <div className="queue-item-actions">
+                    <button type="button" className="queue-edit-button" onClick={() => setEditing({ ...queue })}>Editar</button>
+                    <button type="button" className={`toggle-switch ${queue.isActive ? "on" : ""}`} onClick={() => toggleQueue(queue)} disabled={Boolean(togglingId)} aria-label={`${queue.isActive ? "Pausar" : "Ativar"} demanda ${queue.name}`} aria-pressed={queue.isActive}><span /></button>
+                  </div>
+                  {editing?.id === queue.id ? <form className="queue-inline-editor" onSubmit={saveQueue}><input aria-label="Nome da fila" value={editing.name} onChange={(event) => setEditing((value) => value ? { ...value, name: event.target.value } : value)} /><input aria-label="Número do menu" type="number" min={1} max={99} value={editing.menuOption} onChange={(event) => setEditing((value) => value ? { ...value, menuOption: Number(event.target.value) } : value)} /><input aria-label="SLA em minutos" type="number" min={5} max={1440} value={editing.defaultSlaMins} onChange={(event) => setEditing((value) => value ? { ...value, defaultSlaMins: Number(event.target.value) } : value)} /><input aria-label="Cor da fila" type="color" value={editing.colorHex} onChange={(event) => setEditing((value) => value ? { ...value, colorHex: event.target.value } : value)} /><button type="submit" className="primary-button" disabled={savingEdit}>{savingEdit ? "Salvando..." : "Salvar"}</button><button type="button" className="secondary-button" onClick={() => setEditing(null)}>Cancelar</button></form> : null}
                 </article>
               )) : (
                 <div className="queue-empty">

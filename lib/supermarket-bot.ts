@@ -9,8 +9,9 @@ export type SupermarketBotConfig = {
   weekdayHours: string | null;
   sundayHours: string | null;
   offersUrl: string | null;
-  orderUrl: string | null;
-  deliveryInfo: string | null;
+  offersText: string | null;
+  offersImageUrl: string | null;
+  offersImagePublicId: string | null;
   phone: string | null;
   aiFallbackEnabled: boolean;
 };
@@ -23,6 +24,7 @@ export type SupermarketBotDecision = {
   clearQueue: boolean;
   triageCompleted: boolean;
   appendOutOfHours: boolean;
+  mediaUrl?: string | null;
   reason: string;
 };
 
@@ -50,15 +52,16 @@ function envFlag(name: string, fallback: boolean): boolean {
 export function getSupermarketBotConfig(): SupermarketBotConfig {
   return {
     enabled: envFlag("SUPERMARKET_BOT_ENABLED", true),
-    botName: optionalEnv("SUPERMARKET_BOT_NAME") || "Mavi",
+    botName: optionalEnv("SUPERMARKET_BOT_NAME") || "Mavo",
     storeName: optionalEnv("SUPERMARKET_NAME") || "Supermercado",
     address: optionalEnv("SUPERMARKET_ADDRESS"),
     mapsUrl: optionalEnv("SUPERMARKET_MAPS_URL"),
     weekdayHours: optionalEnv("SUPERMARKET_HOURS_WEEKDAYS"),
     sundayHours: optionalEnv("SUPERMARKET_HOURS_SUNDAY"),
     offersUrl: optionalEnv("SUPERMARKET_OFFERS_URL"),
-    orderUrl: optionalEnv("SUPERMARKET_ORDER_URL"),
-    deliveryInfo: optionalEnv("SUPERMARKET_DELIVERY_INFO"),
+    offersText: optionalEnv("SUPERMARKET_OFFERS_TEXT"),
+    offersImageUrl: optionalEnv("SUPERMARKET_OFFERS_IMAGE_URL"),
+    offersImagePublicId: optionalEnv("SUPERMARKET_OFFERS_IMAGE_PUBLIC_ID"),
     phone: optionalEnv("SUPERMARKET_PHONE"),
     aiFallbackEnabled: envFlag("SUPERMARKET_AI_FALLBACK_ENABLED", false),
   };
@@ -98,7 +101,7 @@ function greetingByBrasiliaTime(date = new Date()): string {
 }
 
 function navigationFooter() {
-  return "\n\nDigite *0* para voltar ao menu ou *7* para falar com a nossa equipe.";
+  return "\n\nDigite *0* para voltar ao menu ou *6* para falar com a nossa equipe.";
 }
 
 export function buildSupermarketMenu(
@@ -127,9 +130,9 @@ export function buildSupermarketMenu(
 }
 
 function offersReply(config: SupermarketBotConfig): string {
-  const destination = config.offersUrl
+  const destination = config.offersText || (config.offersUrl
     ? `Veja as ofertas atualizadas aqui:\n${config.offersUrl}`
-    : "Nossas ofertas mudam ao longo da semana. O link do encarte ainda não foi configurado; nossa equipe pode enviar as promoções atuais para você.";
+    : "As ofertas de hoje ainda não foram cadastradas. Nossa equipe pode enviar as promoções atuais para você.");
   return `🏷️ *Ofertas e promoções*\n\n${destination}${navigationFooter()}`;
 }
 
@@ -146,19 +149,8 @@ function locationReply(config: SupermarketBotConfig): string {
   return `${lines.join("\n").trim()}${navigationFooter()}`;
 }
 
-function deliveryReply(config: SupermarketBotConfig): string {
-  const lines = [
-    "🛵 *Entregas e pedidos*",
-    "",
-    config.deliveryInfo || "Consulte a disponibilidade, a taxa e a área de entrega com a nossa equipe.",
-    config.orderUrl ? `\n*Faça seu pedido:* ${config.orderUrl}` : "",
-    "\nSe você já fez um pedido e precisa de ajuda, escreva *problema com pedido*.",
-  ];
-  return `${lines.join("\n").trim()}${navigationFooter()}`;
-}
-
 function collectDetailsReply(menuOption: number): string {
-  if (menuOption === 4) {
+  if (menuOption === 3) {
     return (
       "🛒 *Consulta de produto*\n\n" +
       "Envie o *nome do produto*, a *marca* e o *tamanho ou peso* que procura.\n" +
@@ -166,7 +158,7 @@ function collectDetailsReply(menuOption: number): string {
       "Um atendente confirmará preço e disponibilidade — o bot não inventa informações de estoque."
     );
   }
-  if (menuOption === 5) {
+  if (menuOption === 4) {
     return (
       "🥩 *Setores frescos*\n\n" +
       "Diga qual setor e item você procura.\n" +
@@ -204,7 +196,7 @@ function hasAny(text: string, terms: string[]) {
 }
 
 function selectedMenuOption(normalized: string): number | null {
-  const match = normalized.match(/^(?:opcao\s*)?([0-7])$/);
+  const match = normalized.match(/^(?:opcao\s*)?([0-6])$/);
   return match ? Number(match[1]) : null;
 }
 
@@ -225,18 +217,15 @@ function optionDecision(
   option: number,
   config: SupermarketBotConfig,
 ): SupermarketBotDecision {
-  if (option === 1 || option === 2 || option === 3) {
+  if (option === 1 || option === 2) {
     const missingSelfServiceData =
-      (option === 1 && !config.offersUrl) ||
-      (option === 2 && !config.weekdayHours && !config.sundayHours && !config.address && !config.mapsUrl) ||
-      (option === 3 && !config.deliveryInfo && !config.orderUrl);
+      (option === 1 && !config.offersUrl && !config.offersText && !config.offersImageUrl) ||
+      (option === 2 && !config.weekdayHours && !config.sundayHours && !config.address && !config.mapsUrl);
     if (missingSelfServiceData) {
       const context =
         option === 1
           ? "Quero receber as ofertas e promoções atuais."
-          : option === 2
-            ? "Preciso confirmar o horário ou a localização da loja."
-            : "Quero informações sobre entrega ou fazer um pedido.";
+          : "Preciso confirmar o horário ou a localização da loja.";
       return {
         handled: true,
         kind: "human-handoff",
@@ -249,7 +238,7 @@ function optionDecision(
       };
     }
 
-    const replyText = option === 1 ? offersReply(config) : option === 2 ? locationReply(config) : deliveryReply(config);
+    const replyText = option === 1 ? offersReply(config) : locationReply(config);
     return {
       handled: true,
       kind: "self-service",
@@ -258,11 +247,12 @@ function optionDecision(
       clearQueue: true,
       triageCompleted: false,
       appendOutOfHours: false,
+      mediaUrl: option === 1 ? config.offersImageUrl : null,
       reason: `supermarket_self_service_${option}`,
     };
   }
 
-  if (option >= 4 && option <= 6) {
+  if (option >= 3 && option <= 5) {
     return {
       handled: true,
       kind: "collect-details",
@@ -279,7 +269,7 @@ function optionDecision(
     handled: true,
     kind: "human-handoff",
     replyText: humanHandoffReply(config),
-    queueMenuOption: 7,
+    queueMenuOption: 6,
     clearQueue: false,
     triageCompleted: true,
     appendOutOfHours: true,
@@ -312,19 +302,15 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     "reclamacao",
     "gerente",
   ]);
-  if (wantsHuman || option === 7) {
-    return optionDecision(7, config);
+  if (wantsHuman || option === 6) {
+    return optionDecision(6, config);
   }
 
   if (option !== null) {
     return optionDecision(option, config);
   }
 
-  if (
-    !params.triageCompleted &&
-    params.currentQueueMenuOption &&
-    [4, 5, 6].includes(params.currentQueueMenuOption)
-  ) {
+  if (!params.triageCompleted && params.currentQueueMenuOption && [3, 4, 5].includes(params.currentQueueMenuOption)) {
     return {
       handled: true,
       kind: "human-handoff",
@@ -337,38 +323,12 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     };
   }
 
-  const orderProblem = hasAny(normalized, [
-    "pedido atrasado",
-    "pedido nao chegou",
-    "problema com pedido",
-    "pedido errado",
-    "faltou no pedido",
-    "acompanhar pedido",
-    "status do pedido",
-  ]);
-  if (orderProblem) {
-    return {
-      handled: true,
-      kind: "human-handoff",
-      replyText: humanHandoffReply(config, rawMessage),
-      queueMenuOption: 3,
-      clearQueue: false,
-      triageCompleted: true,
-      appendOutOfHours: true,
-      reason: "supermarket_order_problem",
-    };
-  }
-
   if (hasAny(normalized, ["oferta", "ofertas", "promocao", "promocoes", "encarte", "desconto"])) {
     return optionDecision(1, config);
   }
 
   if (hasAny(normalized, ["horario", "abre", "fecha", "funcionamento", "endereco", "localizacao", "como chegar"])) {
     return optionDecision(2, config);
-  }
-
-  if (hasAny(normalized, ["entrega", "delivery", "fazer pedido", "comprar online", "taxa de entrega"])) {
-    return optionDecision(3, config);
   }
 
   const freshDepartment = hasAny(normalized, [
@@ -385,8 +345,8 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     return {
       handled: true,
       kind: "collect-details",
-      replyText: collectDetailsReply(5),
-      queueMenuOption: 5,
+      replyText: collectDetailsReply(4),
+      queueMenuOption: 4,
       clearQueue: false,
       triageCompleted: false,
       appendOutOfHours: false,
@@ -408,8 +368,8 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     return {
       handled: true,
       kind: "collect-details",
-      replyText: collectDetailsReply(6),
-      queueMenuOption: 6,
+      replyText: collectDetailsReply(5),
+      queueMenuOption: 5,
       clearQueue: false,
       triageCompleted: false,
       appendOutOfHours: false,
@@ -432,8 +392,8 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     return {
       handled: true,
       kind: "collect-details",
-      replyText: collectDetailsReply(4),
-      queueMenuOption: 4,
+      replyText: collectDetailsReply(3),
+      queueMenuOption: 3,
       clearQueue: false,
       triageCompleted: false,
       appendOutOfHours: false,

@@ -90,12 +90,13 @@ SUPERMARKET_MAPS_URL=https://maps.google.com/...
 SUPERMARKET_HOURS_WEEKDAYS=Segunda a sábado: 07h às 21h
 SUPERMARKET_HOURS_SUNDAY=Domingos e feriados: 08h às 14h
 SUPERMARKET_OFFERS_URL=https://site.com/ofertas
-SUPERMARKET_ORDER_URL=https://site.com/pedidos
-SUPERMARKET_DELIVERY_INFO=Descrição da área, taxa e prazo de entrega
+SUPERMARKET_OFFERS_TEXT=Ofertas do dia disponíveis no encarte.
+SUPERMARKET_OFFERS_IMAGE_URL=https://res.cloudinary.com/...
+SUPERMARKET_OFFERS_IMAGE_PUBLIC_ID=willtalk/offers/oferta-do-dia
 SUPERMARKET_PHONE=(00) 0000-0000
 ```
 
-O painel `/mavo` mostra os campos ausentes. Enquanto um dado não estiver configurado, a Mavi encaminha a solicitação para uma pessoa em vez de inventar resposta.
+O painel `/mavo` mostra os campos ausentes. Enquanto um dado não estiver configurado, o Mavo encaminha a solicitação para uma pessoa em vez de inventar resposta.
 
 Configure também o calendário usado pela automação para decidir se a equipe está
 disponível. O cadastro de horários no banco, quando existir, tem prioridade:

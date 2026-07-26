@@ -1,5 +1,5 @@
 import { getWhatsappState } from "@/lib/whatsapp-client";
-import { getSupermarketBotConfig } from "@/lib/supermarket-bot";
+import { getSupermarketBotConfigForOrganization } from "@/lib/supermarket-settings";
 import { getDatabasePool } from "@/lib/db";
 
 export type MavoSystemOverview = {
@@ -79,10 +79,11 @@ export type MavoSystemOverview = {
     autoApplyPreset: boolean;
     aiFallbackEnabled: boolean;
     address: string | null;
+    mapsUrl: string | null;
     hours: string[];
     offersUrl: string | null;
-    orderUrl: string | null;
-    deliveryInfo: string | null;
+    offersText: string | null;
+    offersImageUrl: string | null;
     phone: string | null;
     missingFields: string[];
   };
@@ -167,7 +168,7 @@ export async function checkMavoDatabaseHealth() {
 
 export async function getMavoSystemOverview(): Promise<MavoSystemOverview> {
   const organizationId = String(process.env.DEFAULT_ORG_ID || "org_willtalk_default");
-  const supermarketConfig = getSupermarketBotConfig();
+  const supermarketConfig = await getSupermarketBotConfigForOrganization(organizationId);
   const whatsapp = getWhatsappState();
   const healthStartedAt = Date.now();
 
@@ -309,12 +310,10 @@ export async function getMavoSystemOverview(): Promise<MavoSystemOverview> {
   }
 
   const missingFields = [
-    !configured(process.env.SUPERMARKET_NAME) ? "Nome do supermercado" : null,
+    !supermarketConfig.storeName ? "Nome do supermercado" : null,
     !supermarketConfig.address ? "Endereço" : null,
     !supermarketConfig.weekdayHours ? "Horário semanal" : null,
-    !supermarketConfig.offersUrl ? "Link de ofertas" : null,
-    !supermarketConfig.orderUrl ? "Link de pedidos" : null,
-    !supermarketConfig.deliveryInfo ? "Informações de entrega" : null,
+    !supermarketConfig.offersUrl && !supermarketConfig.offersText && !supermarketConfig.offersImageUrl ? "Conteúdo de ofertas" : null,
     !supermarketConfig.phone ? "Telefone" : null,
   ].filter((item): item is string => Boolean(item));
 
@@ -380,12 +379,13 @@ export async function getMavoSystemOverview(): Promise<MavoSystemOverview> {
       autoApplyPreset: String(process.env.SUPERMARKET_AUTO_APPLY_PRESET || "true").toLowerCase() !== "false",
       aiFallbackEnabled: supermarketConfig.aiFallbackEnabled,
       address: supermarketConfig.address,
+      mapsUrl: supermarketConfig.mapsUrl,
       hours: [supermarketConfig.weekdayHours, supermarketConfig.sundayHours].filter(
         (item): item is string => Boolean(item),
       ),
       offersUrl: supermarketConfig.offersUrl,
-      orderUrl: supermarketConfig.orderUrl,
-      deliveryInfo: supermarketConfig.deliveryInfo,
+      offersText: supermarketConfig.offersText,
+      offersImageUrl: supermarketConfig.offersImageUrl,
       phone: supermarketConfig.phone,
       missingFields,
     },

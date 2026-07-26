@@ -29,6 +29,7 @@ const App: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPass, setLoginPass] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsappStatus | null>(null);
@@ -82,63 +83,37 @@ const App: React.FC = () => {
 
   if (!authChecked) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-300">
-        <span className="animate-pulse font-semibold">Validando sessão...</span>
+      <div className="min-h-screen flex items-center justify-center app-grid bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-300">
+        <div className="w-full max-w-sm px-6 space-y-4">
+          <div className="h-12 w-12 rounded-2xl skeleton" />
+          <div className="h-4 w-40 rounded skeleton" />
+          <div className="h-3 w-64 rounded skeleton" />
+        </div>
       </div>
     );
   }
 
   if (!session?.isAuthenticated || !session.user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-slate-900 px-4 transition-colors">
-        <div className="max-w-md w-full bg-white rounded-[32px] p-10 shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="text-center mb-10">
-            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white mx-auto mb-6 shadow-xl shadow-blue-500/20">
-              <Icons.Inbox className="w-8 h-8" />
-            </div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">Mavo Talk</h1>
-            <p className="text-slate-500 mt-2 font-medium">Suporte em tempo real para empresas.</p>
+      <div className="min-h-screen grid lg:grid-cols-[1.05fr_.95fr] bg-slate-50 dark:bg-slate-950 transition-colors">
+        <section className="hidden lg:flex relative overflow-hidden bg-slate-950 text-white p-14 flex-col justify-between app-grid">
+          <div className="absolute -right-32 -top-32 w-96 h-96 rounded-full bg-blue-500/20 blur-3xl" />
+          <div className="relative flex items-center gap-3"><div className="w-11 h-11 rounded-2xl bg-blue-600 flex items-center justify-center shadow-xl shadow-blue-500/30"><Icons.Inbox className="w-6 h-6" /></div><div><p className="text-xl font-black tracking-tight">Mavo Talk</p><p className="text-[10px] uppercase tracking-[.2em] text-slate-400">Central de atendimento</p></div></div>
+          <div className="relative max-w-lg"><span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[.18em] text-blue-300"><span className="w-2 h-2 rounded-full bg-emerald-400" /> Operação em tempo real</span><h2 className="mt-5 text-5xl font-black leading-[1.05] tracking-tight">Converse melhor.<br /><span className="text-blue-400">Resolva mais rápido.</span></h2><p className="mt-6 text-slate-400 leading-7">Uma visão única para sua equipe atender clientes, organizar filas e transformar cada conversa em uma experiência melhor.</p><div className="mt-10 grid grid-cols-3 gap-3"><div className="rounded-2xl border border-white/10 bg-white/5 p-4"><strong className="text-2xl">24/7</strong><span className="block mt-1 text-xs text-slate-400">Histórico seguro</span></div><div className="rounded-2xl border border-white/10 bg-white/5 p-4"><strong className="text-2xl">1 tela</strong><span className="block mt-1 text-xs text-slate-400">Toda operação</span></div><div className="rounded-2xl border border-white/10 bg-white/5 p-4"><strong className="text-2xl">IA</strong><span className="block mt-1 text-xs text-slate-400">Apoio ao time</span></div></div></div>
+          <p className="relative text-xs text-slate-500">Mavo Talk · Atendimento e negócio</p>
+        </section>
+        <section className="flex items-center justify-center px-5 py-10 sm:px-10">
+          <div className="w-full max-w-md rounded-[28px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-7 sm:p-10 shadow-xl shadow-slate-200/60 dark:shadow-black/20 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="mb-8 lg:hidden flex items-center gap-3"><div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white"><Icons.Inbox className="w-5 h-5" /></div><span className="font-black text-slate-900 dark:text-white text-xl">Mavo Talk</span></div>
+            <div className="mb-8"><p className="text-sm font-bold text-blue-600 dark:text-blue-400">Bem-vindo de volta</p><h1 className="mt-1 text-3xl font-black tracking-tight text-slate-900 dark:text-white">Acesse seu painel</h1><p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">Entre para acompanhar suas conversas e cuidar da operação.</p></div>
+            <form onSubmit={handleLogin} className="space-y-5">
+              <label className="block"><span className="mb-2 ml-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">E-mail corporativo</span><input type="email" required value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-4 py-3.5 text-slate-900 dark:text-white placeholder-slate-400 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" placeholder="nome@empresa.com" autoComplete="username" /></label>
+              <label className="block"><span className="mb-2 ml-1 block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Senha</span><div className="relative"><input type={showPassword ? 'text' : 'password'} required value={loginPass} onChange={(e) => setLoginPass(e.target.value)} className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-4 py-3.5 pr-12 text-slate-900 dark:text-white placeholder-slate-400 outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" placeholder="Sua senha" autoComplete="current-password" /><button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-xs font-bold text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800">{showPassword ? 'Ocultar' : 'Mostrar'}</button></div></label>
+              {loginError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-sm font-semibold text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300">{loginError}</div>}
+              <button type="submit" disabled={isLoggingIn} className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 hover:-translate-y-0.5 disabled:cursor-wait disabled:opacity-60">{isLoggingIn && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />}{isLoggingIn ? 'Autenticando...' : 'Entrar no painel'}</button>
+            </form>
           </div>
-
-          <form onSubmit={handleLogin} className="space-y-6">
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">E-mail corporativo</label>
-              <input
-                type="email"
-                required
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
-                className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all"
-                placeholder="nome@empresa.com"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Senha</label>
-              <input
-                type="password"
-                required
-                value={loginPass}
-                onChange={(e) => setLoginPass(e.target.value)}
-                className="w-full px-5 py-4 rounded-2xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all"
-                placeholder="••••••••"
-              />
-            </div>
-
-            {loginError && (
-              <div className="p-4 bg-rose-50 border border-rose-100 rounded-2xl text-rose-600 text-sm font-bold animate-in shake duration-300">
-                {loginError}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={isLoggingIn}
-              className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold text-lg hover:bg-blue-700 transition-all shadow-xl shadow-blue-500/20 disabled:opacity-50"
-            >
-              {isLoggingIn ? 'Autenticando...' : 'Acessar Painel'}
-            </button>
-          </form>
-        </div>
+        </section>
       </div>
     );
   }

@@ -1,5 +1,47 @@
 @import "tailwindcss";
 
+/* Mavo Control — configuration workspace */
+.master-bot-form { display: grid; gap: 16px; }
+.master-config-card { background: #fff; border: 1px solid var(--line); border-radius: 20px; padding: 20px; }
+.master-card-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.master-card-actions a { color: var(--primary); font-size: 11px; font-weight: 800; text-decoration: none; padding: 8px 10px; border-radius: 9px; background: var(--primary-soft); }
+.master-config-card-heading { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 18px; color: var(--primary); }
+.master-config-card-heading svg { flex: 0 0 auto; margin-top: 1px; }
+.master-config-card-heading strong { display: block; color: var(--ink); font-size: 15px; }
+.master-config-card-heading span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; }
+.master-config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.master-config-field { display: flex; flex-direction: column; gap: 6px; }
+.master-config-field.wide { grid-column: 1 / -1; }
+.master-config-field span { color: var(--muted); font-size: 11px; font-weight: 700; }
+.master-config-field input, .master-config-field textarea { width: 100%; border: 1px solid var(--line-strong); border-radius: 11px; background: var(--surface-soft); color: var(--ink); padding: 10px 12px; outline: none; font-size: 13px; resize: vertical; }
+.master-config-field input:focus, .master-config-field textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgb(108 92 231 / .13); }
+.master-offer-layout { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 18px; }
+.master-offer-upload { border: 1px dashed var(--line-strong); border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.master-offer-upload img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; background: var(--surface-muted); }
+.master-offer-empty { min-height: 160px; border-radius: 10px; background: var(--surface-muted); display: flex; flex-direction: column; gap: 8px; align-items: center; justify-content: center; color: var(--muted); font-size: 11px; text-align: center; }
+.master-upload-button, .master-remove-button, .master-save-button { border: 0; border-radius: 10px; cursor: pointer; font-size: 12px; font-weight: 800; padding: 10px 12px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.master-upload-button { background: var(--primary-soft); color: var(--primary-dark); }
+.master-upload-button input { display: none; }
+.master-remove-button { background: #fff1f2; color: #be123c; }
+.master-hours-editor { display: grid; gap: 8px; }
+.master-hours-editor label { display: grid; grid-template-columns: minmax(88px, 1fr) 110px auto 110px 74px; align-items: center; gap: 8px; color: var(--ink-soft); font-size: 12px; }
+.master-hours-editor input { border: 1px solid var(--line-strong); border-radius: 9px; padding: 8px; color: var(--ink); background: var(--surface-soft); }
+.master-hours-editor button { border: 1px solid var(--line); background: var(--surface-soft); border-radius: 9px; color: var(--muted); padding: 8px 5px; cursor: pointer; font-size: 11px; font-weight: 700; }
+.master-config-footer { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 2px; }
+.master-check { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.master-save-button { margin-left: auto; background: var(--primary); color: #fff; padding: 12px 18px; }
+.master-save-button:disabled, .master-upload-button:has(input:disabled), .master-remove-button:disabled { opacity: .55; cursor: not-allowed; }
+.queue-item-actions { display: flex; align-items: center; gap: 8px; }
+.queue-edit-button { border: 0; background: transparent; color: var(--primary); cursor: pointer; font-size: 11px; font-weight: 800; }
+.queue-inline-editor { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 7px; padding: 10px 0 2px; }
+.queue-inline-editor input { min-width: 90px; border: 1px solid var(--line-strong); border-radius: 8px; padding: 7px; font-size: 12px; }
+@media (max-width: 700px) {
+  .master-config-grid, .master-offer-layout { grid-template-columns: 1fr; }
+  .master-hours-editor label { grid-template-columns: 1fr 1fr auto 1fr; }
+  .master-hours-editor label button { grid-column: 1 / -1; }
+  .master-save-button { width: 100%; margin-left: 0; }
+}
+
 :root {
   --page: #f6f7fb;
   --surface: #ffffff;

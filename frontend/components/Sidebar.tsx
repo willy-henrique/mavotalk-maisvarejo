@@ -64,7 +64,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
     <aside
       className={`${collapsed ? 'md:w-20' : 'md:w-64'} w-64 fixed inset-y-0 left-0 md:relative md:inset-auto ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'} bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 flex flex-col transition-all duration-300 z-[60] shadow-xl dark:shadow-2xl shrink-0 border-r border-slate-200 dark:border-slate-800`}
     >
-      <div className="p-4 flex items-center justify-between gap-2">
+      <div className="p-4 flex items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800/80">
         <div className="flex items-center gap-3 min-w-0 flex-1 overflow-hidden">
           <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-blue-500/20">
             <Icons.Inbox className="w-6 h-6" />
@@ -72,7 +72,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
           {!collapsed && (
             <div className="min-w-0 overflow-hidden">
               <h1 className="text-slate-800 dark:text-white font-black text-xl tracking-tighter truncate">Mavo Talk</h1>
-              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-widest leading-none">Atendimento e negócio</p>
+              <p className="text-[10px] font-bold text-slate-500 dark:text-slate-500 uppercase tracking-widest leading-none">Atendimento inteligente</p>
             </div>
           )}
         </div>
@@ -94,8 +94,9 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
         </button>
       </div>
 
-      <nav className="flex-1 px-3 space-y-2 mt-4 overflow-x-hidden">
-        {menuItems.filter(canSee).map((item) => {
+      <nav className="flex-1 px-3 space-y-1 mt-4 overflow-x-hidden" aria-label="Navegação principal">
+        {!collapsed && <p className="px-3 pb-2 text-[10px] font-black uppercase tracking-[.18em] text-slate-400">Operação</p>}
+        {menuItems.filter((item) => ['inbox', 'dashboard', 'business', 'contacts', 'painel'].includes(item.id)).filter(canSee).map((item) => {
           const isActive = activeTab === item.id;
           return (
             <button
@@ -112,6 +113,16 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
               title={collapsed ? item.label : undefined}
             >
               <item.icon className={`w-6 h-6 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-500'}`} />
+              {!collapsed && <span className="font-bold text-sm truncate">{item.label}</span>}
+            </button>
+          );
+        })}
+        {!collapsed && <p className="px-3 pb-2 pt-6 text-[10px] font-black uppercase tracking-[.18em] text-slate-400">Administração</p>}
+        {menuItems.filter((item) => !['inbox', 'dashboard', 'business', 'contacts', 'painel'].includes(item.id)).filter(canSee).map((item) => {
+          const isActive = activeTab === item.id;
+          return (
+            <button key={item.id} onClick={() => { navigate(item.path); onNavigate?.(); }} className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl transition-all ${isActive ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20' : 'hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800/50 dark:hover:text-slate-200'} ${collapsed ? 'justify-center' : ''}`} title={collapsed ? item.label : undefined}>
+              <item.icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-500'}`} />
               {!collapsed && <span className="font-bold text-sm truncate">{item.label}</span>}
             </button>
           );

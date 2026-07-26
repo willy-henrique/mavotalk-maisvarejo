@@ -1149,7 +1149,7 @@ const TRIAGE_READY_WAIT_MS = Number(process.env.WILLTALK_TRIAGE_READY_WAIT_MS) |
 export async function sendTriageMessageToWhatsApp(
   toPhone: string,
   text: string,
-  options?: { skipRateLimit?: boolean; fromBot?: boolean },
+  options?: { skipRateLimit?: boolean; fromBot?: boolean; mediaUrl?: string },
 ): Promise<{ externalId: string; channel: "unofficial" | "twilio" }> {
   const provider = process.env.WHATSAPP_PROVIDER || "twilio";
   const twilioSid = process.env.TWILIO_ACCOUNT_SID;
@@ -1165,6 +1165,7 @@ export async function sendTriageMessageToWhatsApp(
       from: twilioFrom,
       to: toPhone,
       body: text,
+      ...(options?.mediaUrl ? { mediaUrl: [options.mediaUrl] } : {}),
     });
     return { externalId: sent.sid, channel: "twilio" as const };
   };

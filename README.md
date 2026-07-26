@@ -6,13 +6,13 @@ Sistema profissional de atendimento com triagem numerica, fila `Aguardando`, car
 
 ## Bot para supermercado
 
-O projeto inclui a **Mavi**, uma assistente de WhatsApp preparada para ofertas, horários, entregas, consulta de produtos, setores frescos, trocas e transferência humana. Ela entende menu numérico e linguagem natural, sincroniza as filas automaticamente e não inventa preço ou estoque.
+O projeto inclui o **Mavo**, um assistente de WhatsApp preparado para ofertas, horários, consulta de produtos, setores frescos, trocas e transferência humana. Ele entende menu numérico e linguagem natural, sincroniza as filas automaticamente e não inventa preço ou estoque.
 
 Configuração e homologação: [`docs/BOT-SUPERMERCADO.md`](docs/BOT-SUPERMERCADO.md).
 
 ## Painel master e produção
 
-- `/mavo`: painel administrativo master com login isolado, saúde do Supabase, integrações, indicadores, filas, usuários, horários, configuração da Mavi e auditoria.
+- `/mavo`: painel administrativo master com login isolado, saúde do Supabase, integrações, indicadores, filas, usuários, horários, configuração do Mavo e auditoria.
 - `/api/health`: health check da aplicação, banco, Redis e estado sanitizado do
   canal WhatsApp para o Render.
 - `render.yaml`: Blueprint de produção com secrets e variáveis necessárias.

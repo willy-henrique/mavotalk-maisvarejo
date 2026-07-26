@@ -49,7 +49,7 @@ export async function uploadTwilioMediaToCloudinary(mediaUrl: string, mimeType?:
   });
 }
 
-export async function uploadBase64ToCloudinary(base64Data: string, mimeType?: string | null) {
+export async function uploadBase64ToCloudinary(base64Data: string, mimeType?: string | null, folder = "willtalk/messages") {
   if (!cloudName || !apiKey || !apiSecret) return null;
 
   const dataUri = `data:${mimeType || "application/octet-stream"};base64,${base64Data}`;
@@ -60,7 +60,7 @@ export async function uploadBase64ToCloudinary(base64Data: string, mimeType?: st
       : "raw";
 
   const result = await cloudinary.uploader.upload(dataUri, {
-    folder: "willtalk/messages",
+    folder,
     resource_type: resourceType,
   });
 

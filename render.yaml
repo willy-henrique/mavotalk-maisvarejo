@@ -120,7 +120,7 @@ services:
       - key: SUPERMARKET_AUTO_APPLY_PRESET
         value: "true"
       - key: SUPERMARKET_BOT_NAME
-        value: Mavi
+        value: Mavo
       - key: SUPERMARKET_NAME
         sync: false
       - key: SUPERMARKET_ADDRESS
@@ -133,9 +133,11 @@ services:
         sync: false
       - key: SUPERMARKET_OFFERS_URL
         sync: false
-      - key: SUPERMARKET_ORDER_URL
+      - key: SUPERMARKET_OFFERS_TEXT
         sync: false
-      - key: SUPERMARKET_DELIVERY_INFO
+      - key: SUPERMARKET_OFFERS_IMAGE_URL
+        sync: false
+      - key: SUPERMARKET_OFFERS_IMAGE_PUBLIC_ID
         sync: false
       - key: SUPERMARKET_PHONE
         sync: false
