@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { User, UserRole, UserStatus } from '../../types';
 import { Icons } from '../../constants';
 import { apiFetch, apiPatch, apiPost } from '../../services/api';
+import { Dialog } from '../ui/Dialog';
 
 type BackendUser = {
   id: string;
@@ -48,12 +49,14 @@ const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [actionUserId, setActionUserId] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
 
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
@@ -90,9 +93,11 @@ const UserManagement: React.FC = () => {
   const toggleUserStatus = async (user: User) => {
     setActionUserId(user.id);
     setSubmitError('');
+    setNotice('');
     try {
       await apiPatch(`/api/admin/users/${user.id}`, { isActive: user.status !== UserStatus.ATIVO });
       await fetchUsers();
+      setNotice(user.status === UserStatus.ATIVO ? 'Colaborador desativado.' : 'Colaborador reativado.');
     } catch (reason) {
       setSubmitError(reason instanceof Error ? reason.message : 'Não foi possível atualizar o colaborador.');
     } finally {
@@ -103,17 +108,18 @@ const UserManagement: React.FC = () => {
   const getStatusStyle = (status: UserStatus) => {
     switch (status) {
       case UserStatus.ATIVO:
-        return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+        return 'border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300';
       case UserStatus.INATIVO:
-        return 'bg-rose-100 text-rose-700 border-rose-200';
+        return 'border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-300';
       case UserStatus.PENDENTE:
-        return 'bg-amber-100 text-amber-700 border-amber-200';
+        return 'border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300';
       default:
-        return 'bg-slate-100 text-slate-700';
+        return 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300';
     }
   };
 
   const openModal = () => {
+    setEditingUser(null);
     setFormName('');
     setFormEmail('');
     setFormPassword('');
@@ -122,27 +128,56 @@ const UserManagement: React.FC = () => {
     setShowModal(true);
   };
 
+  const openEdit = (user: User) => {
+    setEditingUser(user);
+    setFormName(user.name);
+    setFormEmail(user.email);
+    setFormPassword('');
+    setFormRole(user.role);
+    setSubmitError('');
+    setNotice('');
+    setShowModal(true);
+  };
+
+  const closeModal = () => {
+    if (submitting) return;
+    setShowModal(false);
+    setEditingUser(null);
+    setSubmitError('');
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError('');
-    if (!formName.trim() || !formEmail.trim() || !formPassword.trim()) {
-      setSubmitError('Preencha nome, e-mail e senha.');
+    if (!formName.trim() || !formEmail.trim() || (!editingUser && !formPassword.trim())) {
+      setSubmitError(editingUser ? 'Preencha nome e e-mail.' : 'Preencha nome, e-mail e senha.');
       return;
     }
-    if (formPassword.length < 8) {
+    if (formPassword && formPassword.length < 8) {
       setSubmitError('A senha deve ter no mínimo 8 caracteres.');
       return;
     }
     setSubmitting(true);
     try {
-      await apiPost('/api/admin/users', {
-        name: formName.trim(),
-        email: formEmail.trim().toLowerCase(),
-        password: formPassword,
-        role: toBackendRole(formRole),
-      });
+      if (editingUser) {
+        await apiPatch(`/api/admin/users/${editingUser.id}`, {
+          name: formName.trim(),
+          email: formEmail.trim().toLowerCase(),
+          ...(formPassword ? { password: formPassword } : {}),
+          role: toBackendRole(formRole),
+        });
+      } else {
+        await apiPost('/api/admin/users', {
+          name: formName.trim(),
+          email: formEmail.trim().toLowerCase(),
+          password: formPassword,
+          role: toBackendRole(formRole),
+        });
+      }
       await fetchUsers();
+      setNotice(editingUser ? 'Colaborador atualizado.' : 'Colaborador adicionado à equipe.');
       setShowModal(false);
+      setEditingUser(null);
     } catch (err: unknown) {
       setSubmitError(err instanceof Error ? err.message : 'Erro ao criar colaborador.');
     } finally {
@@ -168,6 +203,7 @@ const UserManagement: React.FC = () => {
       </div>
 
       {submitError && <div role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300">{submitError}</div>}
+      {notice && <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">{notice}</div>}
       <div className="mavo-card mb-6 flex flex-col gap-3 p-4 md:flex-row">
         <div className="flex-1 relative">
           <input
@@ -192,29 +228,28 @@ const UserManagement: React.FC = () => {
       ) : (
         <div className="mavo-card overflow-x-auto">
           <table className="w-full text-left">
-            <thead className="bg-slate-50 border-b border-slate-200">
+            <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
               <tr>
                 <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Colaborador</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Função</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Status</th>
-                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Último Login</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase text-right">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredUsers.map((u) => (
-                <tr key={u.id} className="hover:bg-slate-50/50 transition-all">
+                <tr key={u.id} className="transition hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="flex h-10 w-10 items-center justify-center rounded-full border border-blue-800 bg-blue-950 text-xs font-black text-blue-200" aria-label={`Avatar de ${u.name}`}>{u.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</div>
                       <div>
-                        <p className="font-bold text-slate-800 text-sm">{u.name}</p>
-                        <p className="text-xs text-slate-500">{u.email}</p>
+                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{u.name}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{u.email}</p>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-bold text-slate-600 uppercase border border-slate-200">
+                    <span className="rounded border border-slate-200 bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                       {u.role}
                     </span>
                   </td>
@@ -223,73 +258,75 @@ const UserManagement: React.FC = () => {
                       {u.status}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-xs text-slate-500">
-                    {u.lastLoginAt ? (u.lastLoginAt instanceof Date ? u.lastLoginAt.toLocaleDateString() : String(u.lastLoginAt)) : 'Nunca'}
-                  </td>
                   <td className="px-6 py-4 text-right">
-                    <button type="button" disabled={actionUserId === u.id} onClick={() => void toggleUserStatus(u)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+                    <div className="flex justify-end gap-2"><button type="button" onClick={() => openEdit(u)} disabled={actionUserId === u.id} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" disabled={actionUserId === u.id} onClick={() => void toggleUserStatus(u)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">
                       {actionUserId === u.id ? 'Atualizando…' : u.status === UserStatus.ATIVO ? 'Desativar' : 'Reativar'}
-                    </button>
+                    </button></div>
                   </td>
                 </tr>
               ))}
+              {!filteredUsers.length && (
+                <tr>
+                  <td colSpan={4} className="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                    Nenhum colaborador encontrado com os filtros atuais.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl animate-in zoom-in-95">
-            <div className="p-8 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="text-xl font-bold text-slate-800">Novo Colaborador</h3>
-              <button type="button" onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-600 font-bold">
-                ✕
-              </button>
-            </div>
-            <form onSubmit={handleSubmit} className="p-8 space-y-6">
+        <Dialog title={editingUser ? 'Editar colaborador' : 'Novo colaborador'} description={editingUser ? 'A senha é opcional; preencha somente para redefini-la.' : 'O colaborador poderá acessar o Mavo Talk com o e-mail e senha definidos.'} onClose={closeModal}>
+            <form onSubmit={handleSubmit} className="space-y-5 p-6">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Nome Completo</label>
+                  <label htmlFor="team-user-name" className="mb-2 block text-xs font-bold uppercase text-slate-500">Nome completo</label>
                   <input
+                    id="team-user-name"
+                    data-autofocus
                     type="text"
                     required
                     minLength={2}
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="mavo-field"
                     placeholder="Ex: Roberto Carlos"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-2">E-mail Corporativo</label>
+                  <label htmlFor="team-user-email" className="mb-2 block text-xs font-bold uppercase text-slate-500">E-mail corporativo</label>
                   <input
+                    id="team-user-email"
                     type="email"
                     required
                     value={formEmail}
                     onChange={(e) => setFormEmail(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="mavo-field"
                     placeholder="email@empresa.com"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Senha</label>
+                  <label htmlFor="team-user-password" className="mb-2 block text-xs font-bold uppercase text-slate-500">{editingUser ? 'Nova senha (opcional)' : 'Senha'}</label>
                   <input
+                    id="team-user-password"
                     type="password"
-                    required
-                    minLength={4}
+                    required={!editingUser}
+                    minLength={8}
                     value={formPassword}
                     onChange={(e) => setFormPassword(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none"
-                    placeholder="Mínimo 4 caracteres"
+                    className="mavo-field"
+                    placeholder={editingUser ? 'Deixe em branco para manter a atual' : 'Mínimo 8 caracteres'}
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Função</label>
+                  <label htmlFor="team-user-role" className="mb-2 block text-xs font-bold uppercase text-slate-500">Função</label>
                   <select
+                    id="team-user-role"
                     value={formRole}
                     onChange={(e) => setFormRole(e.target.value as UserRole)}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                    className="mavo-field appearance-none"
                   >
                     <option value={UserRole.AGENT}>Agente (N1)</option>
                     <option value={UserRole.SUPERVISOR}>Supervisor</option>
@@ -298,21 +335,20 @@ const UserManagement: React.FC = () => {
                 </div>
               </div>
               {submitError && (
-                <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl text-rose-700 text-sm">
+                <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">
                   {submitError}
                 </div>
               )}
               <div className="flex gap-3 justify-end pt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="px-6 py-3 font-bold text-slate-500 hover:text-slate-700">
+                <button type="button" disabled={submitting} onClick={closeModal} className="mavo-button-secondary">
                   Cancelar
                 </button>
-                <button type="submit" disabled={submitting} className="px-8 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200 disabled:opacity-50">
-                  {submitting ? 'Salvando...' : 'Salvar Colaborador'}
+                <button type="submit" disabled={submitting} className="mavo-button-primary">
+                  {submitting ? 'Salvando...' : editingUser ? 'Salvar alterações' : 'Adicionar colaborador'}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </Dialog>
       )}
     </div></main>
   );
