@@ -81,3 +81,4 @@ npm run render:validate → aprovado
 - A Auditoria segue o mesmo comportamento responsivo: cada cartão mobile mantém consulta, responsável, origem, estado, duração e acesso ao detalhe sanitizado.
 - Filas e automações mantém cards para conjuntos pequenos; quando uma lista extensa exige tabela no desktop, telas mobile continuam recebendo cartões com SLA, estado e ações.
 - Agentes e Acessos gerenciais ignoram respostas HTTP defasadas durante busca, filtro ou paginação, evitando que uma requisição antiga substitua o estado mais recente da tela.
+- Logs de Agentes e detalhe de Auditoria também invalidam requisições anteriores ao trocar ou fechar o drawer, evitando apresentar dados de outro item por uma resposta atrasada.

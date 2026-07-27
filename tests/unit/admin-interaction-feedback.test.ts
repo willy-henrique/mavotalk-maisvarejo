@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 test("administração confirma revogação, mantém ações acessíveis e torna erros recuperáveis", async () => {
-  const [agents, users, queues, styles] = await Promise.all([
+  const [agents, users, queues, styles, audit] = await Promise.all([
     readFile("frontend/components/Admin/AgentsManagement.tsx", "utf8"),
     readFile("frontend/components/Admin/UserManagement.tsx", "utf8"),
     readFile("frontend/components/Admin/TicketTypeManagement.tsx", "utf8"),
     readFile("frontend/index.css", "utf8"),
+    readFile("frontend/components/BusinessAudit.tsx", "utf8"),
   ]);
 
   assert.doesNotMatch(agents, /window\.confirm/);
@@ -20,4 +21,7 @@ test("administração confirma revogação, mantém ações acessíveis e torna 
   assert.match(queues, /group-focus-within:opacity-100/);
   assert.match(queues, /aria-label=\{`Editar fila \$\{q\.name\}`\}/);
   assert.match(styles, /prefers-reduced-motion/);
+  assert.match(agents, /closeEvents/);
+  assert.match(audit, /detailRequestRef/);
+  assert.match(audit, /closeDetail/);
 });

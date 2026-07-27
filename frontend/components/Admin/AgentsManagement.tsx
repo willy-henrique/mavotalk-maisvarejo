@@ -40,6 +40,7 @@ const AgentsManagement: React.FC = () => {
   const pageSize = 25;
   const deferredSearch = useDeferredValue(search);
   const loadRequestRef = useRef(0);
+  const eventsRequestRef = useRef(0);
 
   const load = useCallback(async () => {
     const request = ++loadRequestRef.current;
@@ -128,17 +129,26 @@ const AgentsManagement: React.FC = () => {
   };
 
   const openEvents = async (agent: Agent) => {
+    const request = ++eventsRequestRef.current;
     setEventsFor(agent);
     setEvents([]);
     setLoadingEvents(true);
     try {
       const result = await apiGet<{ items: AgentEvent[] }>(`/api/admin/agents/${agent.id}/events`);
+      if (request !== eventsRequestRef.current) return;
       setEvents(result.items);
     } catch (reason) {
+      if (request !== eventsRequestRef.current) return;
       setError(reason instanceof Error ? reason.message : 'Não foi possível carregar os logs do agente');
     } finally {
-      setLoadingEvents(false);
+      if (request === eventsRequestRef.current) setLoadingEvents(false);
     }
+  };
+
+  const closeEvents = () => {
+    eventsRequestRef.current += 1;
+    setEventsFor(null);
+    setEvents([]);
   };
 
   const statusClass = (agent: Agent) => {
@@ -227,7 +237,7 @@ const AgentsManagement: React.FC = () => {
       )}
       {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="agentes" onPageChange={setPage} />}
       {eventsFor && (
-        <Dialog title={`Logs de ${eventsFor.name}`} description="Eventos recentes da instalação. Endereços de origem não são exibidos nesta tela." onClose={() => setEventsFor(null)}>
+        <Dialog title={`Logs de ${eventsFor.name}`} description="Eventos recentes da instalação. Endereços de origem não são exibidos nesta tela." onClose={closeEvents}>
           <div className="max-h-[60vh] overflow-auto p-5">
             {loadingEvents ? <p className="text-sm text-slate-500 dark:text-slate-400">Carregando eventos…</p> : events.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-400">Nenhum evento de auditoria disponível para este agente.</p> : (
               <ol className="space-y-3">
