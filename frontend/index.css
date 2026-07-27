@@ -3,13 +3,59 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  --mavo-bg: #020617;
+  --mavo-sidebar: #020617;
+  --mavo-surface: #0f172a;
+  --mavo-surface-raised: #162033;
+  --mavo-border: #263349;
+  --mavo-text: #f1f5f9;
+  --mavo-text-muted: #94a3b8;
+  --mavo-text-disabled: #64748b;
+  --mavo-primary: #2563eb;
+  --mavo-primary-hover: #1d4ed8;
+  --mavo-focus: rgb(96 165 250 / .5);
+  --mavo-success: #10b981;
+  --mavo-warning: #f59e0b;
+  --mavo-danger: #f43f5e;
+  --mavo-info: #38bdf8;
+  --mavo-shadow-sm: 0 1px 2px rgb(2 6 23 / .22);
+  --mavo-shadow-lg: 0 18px 42px rgb(2 6 23 / .32);
+  --mavo-radius-sm: .5rem;
+  --mavo-radius-md: .75rem;
+  --mavo-radius-lg: 1rem;
+  --mavo-radius-xl: 1.25rem;
+  --mavo-space-1: .25rem;
+  --mavo-space-2: .5rem;
+  --mavo-space-3: .75rem;
+  --mavo-space-4: 1rem;
+  --mavo-space-5: 1.25rem;
+  --mavo-space-6: 1.5rem;
+  --mavo-transition-fast: 120ms;
+  --mavo-transition-base: 180ms;
+  --mavo-z-dropdown: 50;
+  --mavo-z-modal: 70;
+  --mavo-z-toast: 80;
 }
 
 :root.dark {
   color-scheme: dark;
+}
+
+:root.light {
+  color-scheme: light;
+  --mavo-bg: #f8fafc;
+  --mavo-sidebar: #ffffff;
+  --mavo-surface: #ffffff;
+  --mavo-surface-raised: #ffffff;
+  --mavo-border: #e2e8f0;
+  --mavo-text: #0f172a;
+  --mavo-text-muted: #475569;
+  --mavo-text-disabled: #94a3b8;
+  --mavo-shadow-sm: 0 1px 2px rgb(15 23 42 / .06);
+  --mavo-shadow-lg: 0 18px 42px rgb(15 23 42 / .12);
 }
 
 #root {
@@ -22,10 +68,40 @@ body {
   min-height: 100%;
 }
 
+@layer components {
+  .mavo-page {
+    @apply flex min-h-0 flex-1 flex-col overflow-auto px-4 py-5 sm:px-6 lg:px-8;
+  }
+
+  .mavo-page-content {
+    @apply mx-auto w-full max-w-[1600px];
+  }
+
+  .mavo-card {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900;
+  }
+
+  .mavo-button {
+    @apply inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .mavo-button-primary {
+    @apply mavo-button bg-blue-600 text-white shadow-sm shadow-blue-950/20 hover:bg-blue-700;
+  }
+
+  .mavo-button-secondary {
+    @apply mavo-button border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800;
+  }
+
+  .mavo-field {
+    @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900 transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white;
+  }
+}
+
 body {
   font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  background-color: #f8fafc;
-  color: #1e293b;
+  background-color: #020617;
+  color: #e2e8f0;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }

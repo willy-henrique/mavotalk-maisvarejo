@@ -4,6 +4,7 @@ import { Worker } from "bullmq";
 import IORedis from "ioredis";
 import { v2 as cloudinary } from "cloudinary";
 import runtimeEnvironment from "./lib/config/runtime-env.cjs";
+import { processFirstResponseSlaCheck } from "./lib/sla-worker.mjs";
 
 function log(level, fields) {
   const output = JSON.stringify({
@@ -81,9 +82,15 @@ export function startWorkers({ standalone = false } = {}) {
   const workers = [
     worker("sla", async (job) => {
       if (job.name !== "sla-check") return;
+      const outcome = await processFirstResponseSlaCheck({
+        organizationId: job.data?.organizationId,
+        conversationId: job.data?.conversationId,
+      });
       log("info", {
-        event: "sla_check",
+        event: outcome.breached ? "sla_first_response_breached" : "sla_check_ignored",
+        organization_id: job.data?.organizationId,
         conversation_id: job.data?.conversationId,
+        ticket_id: outcome.ticketId,
       });
     }),
     worker("webhooks", async (job) => {

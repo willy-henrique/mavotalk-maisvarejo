@@ -13,6 +13,7 @@ import { getSupabaseClient } from "@/lib/supabase-admin";
 import type { Row, SupabaseLikeClient } from "@/lib/postgres-supabase-shim";
 import { DEFAULT_ORGANIZATION_ID } from "@/lib/utils";
 import { logger } from "@/lib/logger";
+import { enqueueSlaCheck } from "@/lib/queues";
 import { SUPERMARKET_QUEUE_PRESET } from "@/lib/supermarket-config";
 import { randomUUID } from "node:crypto";
 
@@ -1201,9 +1202,14 @@ export async function updateTicketByConversation(
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if ("queueId" in payload) updates.queue_id = payload.queueId;
   if ("assigneeId" in payload) updates.assignee_id = payload.assigneeId;
-  if ("firstResponseDueAt" in payload) updates.first_response_due_at = payload.firstResponseDueAt instanceof Date
-    ? payload.firstResponseDueAt.toISOString()
-    : payload.firstResponseDueAt;
+  if ("firstResponseDueAt" in payload) {
+    updates.first_response_due_at = payload.firstResponseDueAt instanceof Date
+      ? payload.firstResponseDueAt.toISOString()
+      : payload.firstResponseDueAt;
+    // Uma mudança de fila pode conceder um novo prazo. O worker continuará
+    // ignorando jobs anteriores e só registrará o vencimento desse novo prazo.
+    updates.first_response_sla_breached_at = null;
+  }
   if ("firstResponseAt" in payload) updates.first_response_at = payload.firstResponseAt;
   if ("closeReason" in payload) updates.close_reason = payload.closeReason;
   if ("closedAt" in payload) updates.closed_at = payload.closedAt;
@@ -1213,6 +1219,18 @@ export async function updateTicketByConversation(
     .update(updates)
     .eq("conversation_id", conversationId)
     .eq("organization_id", organizationId);
+
+  if ("firstResponseDueAt" in payload && payload.firstResponseDueAt) {
+    const dueAt = new Date(String(payload.firstResponseDueAt));
+    if (!Number.isNaN(dueAt.getTime())) {
+      void enqueueSlaCheck(organizationId, conversationId, dueAt).catch((error) => {
+        logger.error(
+          { err: error, organizationId, conversationId },
+          "Failed to enqueue first response SLA check",
+        );
+      });
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------

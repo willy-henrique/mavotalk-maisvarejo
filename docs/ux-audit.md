@@ -1,0 +1,41 @@
+# Auditoria UX/UI — baseline de auditoria
+
+Data da inspeção: 2026-07-27. Avaliação estática baseada na SPA principal e em seus estados implementados. Não foram capturados screenshots autenticados porque a credencial QA não foi disponibilizada localmente.
+
+## Diagnóstico
+
+O produto já possui direção visual azul/verde e modo escuro, porém não possui design system. A experiência é inconsistente porque cada página decide seus próprios espaçamentos, densidade, títulos, botões, tabelas, estados vazios e modais. A consequência é uma plataforma que parece composta por telas independentes, em especial na administração.
+
+## Achados priorizados
+
+| Severidade | Achado | Evidência / impacto |
+| --- | --- | --- |
+| P1 | SLA não é acionado nem processado | `enqueueSlaCheck` não possui chamadores; worker só escreve log. A operação não recebe ação quando prazo vence. |
+| P2 | Duplicidade entre sincronização e agentes | Duas entradas de menu apontam para o mesmo componente, confundindo responsabilidade e navegação. |
+| P2 | Cabeçalho incorreto em Menu do painel | Falta metadado da rota e o fallback exibe “Caixa de entrada”. |
+| P2 | Auditoria é pouco utilizável | Sem filtros, ordenação, paginação de API, drawer de detalhe, exportação ou máscara explícita; a tabela depende de contraste por página. |
+| P2 | Sem primitives compartilhadas | Botões, cards, tabelas, modais e estados variam entre Equipe, Filas, Acessos, Agentes e Respostas rápidas. |
+| P2 | Fluxos administrativos têm feedback desigual | Algumas ações têm loading/erro; outras não oferecem confirmação, prevenção uniforme de duplo envio, confirmação destrutiva ou aviso de alterações não salvas. |
+| P2 | Dashboard não cobre a operação declarada | Mostra cartões e volume por fila, mas faltam SLA próximo/vencido, TMR, primeira resposta, agentes online, falhas de integração e qualidade/frescor de dados. |
+| P2 | Acessibilidade de modais incompleta | Modais locais não têm focus trap, fechamento por Escape e restauração garantida de foco. |
+| P3 | Mistura de tema e contraste | O tema escuro é default no provider, mas a base do `body` é clara e páginas têm superfícies/classes próprias. A percepção muda entre telas. |
+| P3 | Estados vazios e largura | Há empty states altos em dashboards e tabelas; em monitores grandes a informação não usa largura/densidade operacional de forma consistente. |
+| P3 | Terminologia e capitalização | “Tipos de Chamado”, “Respostas Rápidas”, “Agentes cloud” e “Sincronização” não seguem mesma nomenclatura. |
+
+## Acessibilidade
+
+Pontos já presentes: foco visível global, labels em boa parte dos formulários, `role=alert` em alguns erros, navegação mobile e `aria-label` em alguns ícones.
+
+Lacunas: menus acionados por hover/focus sem padrão de dropdown acessível, modais sem semântica/dialog/focus trap, ícones em botões sem nome acessível em todos os casos, tabelas sem comportamento responsivo consistente e controles nativos na matriz de visibilidade.
+
+## Direção de implementação
+
+1. Criar tokens CSS semânticos e primitives acessíveis (Button, Input, Select, Dialog, Table, StatusBadge, PageHeader, Empty/Loading/ErrorState).
+2. Construir `AppShell` e uma única fonte de navegação/metadata de rotas; incluir breadcrumb e título da aba.
+3. Consolidar Agentes e Sincronização em uma seção: Provisionamento, Monitoramento e Logs.
+4. Migrar a administração por página, preservando chamadas de API e permissões; não reescrever Inbox em bloco.
+5. Tratar loading, sucesso, falha, conflito e alterações não salvas em toda gravação.
+
+## Capturas antes/depois
+
+Pendente de execução autenticada com `QA_BASE_URL` e `QA_PASSWORD` configurados no ambiente local. As capturas devem usar dados de QA, mascarar telefone/e-mail quando necessário e ocorrer somente em falhas ou comparativos explícitos de regressão visual.

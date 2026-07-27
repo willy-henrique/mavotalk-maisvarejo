@@ -54,14 +54,18 @@ export async function enqueueWebhookEvent(
 }
 
 export async function enqueueSlaCheck(
+  organizationId: string,
   conversationId: string,
-  delayMs: number,
+  dueAt: Date,
 ) {
   if (!slaQueue) return;
+  const delayMs = Math.max(0, dueAt.getTime() - Date.now());
   await slaQueue.add(
     "sla-check",
-    { conversationId },
-    { delay: delayMs, jobId: `sla-${conversationId}` },
+    { organizationId, conversationId, dueAt: dueAt.toISOString() },
+    // Uma troca de fila pode recalcular o SLA. O job antigo é mantido, mas o
+    // worker revalida o prazo no banco e só marca o vencimento atual uma vez.
+    { delay: delayMs, jobId: `sla-${conversationId}-${dueAt.getTime()}` },
   );
 }
 
