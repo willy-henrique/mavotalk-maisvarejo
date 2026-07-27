@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { apiGet } from '../services/api';
+import { ErrorState, LoadingState } from './ui/PageState';
 
 type SupportMetrics = {
   totalAguardando: number;
@@ -20,17 +21,21 @@ const Dashboard: React.FC = () => {
   const [metrics, setMetrics] = useState<SupportMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const loadRequestRef = useRef(0);
 
   const load = useCallback(async () => {
+    const request = ++loadRequestRef.current;
     setLoading(true);
     try {
       const response = await apiGet<{ metrics: SupportMetrics }>('/api/dashboard/metrics');
+      if (request !== loadRequestRef.current) return;
       setMetrics(response.metrics);
       setError('');
     } catch (reason) {
+      if (request !== loadRequestRef.current) return;
       setError(reason instanceof Error ? reason.message : 'Métricas indisponíveis.');
     } finally {
-      setLoading(false);
+      if (request === loadRequestRef.current) setLoading(false);
     }
   }, []);
 
@@ -54,9 +59,9 @@ const Dashboard: React.FC = () => {
         <div className="flex items-center gap-3"><p className="text-xs text-slate-500 dark:text-slate-400">Dados de sync: {metrics?.lastDataSyncAt ? new Date(metrics.lastDataSyncAt).toLocaleString('pt-BR') : 'ainda indisponíveis'}</p><button type="button" onClick={() => void load()} disabled={loading} className="mavo-button-secondary">{loading ? 'Atualizando...' : 'Atualizar dados'}</button></div>
       </div>
 
-      {error && <div role="alert" className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200"><span>{error}</span><button type="button" onClick={() => void load()} className="whitespace-nowrap rounded-lg bg-white px-3 py-2 text-xs font-black text-rose-700 shadow-sm dark:bg-slate-900 dark:text-rose-200">Tentar novamente</button></div>}
+      {error && <ErrorState className="mb-6" title="Não foi possível carregar os indicadores." description={error} action={<button type="button" onClick={() => void load()} disabled={loading} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
 
-      {loading && !metrics ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 8 }, (_, index) => <div key={index} className="h-36 rounded-3xl skeleton" />)}</div> : metrics && <><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{cards.map((card) => <article key={card.label} className="mavo-card group p-5 transition hover:-translate-y-0.5 hover:shadow-lg"><div className={`mb-5 h-2 w-12 rounded-full ${card.accent}`} /><p className="text-[10px] font-black uppercase tracking-[.16em] text-slate-400">{card.label}</p><p className="mt-2 text-3xl font-black tracking-tight text-slate-900 dark:text-white">{card.value}</p><p className="mt-3 text-xs leading-5 text-slate-500 dark:text-slate-400">{card.hint}</p></article>)}</section><section className="mavo-card mt-6 p-5 sm:p-6"><div className="mb-6 flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-black text-slate-900 dark:text-white">Distribuição por fila</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Identifique onde a demanda está concentrada.</p></div><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{metrics.volumeByDemand.reduce((total, item) => total + item.total, 0)} tickets</span></div>{metrics.volumeByDemand.length === 0 ? <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-slate-300 text-sm text-slate-500 dark:border-slate-700">Ainda não há tickets para exibir neste painel.</div> : <div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={metrics.volumeByDemand} margin={{ top: 8, right: 8, left: -20, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, .25)" /><XAxis dataKey="queueName" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis allowDecimals={false} axisLine={false} tickLine={false} /><Tooltip cursor={{ fill: 'rgba(37, 99, 235, .06)' }} contentStyle={{ borderRadius: 16, border: '1px solid #e2e8f0' }} /><Bar dataKey="total" name="Tickets" fill="#2563eb" radius={[8, 8, 2, 2]} /></BarChart></ResponsiveContainer></div>}</section></>}
+      {loading && !metrics ? <LoadingState title="Carregando indicadores operacionais…" description="Validando o estado atual das filas, SLAs e agentes." /> : metrics && <><section aria-busy={loading} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{cards.map((card) => <article key={card.label} className="mavo-card group p-5 transition hover:-translate-y-0.5 hover:shadow-lg"><div className={`mb-5 h-2 w-12 rounded-full ${card.accent}`} /><p className="text-[10px] font-black uppercase tracking-[.16em] text-slate-400">{card.label}</p><p className="mt-2 text-3xl font-black tracking-tight text-slate-900 dark:text-white">{card.value}</p><p className="mt-3 text-xs leading-5 text-slate-500 dark:text-slate-400">{card.hint}</p></article>)}</section><section className="mavo-card mt-6 p-5 sm:p-6"><div className="mb-6 flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-black text-slate-900 dark:text-white">Distribuição por fila</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Identifique onde a demanda está concentrada.</p></div><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{metrics.volumeByDemand.reduce((total, item) => total + item.total, 0)} tickets</span></div>{metrics.volumeByDemand.length === 0 ? <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-slate-300 text-sm text-slate-500 dark:border-slate-700">Ainda não há tickets para exibir neste painel.</div> : <div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={metrics.volumeByDemand} margin={{ top: 8, right: 8, left: -20, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, .25)" /><XAxis dataKey="queueName" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis allowDecimals={false} axisLine={false} tickLine={false} /><Tooltip cursor={{ fill: 'rgba(37, 99, 235, .06)' }} contentStyle={{ borderRadius: 16, border: '1px solid #e2e8f0' }} /><Bar dataKey="total" name="Tickets" fill="#2563eb" radius={[8, 8, 2, 2]} /></BarChart></ResponsiveContainer></div>}</section></>}
     </div></main>
   );
 };
