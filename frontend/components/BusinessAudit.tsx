@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { apiGet } from '../services/api';
+import { Dialog } from './ui/Dialog';
 
 type AuditItem = {
   id: string;
@@ -20,14 +21,23 @@ const BusinessAudit: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [originFilter, setOriginFilter] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [appliedFilters, setAppliedFilters] = useState({ query: '', status: '', origin: '', from: '', to: '' });
+  const [selected, setSelected] = useState<AuditItem | null>(null);
+  const [detail, setDetail] = useState<{ sanitizedInput: string | null; parameters: Record<string, unknown>; resultSummary: Record<string, unknown> } | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const pageSize = 25;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await apiGet<{ items: AuditItem[]; total: number }>(
-        `/api/business/audit?page=${page}&pageSize=${pageSize}`,
-      );
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+      for (const [key, value] of Object.entries(appliedFilters)) if (value) params.set(key, value);
+      const data = await apiGet<{ items: AuditItem[]; total: number }>(`/api/business/audit?${params}`);
       setItems(data.items);
       setTotal(data.total);
       setError('');
@@ -36,7 +46,7 @@ const BusinessAudit: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, appliedFilters]);
 
   useEffect(() => {
     void load();
@@ -56,36 +66,68 @@ const BusinessAudit: React.FC = () => {
     return 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300';
   };
 
+  const applyFilters = (event: React.FormEvent) => {
+    event.preventDefault();
+    setPage(1);
+    setAppliedFilters({ query: query.trim(), status: statusFilter, origin: originFilter, from, to });
+  };
+
+  const clearFilters = () => {
+    setQuery(''); setStatusFilter(''); setOriginFilter(''); setFrom(''); setTo('');
+    setPage(1); setAppliedFilters({ query: '', status: '', origin: '', from: '', to: '' });
+  };
+
+  const openDetail = async (item: AuditItem) => {
+    setSelected(item); setDetail(null); setLoadingDetail(true);
+    try {
+      const result = await apiGet<{ item: typeof detail }>(`/api/business/audit/${item.id}`);
+      setDetail(result.item);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível abrir o evento de auditoria');
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
   return (
-    <div className="p-6 md:p-8 overflow-y-auto flex-1 bg-slate-50 dark:bg-slate-800/95">
+    <main className="mavo-page">
+      <div className="mavo-page-content">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">Auditoria gerencial</h1>
+          <p className="text-xs font-black uppercase tracking-[.16em] text-blue-600 dark:text-blue-400">Administração</p>
+          <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Auditoria gerencial</h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Consultas pela UI, WhatsApp e MCP. Valores financeiros completos não são armazenados neste log.</p>
         </div>
-        <button type="button" onClick={() => void load()} disabled={loading} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">
+        <button type="button" onClick={() => void load()} disabled={loading} className="mavo-button-secondary">
           {loading ? 'Atualizando...' : 'Atualizar'}
         </button>
       </div>
+      <form onSubmit={applyFilters} className="mavo-card mb-5 grid gap-3 p-4 md:grid-cols-6">
+        <label className="md:col-span-2"><span className="sr-only">Buscar auditoria</span><input value={query} onChange={(event) => setQuery(event.target.value)} className="mavo-field" placeholder="Buscar consulta, origem ou pessoa" /></label>
+        <label><span className="sr-only">Estado</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mavo-field"><option value="">Todos os estados</option><option value="success">Sucesso</option><option value="empty">Sem resultado</option><option value="denied">Negado</option><option value="failed">Falha</option></select></label>
+        <label><span className="sr-only">Origem</span><select value={originFilter} onChange={(event) => setOriginFilter(event.target.value)} className="mavo-field"><option value="">Todas as origens</option><option value="ui">Painel</option><option value="whatsapp">WhatsApp</option><option value="mcp">MCP</option></select></label>
+        <label><span className="sr-only">Data inicial</span><input aria-label="Data inicial" type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="mavo-field" /></label>
+        <div className="flex gap-2"><label className="min-w-0 flex-1"><span className="sr-only">Data final</span><input aria-label="Data final" type="date" value={to} onChange={(event) => setTo(event.target.value)} className="mavo-field" /></label><button className="mavo-button-primary px-3" type="submit">Filtrar</button>{Object.values(appliedFilters).some(Boolean) && <button className="mavo-button-secondary px-3" type="button" onClick={clearFilters}>Limpar</button>}</div>
+      </form>
       {error && <div role="alert" className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300"><span>{error}</span><button type="button" onClick={() => void load()} className="font-bold underline">Tentar novamente</button></div>}
       {loading ? (
         <div className="py-12 text-slate-500">Carregando...</div>
       ) : items.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-500">Nenhuma consulta registrada.</div>
+        <div className="mavo-card p-10 text-center text-slate-500 dark:text-slate-400">Nenhuma consulta encontrada com os filtros atuais.</div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 dark:border-slate-700 text-xs uppercase text-slate-500"><tr><th className="p-4">Quando</th><th className="p-4">Tenant</th><th className="p-4">Quem</th><th className="p-4">Origem</th><th className="p-4">Consulta</th><th className="p-4">Estado</th><th className="p-4">Duração</th></tr></thead>
+            <thead className="border-b border-slate-200 dark:border-slate-700 text-xs uppercase text-slate-500"><tr><th className="p-4">Quando</th><th className="p-4">Quem</th><th className="p-4">Origem</th><th className="p-4">Consulta</th><th className="p-4">Estado</th><th className="p-4">Duração</th><th className="p-4"><span className="sr-only">Detalhes</span></th></tr></thead>
             <tbody>
               {items.map((item) => (
                 <tr key={item.id} className="border-b border-slate-100 dark:border-slate-800">
                   <td className="p-4">{new Date(item.createdAt).toLocaleString('pt-BR')}</td>
-                  <td className="p-4 font-mono text-xs">{item.organizationId}</td>
                   <td className="p-4">{item.actorName || item.phoneNormalized || 'Sistema'}</td>
                   <td className="p-4 uppercase">{item.origin}</td>
                   <td className="p-4">{item.queryType}</td>
                   <td className="p-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(item.status)}`}>{item.status}{item.errorCode ? ` · ${item.errorCode}` : ''}</span></td>
                   <td className="p-4">{item.durationMs} ms</td>
+                  <td className="p-4"><button type="button" className="rounded-lg px-2 py-1 text-xs font-bold text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/30" onClick={() => void openDetail(item)}>Ver detalhe</button></td>
                 </tr>
               ))}
             </tbody>
@@ -122,7 +164,9 @@ const BusinessAudit: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+      {selected && <Dialog title="Detalhe de auditoria" description={`${selected.queryType} · ${new Date(selected.createdAt).toLocaleString('pt-BR')}`} onClose={() => setSelected(null)}><div className="space-y-4 p-6 text-sm"><dl className="grid grid-cols-2 gap-3"><div><dt className="text-xs font-bold uppercase text-slate-500">Origem</dt><dd className="mt-1 text-slate-900 dark:text-white">{selected.origin}</dd></div><div><dt className="text-xs font-bold uppercase text-slate-500">Duração</dt><dd className="mt-1 text-slate-900 dark:text-white">{selected.durationMs} ms</dd></div><div><dt className="text-xs font-bold uppercase text-slate-500">Estado</dt><dd className="mt-1 text-slate-900 dark:text-white">{selected.status}</dd></div><div><dt className="text-xs font-bold uppercase text-slate-500">Responsável</dt><dd className="mt-1 text-slate-900 dark:text-white">{selected.actorName || 'Sistema'}</dd></div></dl>{loadingDetail ? <p className="text-slate-500">Carregando dados mascarados…</p> : detail && <><div><h3 className="text-xs font-bold uppercase text-slate-500">Entrada sanitizada</h3><p className="mt-1 rounded-lg bg-slate-100 p-3 text-slate-700 dark:bg-slate-950 dark:text-slate-200">{detail.sanitizedInput || 'Não registrada'}</p></div><div><h3 className="text-xs font-bold uppercase text-slate-500">Parâmetros</h3><pre className="mt-1 overflow-auto rounded-lg bg-slate-100 p-3 text-xs text-slate-700 dark:bg-slate-950 dark:text-slate-200">{JSON.stringify(detail.parameters, null, 2)}</pre></div><div><h3 className="text-xs font-bold uppercase text-slate-500">Resumo</h3><pre className="mt-1 overflow-auto rounded-lg bg-slate-100 p-3 text-xs text-slate-700 dark:bg-slate-950 dark:text-slate-200">{JSON.stringify(detail.resultSummary, null, 2)}</pre></div></>}</div></Dialog>}
+      </div>
+    </main>
   );
 };
 

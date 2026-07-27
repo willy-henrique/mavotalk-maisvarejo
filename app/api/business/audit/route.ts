@@ -14,6 +14,28 @@ export async function GET(request: Request) {
     Math.max(1, Number(url.searchParams.get("pageSize")) || 25),
   );
   const offset = (page - 1) * pageSize;
+  const query = String(url.searchParams.get("query") || "").trim().slice(0, 120);
+  const status = String(url.searchParams.get("status") || "").trim().slice(0, 32);
+  const origin = String(url.searchParams.get("origin") || "").trim().slice(0, 32);
+  const from = String(url.searchParams.get("from") || "").trim();
+  const to = String(url.searchParams.get("to") || "").trim();
+  const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+  const where = ["a.organization_id = $1"];
+  const values: unknown[] = [auth.session.organizationId];
+  const addValue = (value: unknown) => {
+    values.push(value);
+    return `$${values.length}`;
+  };
+  if (query) {
+    const placeholder = addValue(`%${query}%`);
+    where.push(`(a.query_type ILIKE ${placeholder} OR a.origin ILIKE ${placeholder} OR COALESCE(bau.name, u.name, '') ILIKE ${placeholder})`);
+  }
+  if (status) where.push(`a.status = ${addValue(status)}`);
+  if (origin) where.push(`a.origin = ${addValue(origin)}`);
+  if (datePattern.test(from)) where.push(`a.created_at >= ${addValue(from)}::date`);
+  if (datePattern.test(to)) where.push(`a.created_at < (${addValue(to)}::date + interval '1 day')`);
+  const whereClause = where.join(" AND ");
+  const listValues = [...values, pageSize, offset];
   const [items, count] = await Promise.all([
     queryDatabase<{
       id: string;
@@ -40,16 +62,18 @@ export async function GET(request: Request) {
          LEFT JOIN users u
            ON u.id = a.application_user_id
           AND u.organization_id = a.organization_id
-        WHERE a.organization_id = $1
+        WHERE ${whereClause}
         ORDER BY a.created_at DESC
-        LIMIT $2 OFFSET $3`,
-      [auth.session.organizationId, pageSize, offset],
+        LIMIT $${listValues.length - 1} OFFSET $${listValues.length}`,
+      listValues,
     ),
     queryDatabase<{ count: string }>(
       `SELECT COUNT(*)::text AS count
-         FROM business_query_audit
-        WHERE organization_id = $1`,
-      [auth.session.organizationId],
+         FROM business_query_audit a
+         LEFT JOIN business_access_users bau ON bau.id = a.access_user_id AND bau.organization_id = a.organization_id
+         LEFT JOIN users u ON u.id = a.application_user_id AND u.organization_id = a.organization_id
+        WHERE ${whereClause}`,
+      values,
     ),
   ]);
   return NextResponse.json({
