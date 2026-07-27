@@ -56,6 +56,8 @@ const QuickReplyManagement: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [pendingDelete, setPendingDelete] = useState<QuickReply | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -80,6 +82,21 @@ const QuickReplyManagement: React.FC = () => {
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  const normalizedSearch = search.trim().toLowerCase();
+  const filteredItems = items.filter((item) =>
+    !normalizedSearch || [item.name, item.content, item.category]
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(normalizedSearch)),
+  );
+  const pageSize = 25;
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+  const activePage = Math.min(page, totalPages);
+  const pagedItems = filteredItems.slice((activePage - 1) * pageSize, activePage * pageSize);
 
   const openCreate = () => {
     setEditingId(null);
@@ -171,11 +188,12 @@ const QuickReplyManagement: React.FC = () => {
 
       {error && <ErrorState className="mb-5" description={error} action={<button type="button" onClick={() => void fetchItems()} disabled={loading} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
       {notice && <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">{notice}</div>}
+      <label className="mb-5 block max-w-xl"><span className="sr-only">Buscar respostas rápidas</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por atalho, conteúdo ou categoria" className="mavo-field" /></label>
 
       {loading ? (
         <LoadingState title="Carregando respostas rápidas…" />
-      ) : items.length === 0 ? (
-        <EmptyState title="Nenhuma resposta rápida cadastrada." description="Crie atalhos consistentes para reduzir o tempo de resposta da equipe." action={<button type="button" onClick={openCreate} className="mavo-button-primary">Criar a primeira resposta rápida</button>} />
+      ) : filteredItems.length === 0 ? (
+        <EmptyState title={items.length ? 'Nenhuma resposta encontrada.' : 'Nenhuma resposta rápida cadastrada.'} description={items.length ? 'Altere a busca ou limpe o filtro para ver os atalhos cadastrados.' : 'Crie atalhos consistentes para reduzir o tempo de resposta da equipe.'} action={items.length ? <button type="button" onClick={() => setSearch('')} className="mavo-button-secondary">Limpar busca</button> : <button type="button" onClick={openCreate} className="mavo-button-primary">Criar a primeira resposta rápida</button>} />
       ) : (
         <div className="mavo-card overflow-x-auto p-0">
           <table className="w-full text-left">
@@ -188,7 +206,7 @@ const QuickReplyManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
+              {pagedItems.map((item) => (
                 <tr key={item.id} className="border-b border-slate-100 dark:border-slate-700/80 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                   <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{item.name}</td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm max-w-md">
@@ -210,6 +228,9 @@ const QuickReplyManagement: React.FC = () => {
             </tbody>
           </table>
         </div>
+      )}
+      {!loading && filteredItems.length > pageSize && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300"><span>Mostrando {(activePage - 1) * pageSize + 1}–{Math.min(activePage * pageSize, filteredItems.length)} de {filteredItems.length} respostas</span><div className="flex gap-2"><button type="button" disabled={activePage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Anterior</button><button type="button" disabled={activePage === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Próxima</button></div></div>
       )}
 
       {showModal && (
