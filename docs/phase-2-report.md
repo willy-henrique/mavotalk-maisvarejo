@@ -29,7 +29,7 @@ Data: 2026-07-27.
 ```text
 npm run typecheck:all  → aprovado
 npm test               → 104/104 aprovados
-npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
+npm run test:e2e       → 16 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 npm run build           → aprovado (Next.js, 43 páginas/rotas geradas)
 npm run render:validate → aprovado
@@ -38,6 +38,7 @@ npm run render:validate → aprovado
 ## Limites conhecidos
 
 - A suíte E2E não é considerada aprovada enquanto estiver ignorada; faltam password, origem de API e tenants QA controlados.
+- A build emite aviso do `@supabase/supabase-js` de descontinuação de Node 20. A aplicação deve subir o runtime do Render para Node 22 antes da próxima atualização da dependência; o build atual ainda conclui com êxito.
 - A execução anônima contra o Render alcançou a tela de login e não expôs conteúdo administrativo nas quatro dimensões, mas foi reprovada pela observabilidade devido ao aviso de console CSP da versão atualmente publicada. A causa foi corrigida no repositório (diretiva `frame-ancestors` removida da meta tag); é necessário publicar e repetir a execução para obter a evidência pós-deploy.
 - A validação de RLS foi estática/arquitetural nesta fase. O teste negativo integral A→B ainda requer dois tenants de QA controlados e credenciais locais para não tocar em dados de terceiros.
 - Ainda faltam cenários E2E para Inbox, multi-tenancy A→B, WhatsApp, agentes, auditoria e administração. O plano permanece em `docs/e2e-test-plan.md`.

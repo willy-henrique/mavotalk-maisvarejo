@@ -25,7 +25,7 @@ Agentes locais ──HMAC/replay protection────────────�
 | Processo HTTP e tempo real | `server.cjs`, Socket.IO | Autentica o socket, resolve usuário/organização, entra apenas em `organization:<id>`. |
 | Dados | Postgres via `pg`; `lib/repo.ts` reexporta `lib/supabase-repo.ts` | Dados operacionais, configurações, auditoria, agentes e analytics. |
 | Isolamento secundário | `supabase/migrations/202607230004_rls_policies.sql` | RLS baseada em `app.organization_id`; `withTenantTransaction` configura o contexto transacional. |
-| Filas | BullMQ/Redis, `lib/queues.ts`, `worker.mjs` | SLA de primeira resposta é agendado e revalidado de forma idempotente; limpeza de mídia e sync de agentes usam a mesma infraestrutura. |
+| Filas | BullMQ/Redis, `lib/queues.ts`, `worker.mjs` | SLA de primeira resposta é agendado e revalidado de forma idempotente; limpeza de mídia é processada de forma assíncrona. A sincronização de agentes é recebida e validada pelas rotas HTTP próprias, sem fila BullMQ fictícia. |
 | WhatsApp | Baileys e Twilio | Baileys é o padrão do Render; Twilio valida assinatura e resolve a organização pelo canal. |
 | Painel master | `app/mavo`, `components/mavo-admin.tsx` | Autenticação própria de plataforma, seletor de organização validado no servidor, visão e configuração do tenant selecionado. |
 
@@ -60,7 +60,7 @@ Agentes locais ──HMAC/replay protection────────────�
 
 ## Execução em produção
 
-`render.yaml` configura dois serviços: `mavo-talk-web` (SPA estática) e `mavo-talk-api` (Next/Socket.IO). No plano gratuito, `MAVO_INLINE_WORKER=true` executa workers no processo web e o Redis é explicitamente best-effort; a disponibilidade de SLA e sincronização não pode depender desse arranjo.
+`render.yaml` configura dois serviços: `mavo-talk-web` (SPA estática) e `mavo-talk-api` (Next/Socket.IO). No plano gratuito, `MAVO_INLINE_WORKER=true` executa workers no processo web e o Redis é explicitamente best-effort; a disponibilidade de SLA e limpeza de mídia não pode depender desse arranjo. A sincronização de agentes não depende de worker BullMQ.
 
 ## Limites desta auditoria
 

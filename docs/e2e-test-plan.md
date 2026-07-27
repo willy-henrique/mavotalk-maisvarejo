@@ -45,3 +45,7 @@ Em 2026-07-27, o cenário anônimo de rota administrativa foi executado contra `
 - Toda mutação comprova estado final e auditoria, não apenas carregamento de página.
 - Testes negativos A→B devolvem erro seguro e não recebem evento em tempo real.
 - Relatório HTML/JUnit armazenado como artefato de CI, sem segredo, cookie ou PII desnecessária.
+
+## Cobertura implementada adicional
+
+- Quando as credenciais QA estão disponíveis, `operational-navigation.spec.ts` autentica sem registrar segredos e verifica Inbox/Contatos por teclado, URL direta, refresh, título da página e item ativo na navegação. O cenário é somente leitura.
