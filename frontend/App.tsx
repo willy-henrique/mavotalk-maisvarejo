@@ -48,6 +48,14 @@ const App: React.FC = () => {
 
   useEffect(() => { AuthService.refreshSession().then(setSession).catch(() => setSession(null)).finally(() => setAuthChecked(true)); }, []);
   useEffect(() => { const handleExpired = () => { void AuthService.logout(); setSession(null); navigate('/', { replace: true }); }; window.addEventListener('mavo:session-expired', handleExpired); return () => window.removeEventListener('mavo:session-expired', handleExpired); }, [navigate]);
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSidebarOpen(false);
+    };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [sidebarOpen]);
   useEffect(() => { if (!session?.isAuthenticated || session.user?.role === UserRole.AGENT) return; const load = async () => { try { const response = await apiFetch('/api/whatsapp/status'); const data = await response.json(); if (response.ok) { setWhatsappStatus(data?.state?.status ?? null); setWhatsappProvider(data?.provider || ''); } } catch { setWhatsappStatus(null); } }; void load(); const interval = window.setInterval(() => void load(), 10000); return () => window.clearInterval(interval); }, [session?.isAuthenticated, session?.user?.role]);
 
   const login = async (event: React.FormEvent) => { event.preventDefault(); setIsLoggingIn(true); setLoginError(''); try { const next = await AuthService.login(loginEmail, loginPass); setSession(next); navigate('/inbox', { replace: true }); } catch (reason) { setLoginError(reason instanceof Error ? reason.message : 'Erro ao autenticar.'); } finally { setIsLoggingIn(false); } };
