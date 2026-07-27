@@ -3,7 +3,6 @@ import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import { Icons } from './constants';
 import { useTheme } from './contexts/ThemeContext';
 import Sidebar from './components/Sidebar';
-import InboxConversations from './components/InboxConversations';
 import AppHeader from './components/AppHeader';
 import AppErrorBoundary from './components/AppErrorBoundary';
 import { AuthState, UserRole } from './types';
@@ -11,6 +10,7 @@ import { AuthService } from './services/authService';
 import { apiFetch } from './services/api';
 
 const Dashboard = React.lazy(() => import('./components/Dashboard'));
+const InboxConversations = React.lazy(() => import('./components/InboxConversations'));
 const UserManagement = React.lazy(() => import('./components/Admin/UserManagement'));
 const TicketTypeManagement = React.lazy(() => import('./components/Admin/TicketTypeManagement'));
 const QuickReplyManagement = React.lazy(() => import('./components/Admin/QuickReplyManagement'));

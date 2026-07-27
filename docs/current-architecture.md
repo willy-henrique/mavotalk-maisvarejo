@@ -53,6 +53,11 @@ Agentes locais ──HMAC/replay protection────────────�
 - O webhook n8n valida bearer token por organização, valida payload com Zod e deduplica `event_id`/mensagens. O roteamento gerencial de WhatsApp acontece antes de abrir uma conversa comum.
 - Agentes cloud validam assinatura, timestamp, nonce, versão de schema, tamanho e tipo do payload.
 
+## Desempenho de frontend
+
+- As rotas operacionais e administrativas, inclusive o Inbox, usam `React.lazy`; o login não carrega Socket.IO ou o módulo de conversas antes da autenticação.
+- A build local mais recente produziu um chunk inicial de aproximadamente 85,3 kB gzip. O Inbox fica em chunk próprio de aproximadamente 22,6 kB gzip e os gráficos em chunk próprio, carregado apenas por dashboards.
+
 ## Execução em produção
 
 `render.yaml` configura dois serviços: `mavo-talk-web` (SPA estática) e `mavo-talk-api` (Next/Socket.IO). No plano gratuito, `MAVO_INLINE_WORKER=true` executa workers no processo web e o Redis é explicitamente best-effort; a disponibilidade de SLA e sincronização não pode depender desse arranjo.

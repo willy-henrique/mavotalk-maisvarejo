@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 85/85 aprovados
+npm test               → 86/86 aprovados
 npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 npm run build           → aprovado (Next.js, 43 páginas/rotas geradas)
@@ -54,3 +54,5 @@ npm run render:validate → aprovado
 - O drawer de navegação em telas menores agora fecha com `Escape`, além do clique no overlay e da navegação por item.
 - Foram criados `LoadingState`, `EmptyState` e `ErrorState` compartilhados e aplicados em Indicadores do negócio, Contatos, Agentes, Acessos gerenciais e Respostas rápidas; as falhas dessas áreas agora oferecem repetição explícita.
 - A mesma camada de estados passou a atender Equipe, Filas e automações e Menu do painel, eliminando carregamentos e falhas com estilos próprios nessas configurações administrativas.
+- O Inbox agora é uma rota carregada sob demanda: a tela de login não baixa sua lógica de Socket.IO e conversas antes de existir sessão autenticada.
+- A build da SPA reduziu o chunk inicial de 348,5 kB / 108,3 kB gzip para 270,5 kB / 85,3 kB gzip. O código do Inbox passou ao seu próprio chunk de 76,0 kB / 22,6 kB gzip, carregado apenas pela rota autenticada.

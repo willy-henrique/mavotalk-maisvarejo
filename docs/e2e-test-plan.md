@@ -4,7 +4,7 @@ Data da inspeção: 2026-07-27.
 
 ## Estado atual
 
-Playwright está configurado no repositório com quatro projetos (desktop 1366×768, desktop 1920×1080, tablet e mobile 390×844). A suíte observa erros de console/JavaScript, HTTP relevante e requisições pendentes; trace e screenshot são mantidos somente em falha. Existem 85 testes unitários/integração locais, mas eles não substituem navegação autenticada, Socket.IO real ou isolamento A→B.
+Playwright está configurado no repositório com quatro projetos (desktop 1366×768, desktop 1920×1080, tablet e mobile 390×844). A suíte observa erros de console/JavaScript, HTTP relevante e requisições pendentes; trace e screenshot são mantidos somente em falha. Existem 86 testes unitários/integração locais, mas eles não substituem navegação autenticada, Socket.IO real ou isolamento A→B.
 
 Em 2026-07-27, o cenário anônimo de rota administrativa foi executado contra `https://mavo-talk-web.onrender.com`: as quatro dimensões confirmaram a tela de login e não expuseram conteúdo administrativo. A execução é marcada como falha pela observabilidade porque o deployment ainda emite `frame-ancestors` em uma meta CSP. A correção correspondente já existe no código-fonte e deve ser publicada antes da repetição.
 
