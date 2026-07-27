@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 102/102 aprovados
+npm test               → 103/103 aprovados
 npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 npm run build           → aprovado (Next.js, 43 páginas/rotas geradas)
@@ -71,3 +71,4 @@ npm run render:validate → aprovado
 - A Auditoria gerencial foi alinhada aos estados compartilhados, ganhou tabela com contraste reforçado/caption semântico e ignora respostas defasadas ao alterar filtros ou páginas rapidamente.
 - Filas BullMQ sem produtor e sem processamento efetivo (`webhooks` e `agent-sync`) foram removidas; SLA e limpeza de mídia permanecem como os únicos workers ativos e verificáveis.
 - Os controles do bot no painel master deixaram de usar checkboxes nativos e agora utilizam switches acessíveis, com nome, estado e foco visível.
+- A área clara do master recebeu escala tipográfica operacional e contraste reforçado em cartões, filas, usuários e auditoria, removendo textos de 6–9 px que prejudicavam a leitura.

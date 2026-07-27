@@ -3186,6 +3186,52 @@ button:disabled {
 .master-confirm-dialog button:last-child { background: #6050d6; color: #fff; }
 .master-confirm-dialog button:focus-visible { outline: 3px solid #98c7ff; outline-offset: 2px; }
 
+/* O painel master é o ambiente claro de governança. Estes ajustes mantêm a
+   densidade, mas retiram textos abaixo do mínimo operacional de legibilidade. */
+.master-shell { background: #eef1f7; color: #22263a; }
+.master-topbar { border-color: #d8dde8; }
+.master-topbar p { color: #646b7d; font-size: 10px; }
+.master-top-actions button, .master-top-actions > a { border-color: #cfd5e1; font-size: 11px; }
+.master-organization-picker > span { color: #5f6678; font-size: 10px; }
+.master-organization-picker select { border-color: #cfd5e1; font-size: 12px; }
+.master-live-chip { border-color: #cfd5e1; color: #50586b; font-size: 11px; }
+.master-section, .master-card, .master-kpis article { border-color: #d8dde8; box-shadow: 0 1px 2px rgb(15 23 42 / 4%), 0 8px 22px rgb(15 23 42 / 3%); }
+.master-section-heading > div > span, .master-card-title > div > span { font-size: 10px; }
+.master-section-heading h2, .master-card-title h2 { font-size: 18px; }
+.master-section-heading p { color: #626a7b; font-size: 12px; line-height: 1.5; }
+.master-kpis small { color: #5f6678; font-size: 11px; }
+.master-kpis em { color: #70788a; font-size: 10px; }
+.master-card-title > strong { font-size: 11px; }
+.master-card-title button { font-size: 11px; }
+.master-integration-grid article, .master-status-list > div, .master-queue-overview > div, .supermarket-config-list > div { background: #f5f7fb; border-color: #dfe4ed; }
+.master-integration-grid strong { font-size: 12px; }
+.master-integration-grid p { color: #5e6678; font-size: 11px; }
+.master-integration-grid em { color: #697185; font-size: 10px; }
+.master-deploy-strip span, .master-mini-kpis span, .supermarket-config-list span { color: #687084; font-size: 10px; }
+.master-deploy-strip strong { font-size: 11px; }
+.master-status-list > div { font-size: 12px; }
+.master-status-list strong { font-size: 13px; }
+.master-mini-kpis strong { font-size: 14px; }
+.master-queue-overview strong { font-size: 12px; }
+.master-queue-overview small { color: #657084; font-size: 10px; }
+.master-queue-overview em { font-size: 11px; }
+.master-feature-chip { font-size: 11px; }
+.supermarket-config-list strong { font-size: 12px; }
+.supermarket-readiness strong { font-size: 13px; }
+.supermarket-readiness p { color: #526072; font-size: 11px; }
+.master-users-table strong { font-size: 12px; }
+.master-users-table small { color: #657084; font-size: 10px; }
+.master-users-table em { color: #535d71; font-size: 11px; }
+.master-users-table i { font-size: 10px; }
+.master-hours-list > div { font-size: 12px; }
+.master-hours-list span { color: #535d71; }
+.master-hours-list strong { font-size: 11px; }
+.master-audit-list strong { font-size: 12px; }
+.master-audit-list p { color: #626c80; font-size: 10px; }
+.master-audit-list time { color: #586275; font-size: 10px; }
+.master-empty { color: #596375; font-size: 12px; }
+.master-footer { color: #606a7e; font-size: 11px; }
+
 @media (max-width: 1120px) {
   .master-integration-grid { grid-template-columns: repeat(3, 1fr); }
   .master-deploy-strip { grid-template-columns: repeat(3, 1fr); row-gap: 16px; }
