@@ -27,8 +27,14 @@ test("consultas administrativas críticas executam com contexto RLS do tenant", 
     const start = repository.indexOf(`export async function ${name}`);
     const end = repository.indexOf("export async function", start + 1);
     assert.ok(start >= 0, `${name} deve existir no repositório`);
-    assert.match(repository.slice(start, end < 0 ? undefined : end), /supa\(orgId\)/, `${name} deve executar sob o tenant resolvido`);
+    const source = repository.slice(start, end < 0 ? undefined : end);
+    assert.match(source, name === "getOrCreateOpenConversation" ? /withTenantTransaction\(orgId/ : /supa\(orgId\)/, `${name} deve executar sob o tenant resolvido`);
   }
+  const openConversationStart = repository.indexOf("export async function getOrCreateOpenConversation");
+  const openConversationEnd = repository.indexOf("export async function", openConversationStart + 1);
+  const openConversationSource = repository.slice(openConversationStart, openConversationEnd);
+  assert.match(openConversationSource, /pg_advisory_xact_lock/);
+  assert.match(openConversationSource, /INSERT INTO tickets/);
   assert.doesNotMatch(audit, /queryDatabase/);
   assert.match(audit, /queryTenantDatabase/);
   assert.match(auditDetail, /queryTenantDatabase/);

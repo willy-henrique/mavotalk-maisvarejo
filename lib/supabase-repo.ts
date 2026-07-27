@@ -16,7 +16,7 @@ import { logger } from "@/lib/logger";
 import { enqueueSlaCheck } from "@/lib/queues";
 import { SUPERMARKET_QUEUE_PRESET } from "@/lib/supermarket-config";
 import { randomUUID } from "node:crypto";
-import { queryTenantDatabase } from "@/lib/db";
+import { queryTenantDatabase, withTenantTransaction } from "@/lib/db";
 
 // Login e resolução inicial de canal ainda precisam de uma leitura de
 // plataforma para descobrir a organização. Todo fluxo que já recebeu um
@@ -1370,62 +1370,79 @@ export async function getOrCreateOpenConversation(
   contactPhone: string,
 ): Promise<FireConversation & { isNew: boolean }> {
   const orgId = requireOrganizationId(organizationId);
-  const existing = await getOpenConversation(organizationId, contactId);
-  if (existing) {
-    if (!existing.contactPhone) {
-      await supa(orgId)
-        .from("conversations")
-        .update({ contact_phone: contactPhone, updated_at: new Date().toISOString() })
-        .eq("id", existing.id)
-        .eq("organization_id", orgId);
+  return withTenantTransaction(orgId, async (client) => {
+    // Serializa somente o par tenant/contato. Assim, dois webhooks ou uma ação
+    // manual simultânea não criam conversas/tickets paralelos para o mesmo cliente.
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
+      `${orgId}:${contactId}`,
+    ]);
+
+    const existingResult = await client.query<Record<string, unknown>>(
+      `SELECT id, organization_id, contact_id, contact_phone, queue_id, status, triage_completed, menu_attempts
+         FROM conversations
+        WHERE organization_id = $1
+          AND contact_id = $2
+          AND status IN ('aguardando', 'em_atendimento', 'pendente_cliente')
+        ORDER BY updated_at DESC
+        LIMIT 1
+        FOR UPDATE`,
+      [orgId, contactId],
+    );
+    const existing = existingResult.rows[0];
+    if (existing) {
+      const existingPhone = String(existing.contact_phone || "").trim();
+      if (!existingPhone) {
+        await client.query(
+          `UPDATE conversations
+              SET contact_phone = $1, updated_at = now()
+            WHERE id = $2 AND organization_id = $3`,
+          [contactPhone, existing.id, orgId],
+        );
+      }
+      return {
+        id: String(existing.id),
+        organizationId: String(existing.organization_id),
+        contactId: String(existing.contact_id),
+        contactPhone: existingPhone || contactPhone,
+        queueId: existing.queue_id ? String(existing.queue_id) : null,
+        status: String(existing.status) as ConversationStatus,
+        triageCompleted: Boolean(existing.triage_completed),
+        menuAttempts: Number(existing.menu_attempts ?? 0),
+        isNew: false,
+      };
     }
-    return { ...existing, contactPhone: existing.contactPhone || contactPhone, isNew: false };
-  }
 
-  const convId = randomUUID();
-  const ticketId = randomUUID();
-  const now = new Date().toISOString();
-
-  await supa(orgId).from("conversations").insert({
-    id: convId,
-    organization_id: orgId,
-    contact_id: contactId,
-    contact_phone: contactPhone,
-    queue_id: null,
+    const convId = randomUUID();
+    const ticketId = randomUUID();
     // Nova conversa entra diretamente como "aguardando" para já aparecer na fila,
     // mesmo enquanto o cliente está escolhendo a opção do menu.
-    status: "aguardando",
-    triage_completed: false,
-    menu_attempts: 0,
-    created_at: now,
-    updated_at: now,
-  });
+    await client.query(
+      `INSERT INTO conversations (
+         id, organization_id, contact_id, contact_phone, queue_id, status,
+         triage_completed, menu_attempts, created_at, updated_at
+       ) VALUES ($1, $2, $3, $4, NULL, 'aguardando', false, 0, now(), now())`,
+      [convId, orgId, contactId, contactPhone],
+    );
+    await client.query(
+      `INSERT INTO tickets (
+         id, organization_id, conversation_id, queue_id, assignee_id, close_reason,
+         first_response_at, first_response_due_at, created_at, updated_at, closed_at
+       ) VALUES ($1, $2, $3, NULL, NULL, NULL, NULL, NULL, now(), now(), NULL)`,
+      [ticketId, orgId, convId],
+    );
 
-  await supa(orgId).from("tickets").insert({
-    id: ticketId,
-    organization_id: orgId,
-    conversation_id: convId,
-    queue_id: null,
-    assignee_id: null,
-    close_reason: null,
-    first_response_at: null,
-    first_response_due_at: null,
-    created_at: now,
-    updated_at: now,
-    closed_at: null,
+    return {
+      id: convId,
+      organizationId: orgId,
+      contactId,
+      contactPhone,
+      queueId: null,
+      status: "aguardando" as ConversationStatus,
+      triageCompleted: false,
+      menuAttempts: 0,
+      isNew: true,
+    };
   });
-
-  return {
-    id: convId,
-    organizationId: orgId,
-    contactId,
-    contactPhone,
-    queueId: null,
-    status: "aguardando",
-    triageCompleted: false,
-    menuAttempts: 0,
-    isNew: true,
-  };
 }
 
 export async function getOrCreateContactAndOpenConversation(
