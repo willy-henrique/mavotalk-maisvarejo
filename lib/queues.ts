@@ -19,10 +19,6 @@ const defaultJobOptions = {
   removeOnFail: { age: 604_800, count: 5_000 },
 };
 
-export const webhookQueue =
-  connection &&
-  new Queue(queueName("webhooks"), { connection, defaultJobOptions });
-
 export const slaQueue =
   connection &&
   new Queue(queueName("sla"), { connection, defaultJobOptions });
@@ -34,24 +30,10 @@ export const mediaCleanupQueue =
     defaultJobOptions,
   });
 
-export const agentSyncQueue =
-  connection &&
-  new Queue(queueName("agent-sync"), { connection, defaultJobOptions });
-
 global.__mavoQueues = [
-  webhookQueue,
   slaQueue,
   mediaCleanupQueue,
-  agentSyncQueue,
 ].filter((queue): queue is Queue => Boolean(queue));
-
-export async function enqueueWebhookEvent(
-  name: string,
-  data: Record<string, unknown>,
-) {
-  if (!webhookQueue) return;
-  await webhookQueue.add(name, data);
-}
 
 export async function enqueueSlaCheck(
   organizationId: string,

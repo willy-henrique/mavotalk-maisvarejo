@@ -93,13 +93,6 @@ export function startWorkers({ standalone = false } = {}) {
         ticket_id: outcome.ticketId,
       });
     }),
-    worker("webhooks", async (job) => {
-      log("info", {
-        event: "webhook_job",
-        job_name: job.name,
-        organization_id: job.data?.organizationId,
-      });
-    }),
     worker("media-cleanup", async (job) => {
       if (job.name !== "delete-resources" || !Array.isArray(job.data?.publicIds)) {
         return;
@@ -113,20 +106,12 @@ export function startWorkers({ standalone = false } = {}) {
         });
       }
     }),
-    worker("agent-sync", async (job) => {
-      log("info", {
-        event: "agent_sync_job",
-        job_name: job.name,
-        agent_id: job.data?.agentId,
-        batch_id: job.data?.batchId,
-      });
-    }),
   ];
 
   log("info", {
     event: "workers_started",
     mode: standalone ? "standalone" : "inline",
-    queues: ["sla", "webhooks", "media-cleanup", "agent-sync"].map(queueName),
+    queues: ["sla", "media-cleanup"].map(queueName),
   });
 
   let closed = false;

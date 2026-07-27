@@ -18,7 +18,7 @@ Não foi confirmado vazamento entre organizações, autenticação quebrada, per
 | P2-01 | “Sincronização” e “Agentes cloud” são duplicados | Ambas as rotas renderizam `AgentsManagement`. | `frontend/App.tsx`, `frontend/Sidebar.tsx`. |
 | P2-02 | Cabeçalho de Menu do painel está errado | A rota não existe em `pageMeta`; o fallback é Inbox. | `frontend/components/AppHeader.tsx`. |
 | P2-03 | Auditoria ainda não é ferramenta operacional | Sem filtros, ordenação, busca, detalhe, exportação e paginação server-side. | `frontend/components/BusinessAudit.tsx`. |
-| P2-04 | Processadores BullMQ incompletos | Workers `webhooks` e `agent-sync` apenas logam; não há produtores observados para SLA/webhook/agent sync. | `lib/queues.ts`, `worker.mjs`. |
+| Resolvido | Processadores BullMQ incompletos | Workers `webhooks` e `agent-sync` apenas logavam e não possuíam produtores. | Filas mortas removidas; SLA e limpeza de mídia são os únicos processadores ativos e possuem produtor real. |
 | P2-05 | Administração não possui sistema único de feedback | Estados loading/sucesso/erro/confirmação variam por tela e ações destrutivas não têm padrão. | Componentes em `frontend/components/Admin/`. |
 | P2-06 | Modal e dropdown não atendem o fluxo acessível completo | Não há primitive com focus trap, Escape e retorno de foco. | `Contacts.tsx` e modais administrativos. |
 | Resolvido | Painel master não era seletor multiempresa seguro | A sessão master agora seleciona somente organizações existentes, validadas no servidor; sessões operacionais não podem usar essa seleção para trocar de tenant. | `lib/mavo-organization-scope.ts`, `/api/mavo/*`. |

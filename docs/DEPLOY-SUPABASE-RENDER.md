@@ -22,7 +22,7 @@ Consequências que você precisa aceitar:
    com AES-256-GCM e o persiste no Supabase. O QR só precisa ser lido novamente
    quando a sessão é revogada/deslogada.
 2. **A hibernação derruba o bot.** Um bot de WhatsApp precisa estar sempre no ar. Veja a seção 7 para o keep-alive.
-3. Jobs enfileirados podem ser perdidos quando o Key Value reinicia. Hoje só `media-cleanup` faz trabalho real (remoção no Cloudinary); os demais são de observabilidade.
+3. Jobs enfileirados podem ser perdidos quando o Key Value reinicia. As filas ativas são `sla` (revalida o prazo no banco antes de marcar vencimento) e `media-cleanup` (remoção no Cloudinary); ambas devem ter Redis persistente e observabilidade no deploy.
 
 Quando houver orçamento, migre a API, o worker e o Key Value para planos pagos
 para eliminar hibernação e dar durabilidade às filas. O auth state do WhatsApp
