@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { apiFetch, getApiUrl } from '../services/api';
 import { AuthService } from '../services/authService';
 import { UserRole } from '../types';
+import { ErrorState, LoadingState } from './ui/PageState';
 
 type WhatsappState = {
   status: 'idle' | 'initializing' | 'qr' | 'ready' | 'disconnected' | 'error';
@@ -30,6 +31,7 @@ const Painel: React.FC = () => {
   const session = AuthService.getSession();
   const isAdmin = session?.user?.role === UserRole.ADMIN || session?.user?.role === UserRole.SUPERVISOR;
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [provider, setProvider] = useState<string>('');
   const [waState, setWaState] = useState<WhatsappState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,26 +40,39 @@ const Painel: React.FC = () => {
   const [disconnecting, setDisconnecting] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const canAccess = AuthService.canAccessPainel();
+  const statusRequestRef = useRef(0);
 
-  const fetchStatus = useCallback(async () => {
-    setError(null);
-    const res = await apiFetch('/api/whatsapp/status', { method: 'GET' });
-    const data = (await res.json()) as StatusResponse;
-    if (!res.ok) {
-      setError((data as { error?: string }).error || 'Falha ao carregar status');
-      setLoading(false);
-      return;
+  const fetchStatus = useCallback(async (manual = false) => {
+    const request = ++statusRequestRef.current;
+    if (manual) setRefreshing(true);
+    try {
+      const res = await apiFetch('/api/whatsapp/status', { method: 'GET' });
+      const data = await res.json().catch(() => ({})) as Partial<StatusResponse & { error?: string }>;
+      if (!res.ok) throw new Error(data.error || 'Falha ao carregar o status da conexão.');
+      if (!data.state || typeof data.provider !== 'string') throw new Error('O servidor retornou um status de conexão inválido.');
+      if (request !== statusRequestRef.current) return;
+      setProvider(data.provider);
+      setWaState(data.state);
+      setLastUpdated(new Date());
+      setError(null);
+    } catch (reason) {
+      if (request !== statusRequestRef.current) return;
+      setError(reason instanceof Error ? reason.message : 'Falha ao carregar o status da conexão.');
+    } finally {
+      if (request === statusRequestRef.current) {
+        setLoading(false);
+        if (manual) setRefreshing(false);
+      }
     }
-    setProvider(data.provider);
-    setWaState(data.state);
-    setLastUpdated(new Date());
-    setLoading(false);
   }, []);
 
   useEffect(() => {
     void fetchStatus();
     const interval = window.setInterval(() => void fetchStatus(), 10000);
-    return () => window.clearInterval(interval);
+    return () => {
+      window.clearInterval(interval);
+      statusRequestRef.current += 1;
+    };
   }, [fetchStatus]);
 
   const handleConnect = async () => {
@@ -73,7 +88,7 @@ const Painel: React.FC = () => {
           setActionError((data as { error?: string }).error || 'Falha ao conectar');
         }
       } else {
-        await fetchStatus();
+        await fetchStatus(true);
       }
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Erro ao conectar');
@@ -95,7 +110,7 @@ const Painel: React.FC = () => {
           setActionError((data as { error?: string }).error || 'Falha ao desconectar');
         }
       } else {
-        await fetchStatus();
+        await fetchStatus(true);
       }
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Erro ao desconectar');
@@ -110,7 +125,7 @@ const Painel: React.FC = () => {
 
   if (loading) {
     return (
-      <main className="mavo-page"><div className="mavo-page-content"><div className="mavo-card flex min-h-52 items-center justify-center text-slate-500 dark:text-slate-400">Carregando central de conexão...</div></div></main>
+      <main className="mavo-page"><div className="mavo-page-content"><LoadingState title="Carregando central de conexão…" description="Verificando o provedor e o estado atual do WhatsApp." /></div></main>
     );
   }
 
@@ -128,16 +143,12 @@ const Painel: React.FC = () => {
           <h2 className="mt-4 text-2xl font-black tracking-tight">Central de conexão</h2>
           <p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">Conecte o WhatsApp, acompanhe o estado da sessão e acesse as configurações que sustentam a operação.</p>
           </div>
-          <button type="button" onClick={() => void fetchStatus()} className="mavo-button border border-white/15 bg-white/10 text-white hover:bg-white/15">Atualizar status</button>
+          <button type="button" onClick={() => void fetchStatus(true)} disabled={refreshing || connecting || disconnecting} className="mavo-button border border-white/15 bg-white/10 text-white hover:bg-white/15">{refreshing ? 'Atualizando…' : 'Atualizar status'}</button>
         </div>
       </div>
 
       <div>
-        {error && (
-          <div role="alert" className="mb-6 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">
-            {error}
-          </div>
-        )}
+        {error && <ErrorState className="mb-6" title="Não foi possível atualizar a conexão." description={error} action={<button type="button" onClick={() => void fetchStatus(true)} disabled={refreshing || connecting || disconnecting} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
 
         {actionError && (
           <div role="alert" className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100">

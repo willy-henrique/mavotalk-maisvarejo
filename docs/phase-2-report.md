@@ -25,13 +25,14 @@ Data: 2026-07-27.
 - Filas/automações agora usam terminologia operacional, diálogo acessível para edição e switch semântico para a opção do menu do bot.
 - Acessos gerenciais deixaram de usar `window.prompt` para PIN: criação, redefinição de PIN e permissões ocorrem em diálogos acessíveis, com prevenção de duplo envio, mensagens de êxito/erro e sem expor o PIN após o envio.
 - A central de conexão do WhatsApp passou a apresentar estados técnicos em linguagem de operação e preserva os controles Baileys/Twilio existentes.
+- A Central de conexão agora trata falha de rede ou resposta inválida como estado recuperável, não permanece em loading e invalida consultas defasadas do polling/atualização manual.
 - O foco inicial de diálogos pode apontar para o campo de trabalho do formulário, sem perder o focus trap, Escape e restauração de foco.
 
 ## Testes
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 113/113 aprovados
+npm test               → 114/114 aprovados
 npm run test:e2e       → 20 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 npm run build           → aprovado (Next.js, 43 páginas/rotas geradas)
