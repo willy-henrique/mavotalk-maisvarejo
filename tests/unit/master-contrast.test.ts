@@ -16,4 +16,6 @@ test("painel master mantém escala legível para dados operacionais claros", asy
   assert.match(css, /\.master-bot-preview/);
   assert.match(panel, /Prévia da saudação no WhatsApp/);
   assert.match(panel, /assistente virtual do/);
+  assert.match(panel, /Alternar funcionamento de/);
+  assert.match(panel, /role="switch" aria-checked=\{item\.isActive\}/);
 });
