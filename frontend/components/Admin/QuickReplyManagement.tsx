@@ -11,9 +11,9 @@ type QuickReply = {
 };
 
 const VARIABLE_GUIDE = (
-  <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 text-sm">
-    <p className="font-bold text-slate-800 mb-2">Você pode usar variáveis:</p>
-    <ul className="space-y-1 text-slate-600 mb-3">
+  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-950">
+    <p className="mb-2 font-bold text-slate-800 dark:text-slate-100">Você pode usar variáveis:</p>
+    <ul className="mb-3 space-y-1 text-slate-600 dark:text-slate-300">
       <li>
         <code className="bg-slate-200 px-1 rounded">&#123;saudacao&#125;</code> → Saudação automática (Bom dia / Boa
         tarde / Boa noite)
@@ -37,7 +37,7 @@ const VARIABLE_GUIDE = (
         <code className="bg-slate-200 px-1 rounded">&#123;hora&#125;</code> → Hora atual
       </li>
     </ul>
-    <p className="text-slate-500 italic">
+    <p className="italic text-slate-500 dark:text-slate-400">
       Exemplo: <code className="bg-slate-200 px-1 rounded">&#123;saudacao&#125;, &#123;primeiro_nome&#125;! Me chamo &#123;user&#125; e vou te ajudar.</code>
     </p>
   </div>
@@ -53,6 +53,10 @@ const QuickReplyManagement: React.FC = () => {
   const [formCategory, setFormCategory] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [pendingDelete, setPendingDelete] = useState<QuickReply | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -61,9 +65,12 @@ const QuickReplyManagement: React.FC = () => {
       const data = (await res.json()) as { quickReplies?: QuickReply[] };
       if (res.ok && Array.isArray(data.quickReplies)) {
         setItems(data.quickReplies);
+        setError('');
+      } else {
+        setError('Não foi possível carregar as respostas rápidas.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setError('Não foi possível carregar as respostas rápidas.');
     } finally {
       setLoading(false);
     }
@@ -79,6 +86,7 @@ const QuickReplyManagement: React.FC = () => {
     setFormContent('');
     setFormCategory('');
     setSubmitError('');
+    setNotice('');
     setShowModal(true);
   };
 
@@ -117,6 +125,7 @@ const QuickReplyManagement: React.FC = () => {
       }
       await fetchItems();
       closeModal();
+      setNotice(editingId ? 'Resposta rápida atualizada.' : 'Resposta rápida criada.');
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Erro ao salvar');
     } finally {
@@ -124,43 +133,56 @@ const QuickReplyManagement: React.FC = () => {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Excluir esta resposta rápida?')) return;
+  const handleDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    setError('');
+    setNotice('');
     try {
-      const res = await apiFetch(`/api/quick-replies/${id}`, { method: 'DELETE' });
-      if (res.ok) await fetchItems();
-    } catch (e) {
-      console.error(e);
+      const res = await apiFetch(`/api/quick-replies/${pendingDelete.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Não foi possível excluir a resposta rápida.');
+      setPendingDelete(null);
+      setNotice('Resposta rápida excluída.');
+      await fetchItems();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível excluir a resposta rápida.');
+    } finally {
+      setDeleting(false);
     }
   };
 
   return (
-    <div className="p-6 md:p-8 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-800/95 transition-colors">
-      <div className="flex flex-wrap justify-between items-end gap-4 mb-6">
+    <main className="mavo-page"><div className="mavo-page-content">
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">Respostas Rápidas</h1>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-0.5">Atalhos e variáveis para envio rápido no chat (use / no campo de mensagem).</p>
+          <p className="text-xs font-black uppercase tracking-[.16em] text-blue-600 dark:text-blue-400">Administração</p>
+          <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Respostas rápidas</h1>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Atalhos e variáveis para envio rápido no chat. Use <kbd className="rounded bg-slate-200 px-1 dark:bg-slate-800">/</kbd> no campo de mensagem.</p>
         </div>
         <button
           onClick={openCreate}
-          className="bg-blue-600 text-white px-5 py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-colors flex items-center gap-2"
+          className="mavo-button-primary"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z" /></svg>
-          NOVA RESPOSTA
+          Nova resposta
         </button>
       </div>
 
+      {error && <div role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">{error}</div>}
+      {notice && <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">{notice}</div>}
+
       {loading ? (
-        <div className="text-slate-400 py-8">Carregando...</div>
+        <div className="mavo-card py-12 text-center text-slate-500 dark:text-slate-400">Carregando respostas rápidas...</div>
       ) : items.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/50 p-12 text-center text-slate-500">
-          <p className="mb-4">Nenhuma resposta rápida cadastrada.</p>
-          <button onClick={openCreate} className="text-blue-600 dark:text-blue-400 font-bold hover:underline">
+        <div className="mavo-card p-10 text-center text-slate-500 dark:text-slate-400">
+          <p className="mb-2 font-bold text-slate-800 dark:text-slate-100">Nenhuma resposta rápida cadastrada.</p>
+          <p className="mb-4 text-sm">Crie atalhos consistentes para reduzir o tempo de resposta da equipe.</p>
+          <button type="button" onClick={openCreate} className="font-bold text-blue-600 hover:underline dark:text-blue-400">
             Criar a primeira resposta rápida
           </button>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 shadow-sm dark:shadow-none">
+        <div className="mavo-card overflow-x-auto p-0">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700">
@@ -180,10 +202,10 @@ const QuickReplyManagement: React.FC = () => {
                   <td className="px-4 py-3 text-slate-500 text-sm">—</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      <button onClick={() => openEdit(item)} className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400 transition-colors" title="Editar">
+                      <button type="button" onClick={() => openEdit(item)} className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-blue-400" title="Editar" aria-label={`Editar ${item.name}`}>
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" /></svg>
                       </button>
-                      <button onClick={() => handleDelete(item.id)} className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-rose-600 dark:hover:text-rose-400 transition-colors" title="Excluir">
+                      <button type="button" onClick={() => setPendingDelete(item)} className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-rose-600 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-rose-400" title="Excluir" aria-label={`Excluir ${item.name}`}>
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5"><path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.519.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clipRule="evenodd" /></svg>
                       </button>
                     </div>
@@ -212,7 +234,8 @@ const QuickReplyManagement: React.FC = () => {
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
                     placeholder="Ex: Saudação inicial"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+                    data-autofocus
+                    className="mavo-field"
                     required
                   />
                 </div>
@@ -224,7 +247,7 @@ const QuickReplyManagement: React.FC = () => {
                     onChange={(e) => setFormContent(e.target.value)}
                     placeholder="{saudacao}, {primeiro_nome}! Me chamo {user}."
                     rows={4}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="mavo-field"
                     required
                   />
                 </div>
@@ -236,23 +259,23 @@ const QuickReplyManagement: React.FC = () => {
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value)}
                     placeholder="Ex: Saudação"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="mavo-field"
                   />
                 </div>
-                {submitError && <p className="text-sm text-rose-600">{submitError}</p>}
+                {submitError && <p role="alert" className="text-sm text-rose-600 dark:text-rose-300">{submitError}</p>}
                 <div className="flex gap-2 justify-end pt-2">
                   <button
                     type="button"
                     onClick={closeModal}
                     disabled={submitting}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium disabled:opacity-50"
+                    className="mavo-button-secondary"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={submitting || !formName.trim() || !formContent.trim()}
-                    className="px-6 py-2.5 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50"
+                    className="mavo-button-primary"
                   >
                     {submitting ? 'Salvando...' : editingId ? 'Atualizar' : 'Criar'}
                   </button>
@@ -261,7 +284,8 @@ const QuickReplyManagement: React.FC = () => {
             </div>
         </Dialog>
       )}
-    </div>
+      {pendingDelete && <Dialog title="Excluir resposta rápida" description={`A resposta “${pendingDelete.name}” deixará de aparecer no Inbox.`} onClose={() => { if (!deleting) setPendingDelete(null); }}><div className="p-6"><p className="text-sm text-slate-600 dark:text-slate-300">Esta ação não pode ser desfeita.</p><div className="mt-5 flex justify-end gap-3"><button type="button" disabled={deleting} onClick={() => setPendingDelete(null)} className="mavo-button-secondary">Cancelar</button><button type="button" disabled={deleting} onClick={() => void handleDelete()} className="mavo-button bg-rose-600 text-white hover:bg-rose-700">{deleting ? 'Excluindo...' : 'Excluir resposta'}</button></div></div></Dialog>}
+    </div></main>
   );
 };
 
