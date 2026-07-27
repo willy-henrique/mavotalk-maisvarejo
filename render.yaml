@@ -19,7 +19,11 @@ services:
     runtime: node
     region: virginia
     plan: free
-    buildCommand: npm ci --include=dev && npm run build && npm run db:migrate && npm run db:bootstrap:production && npm run db:verify
+    # Cada etapa tem teto. `npm ci` e `next build` são limitados por `timeout`
+    # (sai 124 e falha o build); as etapas de banco se limitam sozinhas via
+    # runDeployStep em scripts/db-common.mjs. Sem isso um passo pendurado deixa
+    # o deploy em "Building" até o limite da plataforma, sem log de erro.
+    buildCommand: timeout 900 npm ci --include=dev && timeout 1500 npm run build && npm run db:migrate && npm run db:bootstrap:production && npm run db:verify
     startCommand: npm run start
     healthCheckPath: /api/health
     envVars:
@@ -53,6 +57,18 @@ services:
         value: "30000"
       - key: PG_APPLICATION_NAME
         value: mavo-talk-api
+      # Tetos das etapas de banco do build (scripts/db-common.mjs). Ajustáveis
+      # pelo painel sem novo commit quando uma migration legítima demorar mais.
+      - key: DB_STEP_DEADLINE_MS
+        value: "600000"
+      - key: DB_STATEMENT_TIMEOUT_MS
+        value: "300000"
+      - key: DB_LOCK_TIMEOUT_MS
+        value: "15000"
+      - key: DB_LOCK_ATTEMPTS
+        value: "10"
+      - key: DB_LOCK_WAIT_MS
+        value: "3000"
       - key: JWT_SECRET
         generateValue: true
       - key: SESSION_COOKIE_NAME
