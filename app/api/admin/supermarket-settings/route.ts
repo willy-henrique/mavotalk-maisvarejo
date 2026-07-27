@@ -57,8 +57,8 @@ function parseHours(value: unknown): ConfiguredHour[] | null {
   return hours;
 }
 
-export async function GET() {
-  const auth = await requireSupermarketAdmin();
+export async function GET(request: Request) {
+  const auth = await requireSupermarketAdmin(request);
   if (auth.error || !auth.session) return auth.error;
   const [settings, businessHours] = await Promise.all([
     getSupermarketSettings(auth.session.organizationId),

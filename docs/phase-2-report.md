@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 94/94 aprovados
+npm test               → 95/95 aprovados
 npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 npm run build           → aprovado (Next.js, 43 páginas/rotas geradas)
@@ -64,3 +64,4 @@ npm run render:validate → aprovado
 - Agentes e sincronização agora mostra uma ação recomendada derivada do estado real da instalação, sem expor endereço de rede.
 - Filas podem ser excluídas somente quando não possuem conversas ou tickets vinculados; a API usa a permissão de exclusão, registra auditoria e retorna conflito explícito em vez de apagar histórico.
 - Acessos gerenciais agora busca por nome/telefone e filtra função ou estado no servidor, sempre com `organization_id` no contexto estrito do tenant.
+- A leitura de configuração da empresa no painel master agora recebe a requisição e valida a organização selecionada também no `GET`, não somente nas mutações.
