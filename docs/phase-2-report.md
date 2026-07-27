@@ -83,3 +83,6 @@ npm run render:validate → aprovado
 - Filas e automações mantém cards para conjuntos pequenos; quando uma lista extensa exige tabela no desktop, telas mobile continuam recebendo cartões com SLA, estado e ações.
 - Agentes e Acessos gerenciais ignoram respostas HTTP defasadas durante busca, filtro ou paginação, evitando que uma requisição antiga substitua o estado mais recente da tela.
 - Logs de Agentes e detalhe de Auditoria também invalidam requisições anteriores ao trocar ou fechar o drawer, evitando apresentar dados de outro item por uma resposta atrasada.
+- Filas e automações também invalidam carregamentos defasados e exibem confirmação acessível após criar, editar ou excluir uma fila.
+- Indicadores do negócio ignoram respostas de um período ou de uma consulta anterior quando o operador muda a seleção rapidamente.
+- O Inbox coalesce eventos de Socket.IO, polling e atualização manual que chegam durante uma leitura; uma recarga final garante que nenhuma atualização de conversa seja perdida ou sobrescreva o estado por uma resposta vencida.
