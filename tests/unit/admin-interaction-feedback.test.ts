@@ -18,6 +18,9 @@ test("administração confirma revogação, mantém ações acessíveis e torna 
   assert.match(queues, /setLoadError/);
   assert.match(users, /Tentar novamente/);
   assert.match(queues, /Tentar novamente/);
+  assert.match(queues, /requestRef/);
+  assert.match(queues, /Fila (?:criada|atualizada|excluída) com sucesso/);
+  assert.match(queues, /role="status"/);
   assert.match(queues, /group-focus-within:opacity-100/);
   assert.match(queues, /aria-label=\{`Editar fila \$\{q\.name\}`\}/);
   assert.match(styles, /prefers-reduced-motion/);

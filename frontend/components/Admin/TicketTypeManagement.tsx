@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { apiDelete, apiFetch, apiPost, apiPatch } from '../../services/api';
 import { Icons } from '../../constants';
 import { Dialog } from '../ui/Dialog';
@@ -30,22 +30,30 @@ const TicketTypeManagement: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<Queue | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [notice, setNotice] = useState('');
+  const requestRef = useRef(0);
 
   const fetchQueues = useCallback(async () => {
+    const request = ++requestRef.current;
     setLoading(true);
     setLoadError('');
     try {
       const res = await apiFetch('/api/queues', { method: 'GET' });
       const data = (await res.json()) as { queues?: Queue[] };
+      if (request !== requestRef.current) return false;
       if (res.ok && Array.isArray(data.queues)) {
         setQueues(data.queues);
+        return true;
       } else {
         setLoadError('Não foi possível carregar as filas. Tente novamente.');
+        return false;
       }
     } catch {
+      if (request !== requestRef.current) return false;
       setLoadError('Não foi possível carregar as filas. Verifique a conexão e tente novamente.');
+      return false;
     } finally {
-      setLoading(false);
+      if (request === requestRef.current) setLoading(false);
     }
   }, []);
 
@@ -61,6 +69,7 @@ const TicketTypeManagement: React.FC = () => {
     setFormDefaultSlaMins(30);
     setFormIsActive(true);
     setSubmitError('');
+    setNotice('');
     setShowModal(true);
   };
 
@@ -72,6 +81,7 @@ const TicketTypeManagement: React.FC = () => {
     setFormDefaultSlaMins(q.defaultSlaMins);
     setFormIsActive(q.isActive);
     setSubmitError('');
+    setNotice('');
     setShowModal(true);
   };
 
@@ -84,6 +94,7 @@ const TicketTypeManagement: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError('');
+    setNotice('');
     setSubmitting(true);
     try {
       const body = {
@@ -99,6 +110,7 @@ const TicketTypeManagement: React.FC = () => {
         await apiPost('/api/queues', body);
       }
       await fetchQueues();
+      setNotice(editingId ? 'Fila atualizada com sucesso.' : 'Fila criada com sucesso.');
       closeModal();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Erro ao salvar');
@@ -111,10 +123,12 @@ const TicketTypeManagement: React.FC = () => {
     if (!deleteCandidate) return;
     setDeleting(true);
     setSubmitError('');
+    setNotice('');
     try {
       await apiDelete(`/api/queues/${deleteCandidate.id}`);
       setDeleteCandidate(null);
       await fetchQueues();
+      setNotice('Fila excluída com sucesso.');
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Não foi possível excluir a fila.');
     } finally {
@@ -146,6 +160,7 @@ const TicketTypeManagement: React.FC = () => {
         </button>
       </div>
 
+      {notice && <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">{notice}</div>}
       {loadError && <ErrorState className="mb-5" description={loadError} action={<button type="button" onClick={() => void fetchQueues()} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
       {!loading && queues.length > 0 && (
         <div className="mb-5 flex flex-wrap gap-3">
