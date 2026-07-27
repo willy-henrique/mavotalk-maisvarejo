@@ -68,13 +68,16 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const auth = await requireSupermarketAdmin();
+  const auth = await requireSupermarketAdmin(request);
   if (auth.error || !auth.session) return auth.error;
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
   const settings = await updateSupermarketSettings(auth.session.organizationId, parseSettings(body));
   const hours = parseHours(body.businessHours);
   const businessHours = hours ? await updateConfiguredBusinessHours(auth.session.organizationId, hours) : await getConfiguredBusinessHours(auth.session.organizationId);
-  await createAuditLog(auth.session.organizationId, auth.session.userId, "update_supermarket_settings", "organization", auth.session.organizationId, { fields: Object.keys(body) });
+  await createAuditLog(auth.session.organizationId, auth.session.userId, "update_supermarket_settings", "organization", auth.session.organizationId, {
+    fields: Object.keys(body),
+    origin: auth.session.userId ? "operational-admin" : "mavo-master",
+  });
   return NextResponse.json({ settings, businessHours });
 }

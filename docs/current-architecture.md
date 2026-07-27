@@ -27,7 +27,7 @@ Agentes locais ──HMAC/replay protection────────────�
 | Isolamento secundário | `supabase/migrations/202607230004_rls_policies.sql` | RLS baseada em `app.organization_id`; `withTenantTransaction` configura o contexto transacional. |
 | Filas | BullMQ/Redis, `lib/queues.ts`, `worker.mjs` | Estrutura para SLA, webhook, limpeza de mídia e sync de agentes. |
 | WhatsApp | Baileys e Twilio | Baileys é o padrão do Render; Twilio valida assinatura e resolve a organização pelo canal. |
-| Painel master | `app/mavo`, `components/mavo-admin.tsx` | Autenticação própria de master, visão e configuração da organização padrão. |
+| Painel master | `app/mavo`, `components/mavo-admin.tsx` | Autenticação própria de plataforma, seletor de organização validado no servidor, visão e configuração do tenant selecionado. |
 
 ## Autenticação, sessão e RBAC
 

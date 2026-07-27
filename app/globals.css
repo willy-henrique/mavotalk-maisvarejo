@@ -3042,6 +3042,10 @@ button:disabled {
 .master-topbar h1 { font-size: 18px; letter-spacing: -0.5px; margin: 0; }
 .master-mobile-brand { display: none; }
 .master-top-actions { align-items: center; display: flex; gap: 8px; }
+.master-organization-picker { display: flex; flex-direction: column; gap: 2px; }
+.master-organization-picker > span { color: #888596; font-size: 7px; font-weight: 800; letter-spacing: 0.55px; text-transform: uppercase; }
+.master-organization-picker select { background: #fff; border: 1px solid #dedfe7; border-radius: 9px; color: #393648; font: inherit; font-size: 9px; font-weight: 750; height: 34px; max-width: 200px; padding: 0 26px 0 10px; }
+.master-organization-picker select:focus-visible { outline: 3px solid rgba(102, 86, 222, 0.25); outline-offset: 2px; }
 .master-live-chip { align-items: center; background: #fff; border: 1px solid #e3e4ea; border-radius: 20px; color: #686678; display: flex; font-size: 8px; font-weight: 750; gap: 6px; padding: 8px 10px; }
 .master-live-chip i, .master-status-dot i, .master-feature-chip i { background: #ef4444; border-radius: 50%; height: 6px; width: 6px; }
 .master-live-chip.online i, .master-feature-chip.on i { background: #16b981; box-shadow: 0 0 0 3px rgba(22, 185, 129, 0.12); }
@@ -3190,6 +3194,8 @@ button:disabled {
 @media (max-width: 650px) {
   .master-topbar { align-items: flex-start; flex-direction: column; gap: 12px; justify-content: flex-end; }
   .master-top-actions { flex-wrap: wrap; }
+  .master-organization-picker { min-width: min(100%, 240px); }
+  .master-organization-picker select { max-width: 100%; width: 100%; }
   .master-live-chip { order: 3; }
   .master-hero { display: block; padding: 25px; }
   .master-hero-meta { margin-top: 22px; min-width: 0; width: 100%; }

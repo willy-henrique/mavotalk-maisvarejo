@@ -4,7 +4,7 @@
 // host é dinâmico, usamos img para não exigir allowlist de domínios no build.
 /* eslint-disable @next/next/no-img-element */
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Icon, MavoBrand } from "@/components/mavo-brand";
 import type { MavoMasterSession } from "@/lib/mavo-master-auth";
 import type { MavoSystemOverview } from "@/lib/mavo-system-overview";
@@ -43,6 +43,24 @@ function roleName(role: string) {
   if (role === "admin") return "Administrador";
   if (role === "gestor") return "Gestor";
   return "Atendente";
+}
+
+type OrganizationOption = { id: string; name: string };
+
+function settingsDraftFromOverview(overview: MavoSystemOverview) {
+  return {
+    enabled: overview.supermarket.enabled,
+    botName: overview.supermarket.botName,
+    storeName: overview.supermarket.storeName,
+    address: overview.supermarket.address || "",
+    mapsUrl: overview.supermarket.mapsUrl || "",
+    weekdayHours: overview.supermarket.hours[0] || "",
+    sundayHours: overview.supermarket.hours[1] || "",
+    offersUrl: overview.supermarket.offersUrl || "",
+    offersText: overview.supermarket.offersText || "",
+    phone: overview.supermarket.phone || "",
+    aiFallbackEnabled: overview.supermarket.aiFallbackEnabled,
+  };
 }
 
 export function MavoMasterLogin({ configured }: { configured: boolean }) {
@@ -140,32 +158,37 @@ export function MavoAdminPanel({
   const [busy, setBusy] = useState<"refresh" | "sync" | "logout" | null>(null);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [settingsBusy, setSettingsBusy] = useState<"save" | "upload" | null>(null);
-  const [settingsDraft, setSettingsDraft] = useState(() => ({
-    enabled: initialOverview.supermarket.enabled,
-    botName: initialOverview.supermarket.botName,
-    storeName: initialOverview.supermarket.storeName,
-    address: initialOverview.supermarket.address || "",
-    mapsUrl: initialOverview.supermarket.mapsUrl || "",
-    weekdayHours: initialOverview.supermarket.hours[0] || "",
-    sundayHours: initialOverview.supermarket.hours[1] || "",
-    offersUrl: initialOverview.supermarket.offersUrl || "",
-    offersText: initialOverview.supermarket.offersText || "",
-    phone: initialOverview.supermarket.phone || "",
-    aiFallbackEnabled: initialOverview.supermarket.aiFallbackEnabled,
-  }));
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>([{ id: initialOverview.organization.id, name: initialOverview.organization.name }]);
+  const [settingsDraft, setSettingsDraft] = useState(() => settingsDraftFromOverview(initialOverview));
   const [hoursDraft, setHoursDraft] = useState(() => defaultBusinessHours.map((fallback) => initialOverview.businessHours.find((item) => item.weekday === fallback.weekday) || fallback));
 
-  async function refresh(showFeedback = false) {
+  const applyOverview = (next: MavoSystemOverview) => {
+    setOverview(next);
+    setSettingsDraft(settingsDraftFromOverview(next));
+    setHoursDraft(defaultBusinessHours.map((fallback) => next.businessHours.find((item) => item.weekday === fallback.weekday) || fallback));
+  };
+
+  useEffect(() => {
+    void fetch("/api/mavo/organizations", { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null) as { organizations?: OrganizationOption[]; error?: string } | null;
+        if (!response.ok) throw new Error(payload?.error || "Não foi possível carregar as organizações.");
+        if (payload?.organizations?.length) setOrganizations(payload.organizations);
+      })
+      .catch((error) => setFeedback({ type: "error", text: error instanceof Error ? error.message : "Não foi possível carregar as organizações." }));
+  }, []);
+
+  async function refresh(showFeedback = false, organizationId = overview.organization.id) {
     setBusy("refresh");
     try {
-      const response = await fetch("/api/mavo/overview", { cache: "no-store" });
+      const response = await fetch(`/api/mavo/overview?organizationId=${encodeURIComponent(organizationId)}`, { cache: "no-store" });
       if (response.status === 401) {
         window.location.href = "/mavo";
         return;
       }
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.error || "Não foi possível atualizar o painel.");
-      setOverview(payload.overview);
+      applyOverview(payload.overview);
       if (showFeedback) setFeedback({ type: "success", text: "Painel atualizado com dados do ambiente." });
     } catch (error) {
       setFeedback({ type: "error", text: error instanceof Error ? error.message : "Falha na atualização." });
@@ -174,11 +197,16 @@ export function MavoAdminPanel({
     }
   }
 
+  async function changeOrganization(organizationId: string) {
+    if (!organizationId || organizationId === overview.organization.id) return;
+    await refresh(false, organizationId);
+  }
+
   async function syncSupermarket() {
     if (!window.confirm("Sincronizar as sete filas do supermercado e pausar filas fora do modelo?")) return;
     setBusy("sync");
     try {
-      const response = await fetch("/api/mavo/actions/sync-supermarket", { method: "POST" });
+      const response = await fetch(`/api/mavo/actions/sync-supermarket?organizationId=${encodeURIComponent(overview.organization.id)}`, { method: "POST" });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.error || "Não foi possível sincronizar as filas.");
       setFeedback({ type: "success", text: `Filas sincronizadas: ${payload.created} criadas, ${payload.updated} atualizadas e ${payload.paused} pausadas.` });
@@ -195,7 +223,7 @@ export function MavoAdminPanel({
     try {
       const response = await fetch("/api/admin/supermarket-settings", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Mavo-Organization-Id": overview.organization.id },
         body: JSON.stringify({ ...settingsDraft, businessHours: hoursDraft }),
       });
       const payload = await response.json().catch(() => null);
@@ -222,7 +250,7 @@ export function MavoAdminPanel({
     try {
       const form = new FormData();
       form.append("file", file);
-      const response = await fetch("/api/admin/supermarket-settings/offers-image", { method: "POST", body: form });
+      const response = await fetch("/api/admin/supermarket-settings/offers-image", { method: "POST", headers: { "X-Mavo-Organization-Id": overview.organization.id }, body: form });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.error || "Não foi possível enviar a imagem.");
       setOverview((current) => ({ ...current, supermarket: { ...current.supermarket, ...payload.settings } }));
@@ -237,7 +265,7 @@ export function MavoAdminPanel({
   async function removeOfferImage() {
     setSettingsBusy("upload");
     try {
-      const response = await fetch("/api/admin/supermarket-settings/offers-image", { method: "DELETE" });
+      const response = await fetch("/api/admin/supermarket-settings/offers-image", { method: "DELETE", headers: { "X-Mavo-Organization-Id": overview.organization.id } });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.error || "Não foi possível remover a imagem.");
       setOverview((current) => ({ ...current, supermarket: { ...current.supermarket, ...payload.settings } }));
@@ -289,6 +317,7 @@ export function MavoAdminPanel({
           </div>
           <div className="master-top-actions">
             <span className={`master-live-chip ${overview.database.status}`}><i />{overview.database.status === "online" ? "Sistema operacional" : "Atenção necessária"}</span>
+            <label className="master-organization-picker"><span>Organização</span><select value={overview.organization.id} onChange={(event) => void changeOrganization(event.target.value)} disabled={busy !== null || settingsBusy !== null}>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>
             <button type="button" onClick={() => refresh(true)} disabled={Boolean(busy)}><Icon name="refresh" size={16} />{busy === "refresh" ? "Atualizando..." : "Atualizar"}</button>
             <a href="/dashboard">Abrir atendimento</a>
           </div>

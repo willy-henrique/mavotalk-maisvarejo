@@ -1,6 +1,7 @@
 import { getWhatsappState } from "@/lib/whatsapp-client";
 import { getSupermarketBotConfigForOrganization } from "@/lib/supermarket-settings";
 import { getDatabasePool } from "@/lib/db";
+import { defaultMavoOrganizationId } from "@/lib/mavo-organization-scope";
 
 export type MavoSystemOverview = {
   generatedAt: string;
@@ -166,8 +167,9 @@ export async function checkMavoDatabaseHealth() {
   }
 }
 
-export async function getMavoSystemOverview(): Promise<MavoSystemOverview> {
-  const organizationId = String(process.env.DEFAULT_ORG_ID || "org_willtalk_default");
+export async function getMavoSystemOverview(
+  organizationId = defaultMavoOrganizationId(),
+): Promise<MavoSystemOverview> {
   const supermarketConfig = await getSupermarketBotConfigForOrganization(organizationId);
   const whatsapp = getWhatsappState();
   const healthStartedAt = Date.now();

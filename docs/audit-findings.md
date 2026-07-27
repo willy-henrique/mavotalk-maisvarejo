@@ -21,7 +21,7 @@ Não foi confirmado vazamento entre organizações, autenticação quebrada, per
 | P2-04 | Processadores BullMQ incompletos | Workers `webhooks` e `agent-sync` apenas logam; não há produtores observados para SLA/webhook/agent sync. | `lib/queues.ts`, `worker.mjs`. |
 | P2-05 | Administração não possui sistema único de feedback | Estados loading/sucesso/erro/confirmação variam por tela e ações destrutivas não têm padrão. | Componentes em `frontend/components/Admin/`. |
 | P2-06 | Modal e dropdown não atendem o fluxo acessível completo | Não há primitive com focus trap, Escape e retorno de foco. | `Contacts.tsx` e modais administrativos. |
-| P2-07 | Painel master não é seletor multiempresa seguro | Escopo usa organização padrão, sem modelo explícito de plataforma/impersonation auditada. | `/api/mavo/*`, `DEFAULT_ORG_ID`. |
+| Resolvido | Painel master não era seletor multiempresa seguro | A sessão master agora seleciona somente organizações existentes, validadas no servidor; sessões operacionais não podem usar essa seleção para trocar de tenant. | `lib/mavo-organization-scope.ts`, `/api/mavo/*`. |
 | P2-08 | Não há E2E browser real | O repositório não contém Playwright/Cypress. | `package.json`, diretório `tests/`. |
 
 ## P3 — refinamento e padronização

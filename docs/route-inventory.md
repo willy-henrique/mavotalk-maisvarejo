@@ -8,7 +8,7 @@ Data da inspeção: 2026-07-27.
 | --- | --- | --- | --- |
 | SPA principal | `/inbox`, `/dashboard`, `/business`, `/business/sincronizacao`, `/business/auditoria`, `/contacts`, `/painel`, `/admin/*` | React Router em `frontend/App.tsx` | Interface operacional canônica. |
 | Next legado/ponte | `/`, `/dashboard`, `/dashboard/queues`, `/login` | `app/` | A página raiz redireciona para a localização canônica configurada; não deve receber novas telas operacionais sem justificativa. |
-| Master | `/mavo` | `app/mavo/page.tsx` + `components/mavo-admin.tsx` | Sessão master separada. |
+| Master | `/mavo` | `app/mavo/page.tsx` + `components/mavo-admin.tsx` | Sessão master separada, com seleção de organização validada pelo backend. |
 
 ## SPA operacional
 

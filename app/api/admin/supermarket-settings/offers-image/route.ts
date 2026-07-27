@@ -8,7 +8,7 @@ const MAX_BYTES = 8 * 1024 * 1024;
 const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 export async function POST(request: Request) {
-  const auth = await requireSupermarketAdmin();
+  const auth = await requireSupermarketAdmin(request);
   if (auth.error || !auth.session) return auth.error;
   const form = await request.formData();
   const file = form.get("file");
@@ -23,15 +23,21 @@ export async function POST(request: Request) {
     offersImagePublicId: upload.public_id,
   });
   if (current.offersImagePublicId) await deleteCloudinaryResources([current.offersImagePublicId]).catch(() => undefined);
-  await createAuditLog(auth.session.organizationId, auth.session.userId, "upload_supermarket_offer_image", "organization", auth.session.organizationId, { publicId: upload.public_id });
+  await createAuditLog(auth.session.organizationId, auth.session.userId, "upload_supermarket_offer_image", "organization", auth.session.organizationId, {
+    publicId: upload.public_id,
+    origin: auth.session.userId ? "operational-admin" : "mavo-master",
+  });
   return NextResponse.json({ settings });
 }
 
-export async function DELETE() {
-  const auth = await requireSupermarketAdmin();
+export async function DELETE(request: Request) {
+  const auth = await requireSupermarketAdmin(request);
   if (auth.error || !auth.session) return auth.error;
   const current = await getSupermarketSettings(auth.session.organizationId);
   if (current.offersImagePublicId) await deleteCloudinaryResources([current.offersImagePublicId]).catch(() => undefined);
   const settings = await updateSupermarketSettings(auth.session.organizationId, { offersImageUrl: null, offersImagePublicId: null });
+  await createAuditLog(auth.session.organizationId, auth.session.userId, "remove_supermarket_offer_image", "organization", auth.session.organizationId, {
+    origin: auth.session.userId ? "operational-admin" : "mavo-master",
+  });
   return NextResponse.json({ settings });
 }
