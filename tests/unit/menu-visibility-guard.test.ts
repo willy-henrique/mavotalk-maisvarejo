@@ -11,6 +11,10 @@ test("sidebar usa a política de leitura por tenant, sem tratar visibilidade com
   assert.ok(policyCheck > roleCheck, "política do servidor deve ser aplicada após o fallback visual");
   assert.match(source, /if \(!visibilityOverrides \|\| !permissions\) return roleAllowed/);
   assert.match(source, /data\.permissions/);
+  assert.match(source, /menuSettingsError/);
+  assert.match(source, /Permissões do menu indisponíveis/);
+  assert.match(source, /loadMenuPolicy/);
+  assert.match(source, /menuPolicyRequestRef/);
 });
 
 test("tabs do menu do painel conectam painel e oferecem teclado", async () => {

@@ -24,7 +24,7 @@ O produto possui direção visual azul/verde, modo escuro padrão e uma fundaç�
 | Resolvido | Tabelas administrativas não priorizavam informação em mobile | Equipe, Respostas rápidas, Acessos gerenciais e Auditoria preservam tabelas densas em desktop e passam a cartões com dados e ações equivalentes em telas menores. |
 | Resolvido | Listas extensas de filas quebravam a densidade mobile | Quando há mais de oito filas, a tabela continua no desktop; no mobile ela passa a cartões com menu, SLA, estado e ações. |
 | P3 | Estados vazios e largura | Há empty states altos em dashboards e tabelas; em monitores grandes a informação não usa largura/densidade operacional de forma consistente. |
-| P3 | Terminologia e capitalização | “Tipos de Chamado”, “Respostas Rápidas”, “Agentes cloud” e “Sincronização” não seguem mesma nomenclatura. |
+| P3 | Terminologia e capitalização | A navegação e os atalhos usam “Respostas rápidas” e “Agentes e sincronização”; ainda é necessário revisar referências históricas fora da SPA. |
 
 ## Acessibilidade
 

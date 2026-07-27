@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Icons } from '../constants';
 import { User, UserRole } from '../types';
@@ -10,6 +10,11 @@ interface SidebarProps {
   mobileOpen?: boolean;
   onNavigate?: () => void;
 }
+
+type MenuPolicyResponse = {
+  visibility?: Record<string, boolean>;
+  permissions?: Record<string, { read?: boolean }>;
+};
 
 const TAB_BY_PATH: Record<string, string> = {
   '/inbox': 'inbox',
@@ -38,7 +43,7 @@ const menuItems = [
   { id: 'admin_business_access', label: 'Acessos gerenciais', icon: Icons.Users, path: '/admin/acessos-gerenciais', role: UserRole.ADMIN },
   { id: 'admin_users', label: 'Equipe', icon: Icons.Users, path: '/admin/usuarios', role: UserRole.ADMIN },
   { id: 'admin_types', label: 'Filas e automações', icon: Icons.Settings, path: '/admin/tipos', role: UserRole.ADMIN },
-  { id: 'admin_quick_replies', label: 'Respostas Rápidas', icon: Icons.Settings, path: '/admin/respostas-rapidas', role: UserRole.ADMIN },
+  { id: 'admin_quick_replies', label: 'Respostas rápidas', icon: Icons.Settings, path: '/admin/respostas-rapidas', role: UserRole.ADMIN },
   { id: 'admin_menu_settings', label: 'Menu do painel', icon: Icons.Settings, path: '/admin/menu-visibilidade', role: UserRole.ADMIN },
 ];
 
@@ -50,22 +55,32 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
   const [collapsed, setCollapsed] = useState(false);
   const [visibilityOverrides, setVisibilityOverrides] = useState<Record<string, boolean> | null>(null);
   const [permissions, setPermissions] = useState<Record<string, { read?: boolean }> | null>(null);
+  const [menuSettingsError, setMenuSettingsError] = useState('');
+  const menuPolicyRequestRef = useRef(0);
+
+  const loadMenuPolicy = useCallback(async () => {
+    const request = ++menuPolicyRequestRef.current;
+    setMenuSettingsError('');
+    try {
+      const response = await apiFetch('/api/menu-settings', { method: 'GET' });
+      if (!response.ok) throw new Error('Não foi possível carregar a política de navegação.');
+      const data = await response.json() as MenuPolicyResponse;
+      if (!data?.visibility) throw new Error('A política de navegação retornou dados incompletos.');
+      if (request !== menuPolicyRequestRef.current) return;
+      setVisibilityOverrides(data.visibility);
+      setPermissions(data.permissions || {});
+    } catch (reason) {
+      if (request !== menuPolicyRequestRef.current) return;
+      setVisibilityOverrides(null);
+      setPermissions(null);
+      setMenuSettingsError(reason instanceof Error ? reason.message : 'Não foi possível carregar a política de navegação.');
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    apiFetch('/api/menu-settings', { method: 'GET' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!cancelled && data?.visibility) {
-          setVisibilityOverrides(data.visibility as Record<string, boolean>);
-          setPermissions(data.permissions as Record<string, { read?: boolean }> || {});
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void loadMenuPolicy();
+    return () => { menuPolicyRequestRef.current += 1; };
+  }, [loadMenuPolicy]);
 
   const initials = user.name
     .split(/\s+/)
@@ -156,6 +171,16 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
           );
         })}
       </nav>
+
+      {menuSettingsError && (
+        <div className="mx-3 mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-900/70 dark:bg-amber-950/30 dark:text-amber-100" role="status">
+          {collapsed ? (
+            <button type="button" onClick={() => void loadMenuPolicy()} className="mavo-button-secondary min-h-0 w-full px-2 py-2 text-xs" aria-label="Tentar carregar permissões do menu">Tentar</button>
+          ) : (
+            <><p className="font-bold">Permissões do menu indisponíveis</p><p className="mt-1 leading-5">Exibindo apenas o acesso padrão enquanto a política é atualizada.</p><button type="button" onClick={() => void loadMenuPolicy()} className="mt-2 font-bold underline underline-offset-2">Tentar novamente</button></>
+          )}
+        </div>
+      )}
 
       <div className={`p-4 border-t border-slate-200 dark:border-slate-800 ${collapsed ? 'flex justify-center' : ''}`}>
         <div className={`flex items-center gap-3 p-3 rounded-2xl bg-slate-100/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 ${collapsed ? 'justify-center' : ''}`}>

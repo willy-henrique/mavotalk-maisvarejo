@@ -231,7 +231,7 @@ const Painel: React.FC = () => {
                 onClick={() => navigate('/admin/respostas-rapidas')}
                 className="mavo-card p-4 text-left transition hover:border-blue-300 hover:shadow-md dark:hover:border-blue-800"
               >
-                <span className="font-bold text-slate-800 block">Respostas Rápidas</span>
+                <span className="font-bold text-slate-800 block">Respostas rápidas</span>
                 <span className="text-sm text-slate-500">Atalhos e variáveis globais</span>
               </button>
               <button
