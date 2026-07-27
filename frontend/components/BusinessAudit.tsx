@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch, apiGet } from '../services/api';
 import { Dialog } from './ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from './ui/PageState';
+import { Pagination } from './ui/Pagination';
 
 type AuditItem = {
   id: string;
@@ -59,13 +60,7 @@ const BusinessAudit: React.FC = () => {
     void load();
   }, [load]);
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const hasAppliedFilters = Boolean(appliedFilters.query || appliedFilters.status || appliedFilters.origin || appliedFilters.from || appliedFilters.to || appliedFilters.sort !== 'recent');
-  const rangeLabel = useMemo(() => {
-    if (!total || !items.length) return 'Nenhum evento';
-    const first = (page - 1) * pageSize + 1;
-    return `${first}–${first + items.length - 1} de ${total} eventos`;
-  }, [items.length, page, total]);
 
   const statusClass = (status: string) => {
     const normalized = status.toLowerCase();
@@ -157,7 +152,7 @@ const BusinessAudit: React.FC = () => {
       ) : items.length === 0 ? (
         <EmptyState title="Nenhuma consulta encontrada." description={hasAppliedFilters ? 'Altere ou limpe os filtros para consultar outro período.' : 'As consultas gerenciais, pelo WhatsApp e pelo MCP aparecerão aqui.'} action={hasAppliedFilters ? <button type="button" onClick={clearFilters} className="mavo-button-secondary">Limpar filtros</button> : undefined} />
       ) : (
-        <div className="mavo-card overflow-x-auto p-0">
+        <><div className="mavo-card hidden overflow-x-auto p-0 md:block">
           <table className="w-full text-left text-sm">
             <caption className="sr-only">Eventos de auditoria gerencial filtrados</caption>
             <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300"><tr><th className="p-4">Quando</th><th className="p-4">Quem</th><th className="p-4">Origem</th><th className="p-4">Consulta</th><th className="p-4">Estado</th><th className="p-4">Duração</th><th className="p-4"><span className="sr-only">Detalhes</span></th></tr></thead>
@@ -175,38 +170,9 @@ const BusinessAudit: React.FC = () => {
               ))}
             </tbody>
           </table>
-        </div>
+        </div><div className="grid gap-3 md:hidden">{items.map((item) => <article key={item.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{item.queryType}</h3><p className="mt-1 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString('pt-BR')}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(item.status)}`}>{item.status}{item.errorCode ? ` · ${item.errorCode}` : ''}</span></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Responsável</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{item.actorName || item.phoneNormalized || 'Sistema'}</dd></div><div><dt className="font-semibold text-slate-500">Origem</dt><dd className="mt-1 uppercase text-slate-700 dark:text-slate-200">{item.origin}</dd></div><div><dt className="font-semibold text-slate-500">Duração</dt><dd className="mt-1 tabular-nums text-slate-700 dark:text-slate-200">{item.durationMs} ms</dd></div></dl><button type="button" className="mavo-button-secondary min-h-0 px-3 py-2 text-xs" onClick={() => void openDetail(item)}>Ver detalhe</button></article>)}</div></>
       )}
-      <p className="mt-4 text-xs font-medium text-slate-500 dark:text-slate-400" aria-live="polite">{rangeLabel}</p>
-      {total > pageSize && (
-        <div className="mt-4 flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
-          <span>
-            Página {page} de {totalPages}
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={page === 1}
-              onClick={() => {
-                setPage((value) => Math.max(1, value - 1));
-              }}
-              className="mavo-button-secondary min-h-0 px-3 py-2 text-xs"
-            >
-              Anterior
-            </button>
-            <button
-              type="button"
-              disabled={page >= totalPages}
-              onClick={() => {
-                setPage((value) => value + 1);
-              }}
-              className="mavo-button-secondary min-h-0 px-3 py-2 text-xs"
-            >
-              Próxima
-            </button>
-          </div>
-        </div>
-      )}
+      {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="eventos" onPageChange={setPage} />}
       {selected && <Dialog title="Detalhe de auditoria" description={`${selected.queryType} · ${new Date(selected.createdAt).toLocaleString('pt-BR')}`} onClose={() => setSelected(null)}><div className="space-y-4 p-6 text-sm"><dl className="grid grid-cols-2 gap-3"><div><dt className="text-xs font-bold uppercase text-slate-500">Origem</dt><dd className="mt-1 text-slate-900 dark:text-white">{selected.origin}</dd></div><div><dt className="text-xs font-bold uppercase text-slate-500">Duração</dt><dd className="mt-1 text-slate-900 dark:text-white">{selected.durationMs} ms</dd></div><div><dt className="text-xs font-bold uppercase text-slate-500">Estado</dt><dd className="mt-1 text-slate-900 dark:text-white">{selected.status}</dd></div><div><dt className="text-xs font-bold uppercase text-slate-500">Responsável</dt><dd className="mt-1 text-slate-900 dark:text-white">{selected.actorName || 'Sistema'}</dd></div></dl>{loadingDetail ? <p className="text-slate-500">Carregando dados mascarados…</p> : detail && <><div><h3 className="text-xs font-bold uppercase text-slate-500">Entrada sanitizada</h3><p className="mt-1 rounded-lg bg-slate-100 p-3 text-slate-700 dark:bg-slate-950 dark:text-slate-200">{detail.sanitizedInput || 'Não registrada'}</p></div><div><h3 className="text-xs font-bold uppercase text-slate-500">Parâmetros</h3><pre className="mt-1 overflow-auto rounded-lg bg-slate-100 p-3 text-xs text-slate-700 dark:bg-slate-950 dark:text-slate-200">{JSON.stringify(detail.parameters, null, 2)}</pre></div><div><h3 className="text-xs font-bold uppercase text-slate-500">Resumo</h3><pre className="mt-1 overflow-auto rounded-lg bg-slate-100 p-3 text-xs text-slate-700 dark:bg-slate-950 dark:text-slate-200">{JSON.stringify(detail.resultSummary, null, 2)}</pre></div></>}</div></Dialog>}
       </div>
     </main>

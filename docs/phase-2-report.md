@@ -75,6 +75,7 @@ npm run render:validate → aprovado
 - A área clara do master recebeu escala tipográfica operacional e contraste reforçado em cartões, filas, usuários e auditoria, removendo textos de 6–9 px que prejudicavam a leitura.
 - O editor de empresa no master agora sinaliza alterações não salvas, protege saída/refresh/troca de organização e oferece confirmação acessível para descarte.
 - Contatos deixou de carregar toda a base do tenant: busca, filtro de bloqueio e paginação ocorrem na API sob contexto RLS, e a consulta obtém apenas a última conversa/mensagem de cada contato exibido. A migration adiciona o índice para essa ordenação; em mobile, a tabela dá lugar a cartões operacionais sem rolagem horizontal.
-- A paginação de Contatos, Equipe, Respostas rápidas, Agentes e Acessos gerenciais foi centralizada em uma primitive com intervalo exibido, estado de página, botões consistentes e nomes acessíveis.
+- A paginação de Contatos, Equipe, Respostas rápidas, Agentes, Acessos gerenciais e Auditoria foi centralizada em uma primitive com intervalo exibido, estado de página, botões consistentes e nomes acessíveis.
 - Agentes e sincronização preserva a tabela densa em desktop e oferece cartões em mobile, sem ocultar status, última sincronização, quantidade de registros, recomendação ou ações administrativas.
 - Equipe, Respostas rápidas e Acessos gerenciais também alternam entre tabela densa no desktop e cartões completos no mobile; controles de edição, bloqueio, PIN, revogação e permissões permanecem disponíveis.
+- A Auditoria segue o mesmo comportamento responsivo: cada cartão mobile mantém consulta, responsável, origem, estado, duração e acesso ao detalhe sanitizado.

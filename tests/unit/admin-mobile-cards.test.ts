@@ -3,13 +3,14 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 test("tabelas administrativas críticas preservam ações em cartões no mobile", async () => {
-  const [users, replies, access] = await Promise.all([
+  const [users, replies, access, audit] = await Promise.all([
     readFile("frontend/components/Admin/UserManagement.tsx", "utf8"),
     readFile("frontend/components/Admin/QuickReplyManagement.tsx", "utf8"),
     readFile("frontend/components/Admin/BusinessAccessManagement.tsx", "utf8"),
+    readFile("frontend/components/BusinessAudit.tsx", "utf8"),
   ]);
 
-  for (const source of [users, replies, access]) {
+  for (const source of [users, replies, access, audit]) {
     assert.match(source, /hidden overflow-x-auto[\s\S]*md:block/);
     assert.match(source, /grid gap-3 md:hidden/);
   }
@@ -17,4 +18,5 @@ test("tabelas administrativas críticas preservam ações em cartões no mobile"
   assert.match(replies, /Editar \$\{item\.name\}/);
   assert.match(access, /Revogar sessões/);
   assert.match(access, /Permissões/);
+  assert.match(audit, /Ver detalhe/);
 });
