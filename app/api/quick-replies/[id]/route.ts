@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSession, requireRole } from "@/lib/api";
-import { updateQuickReply, deleteQuickReply } from "@/lib/repo";
+import { createAuditLog, updateQuickReply, deleteQuickReply } from "@/lib/repo";
 import { quickReplySchema } from "@/lib/schemas";
 
 export async function PATCH(
@@ -35,6 +35,15 @@ export async function PATCH(
     return NextResponse.json({ error: "Resposta rapida nao encontrada" }, { status: 404 });
   }
 
+  await createAuditLog(
+    auth.session.organizationId,
+    auth.session.userId,
+    "update_quick_reply",
+    "quick_reply",
+    id,
+    { fieldsChanged: Object.keys(updates), name: item.name, category: item.category },
+  );
+
   return NextResponse.json({ quickReply: item });
 }
 
@@ -53,6 +62,14 @@ export async function DELETE(
   if (!deleted) {
     return NextResponse.json({ error: "Resposta rapida nao encontrada" }, { status: 404 });
   }
+
+  await createAuditLog(
+    auth.session.organizationId,
+    auth.session.userId,
+    "delete_quick_reply",
+    "quick_reply",
+    id,
+  );
 
   return NextResponse.json({ ok: true });
 }

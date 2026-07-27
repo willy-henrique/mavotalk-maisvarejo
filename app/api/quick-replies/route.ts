@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireSession, requireRole } from "@/lib/api";
-import { listQuickReplies, createQuickReply } from "@/lib/repo";
+import { listQuickReplies, createAuditLog, createQuickReply } from "@/lib/repo";
 import { quickReplySchema } from "@/lib/schemas";
 
 export async function GET() {
@@ -30,6 +30,15 @@ export async function POST(request: Request) {
     content: parsed.data.content,
     category: parsed.data.category ?? null,
   });
+
+  await createAuditLog(
+    auth.session.organizationId,
+    auth.session.userId,
+    "create_quick_reply",
+    "quick_reply",
+    String(item.id),
+    { name: item.name, category: item.category },
+  );
 
   return NextResponse.json({ quickReply: item }, { status: 201 });
 }

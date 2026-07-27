@@ -25,7 +25,7 @@ Data da inspeção: 2026-07-27. Esta é uma auditoria estática; validação de 
 | Resolvido | Master limitado à organização padrão | O master agora lista organizações apenas sob sessão de plataforma e valida a existência do tenant antes de overview, sincronização ou gravação de configurações. Sessões operacionais ignoram o header de seleção e permanecem no tenant autenticado. |
 | P2 | Worker de webhook e agente-sync é estrutural | processadores apenas registram logs e não há produtor para SLA/webhook/agent-sync além de limpeza de mídia | remover fila morta ou implementar fluxo completo com observabilidade, DLQ e testes. |
 | P2 | CSRF requer validação por ambiente | autenticação por cookie; não foi localizado token anti-CSRF nas mutações | confirmar SameSite/origens em QA e adotar verificação Origin/CSRF para mutações cross-site quando `SameSite=None` for necessário. |
-| P2 | Auditoria administrativa não é uniformemente demonstrada | existem auditorias para configurações e consultas de negócio, mas a auditoria completa de todas as ações administrativas não foi comprovada estaticamente | inventariar cada mutação e centralizar `auditAdminAction`, com payload mascarado. |
+| P2 | Auditoria administrativa não é uniformemente demonstrada | Configurações, filas, usuários, agentes, acessos gerenciais e respostas rápidas auditam as mutações principais com payload mascarado. Ainda falta inventariar e centralizar todas as mutações administrativas futuras em uma única política. |
 | P2 | Nome técnico de tenant aparece na experiência | IDs são usados como dado de interface em fluxos administrativos | usar nome amigável; manter ID apenas em detalhe/tooltip e logs técnicos. |
 
 ## Escopo de dados por origem

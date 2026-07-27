@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 82/82 aprovados
+npm test               → 83/83 aprovados
 npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 ```
@@ -47,3 +47,4 @@ npm --prefix frontend run build → aprovado
 - As telas de Equipe e Filas e automações deixam de falhar silenciosamente ao carregar: o erro é apresentado com `role=alert` e ação de tentativa novamente, separado dos erros de gravação do formulário.
 - A revogação de agentes usa confirmação acessível em diálogo, em vez de confirmação nativa do navegador; a ação permanece bloqueada durante o envio e recebe estilo destrutivo consistente.
 - O cabeçalho operacional passou a publicar breadcrumb e título de aba por rota pela mesma fonte de metadados, evitando cabeçalhos genéricos ou títulos do navegador desatualizados.
+- Criação, edição e exclusão de respostas rápidas passaram a gerar auditoria por organização com nome/categoria ou campos alterados, sem persistir o conteúdo da mensagem na trilha.
