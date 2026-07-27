@@ -12,6 +12,8 @@
     "typecheck": "tsc --noEmit --incremental false",
     "typecheck:all": "tsc --noEmit --incremental false && npm --prefix frontend run typecheck",
     "test": "node scripts/run-tests.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:report": "playwright show-report playwright-report",
     "lint": "eslint",
     "worker": "node worker.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",
@@ -54,6 +56,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",

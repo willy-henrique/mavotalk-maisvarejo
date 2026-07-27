@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Icons } from '../constants';
 import { User, UserRole } from '../types';
@@ -6,7 +6,7 @@ import { User, UserRole } from '../types';
 type WhatsappStatus = 'idle' | 'initializing' | 'qr' | 'ready' | 'disconnected' | 'error';
 
 const pageMeta: Array<{ match: string; title: string; description: string; section: string }> = [
-  { match: '/business/sincronizacao', title: 'Agentes de sincronização', description: 'Acompanhe integrações e a entrada segura de dados.', section: 'Administração' },
+  { match: '/business/sincronizacao', title: 'Agentes e sincronização', description: 'Provisione, monitore e acompanhe a entrada segura de dados.', section: 'Administração' },
   { match: '/business/auditoria', title: 'Auditoria gerencial', description: 'Rastreabilidade das consultas do negócio.', section: 'Administração' },
   { match: '/admin/acessos-gerenciais', title: 'Acessos gerenciais', description: 'Controle quem pode consultar indicadores pelo WhatsApp.', section: 'Administração' },
   { match: '/admin/respostas-rapidas', title: 'Respostas rápidas', description: 'Padronize respostas e reduza o tempo de atendimento.', section: 'Administração' },
@@ -37,10 +37,28 @@ type Props = {
 
 export default function AppHeader({ user, theme, onToggleTheme, onOpenMenu, onLogout, whatsappStatus, whatsappProvider }: Props) {
   const { pathname } = useLocation();
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const meta = currentMeta(pathname);
   const initials = user.name.split(/\s+/).filter(Boolean).slice(0, 2).map((value) => value[0]).join('').toUpperCase() || 'MT';
   const whatsappReady = whatsappProvider === 'twilio' || whatsappStatus === 'ready';
   const canManageWhatsapp = user.role !== UserRole.AGENT;
+
+  useEffect(() => {
+    const closeMenu = (event: MouseEvent | KeyboardEvent) => {
+      if (event instanceof KeyboardEvent && event.key === 'Escape') {
+        setUserMenuOpen(false);
+      } else if (event instanceof MouseEvent && !userMenuRef.current?.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', closeMenu);
+    document.addEventListener('keydown', closeMenu);
+    return () => {
+      document.removeEventListener('mousedown', closeMenu);
+      document.removeEventListener('keydown', closeMenu);
+    };
+  }, []);
 
   return (
     <header className="sticky top-0 z-30 flex min-h-[76px] shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/85 sm:px-6">
@@ -63,14 +81,14 @@ export default function AppHeader({ user, theme, onToggleTheme, onOpenMenu, onLo
           </Link>
         )}
         <button type="button" onClick={onToggleTheme} className="rounded-xl p-2.5 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white" aria-label={theme === 'dark' ? 'Usar tema claro' : 'Usar tema escuro'}>{theme === 'dark' ? <span className="text-base">☀</span> : <span className="text-base">◐</span>}</button>
-        <div className="group relative">
-          <button type="button" className="flex items-center gap-2 rounded-xl p-1.5 transition hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Menu do usuário">
+        <div ref={userMenuRef} className="relative">
+          <button type="button" onClick={() => setUserMenuOpen((open) => !open)} className="flex items-center gap-2 rounded-xl p-1.5 transition hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Menu do usuário" aria-expanded={userMenuOpen} aria-controls="user-actions-menu">
             <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-xs font-black text-white shadow-lg shadow-blue-500/20">{initials}</span>
             <span className="hidden max-w-28 truncate text-left text-xs font-bold text-slate-700 dark:text-slate-200 lg:block">{user.name}</span>
           </button>
-          <div className="invisible absolute right-0 top-full z-50 mt-2 w-48 translate-y-1 rounded-2xl border border-slate-200 bg-white p-2 opacity-0 shadow-xl transition group-focus-within:visible group-focus-within:translate-y-0 group-focus-within:opacity-100 group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 dark:border-slate-700 dark:bg-slate-900">
+          <div id="user-actions-menu" role="menu" className={`${userMenuOpen ? 'visible translate-y-0 opacity-100' : 'invisible translate-y-1 opacity-0'} absolute right-0 top-full z-50 mt-2 w-48 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl transition dark:border-slate-700 dark:bg-slate-900`}>
             <p className="px-3 py-2 text-xs text-slate-500">{user.email}</p>
-            <button type="button" onClick={onLogout} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-bold text-rose-600 transition hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950/30"><Icons.Settings className="h-4 w-4" /> Sair do sistema</button>
+            <button type="button" role="menuitem" onClick={onLogout} className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-sm font-bold text-rose-600 transition hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950/30"><Icons.Settings className="h-4 w-4" /> Sair do sistema</button>
           </div>
         </div>
       </div>

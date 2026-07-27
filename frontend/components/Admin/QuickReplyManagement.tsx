@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch, apiPost, apiPatch } from '../../services/api';
+import { Dialog } from '../ui/Dialog';
 
 type QuickReply = {
   id: string;
@@ -195,23 +196,18 @@ const QuickReplyManagement: React.FC = () => {
       )}
 
       {showModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-          onClick={() => !submitting && closeModal()}
+        <Dialog
+          title={editingId ? 'Editar resposta rápida' : 'Nova resposta rápida'}
+          description="Use variáveis para personalizar a mensagem no Inbox."
+          onClose={() => { if (!submitting) closeModal(); }}
         >
-          <div
-            className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
             <div className="p-6">
-              <h2 className="text-xl font-bold text-slate-800 mb-4">
-                {editingId ? 'Editar resposta rápida' : 'Nova resposta rápida'}
-              </h2>
               {VARIABLE_GUIDE}
               <form onSubmit={handleSubmit} className="mt-6 space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome</label>
+                  <label htmlFor="quick-reply-name" className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome</label>
                   <input
+                    id="quick-reply-name"
                     type="text"
                     value={formName}
                     onChange={(e) => setFormName(e.target.value)}
@@ -221,8 +217,9 @@ const QuickReplyManagement: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Conteúdo</label>
+                  <label htmlFor="quick-reply-content" className="block text-xs font-bold text-slate-500 uppercase mb-1">Conteúdo</label>
                   <textarea
+                    id="quick-reply-content"
                     value={formContent}
                     onChange={(e) => setFormContent(e.target.value)}
                     placeholder="{saudacao}, {primeiro_nome}! Me chamo {user}."
@@ -232,8 +229,9 @@ const QuickReplyManagement: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Categoria (opcional)</label>
+                  <label htmlFor="quick-reply-category" className="block text-xs font-bold text-slate-500 uppercase mb-1">Categoria (opcional)</label>
                   <input
+                    id="quick-reply-category"
                     type="text"
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value)}
@@ -261,8 +259,7 @@ const QuickReplyManagement: React.FC = () => {
                 </div>
               </form>
             </div>
-          </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );
