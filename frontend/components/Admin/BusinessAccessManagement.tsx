@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiGet, apiPatch, apiPost } from '../../services/api';
+import { Dialog } from '../ui/Dialog';
 
 type Permission =
   | 'sales.read'
@@ -34,10 +35,14 @@ const BusinessAccessManagement: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: '', phone: '', role: 'manager', pin: '' });
   const [editingPermissions, setEditingPermissions] = useState<AccessUser | null>(null);
+  const [resetPinFor, setResetPinFor] = useState<AccessUser | null>(null);
+  const [newPin, setNewPin] = useState('');
+  const [actionId, setActionId] = useState<string | null>(null);
   const [permissionDraft, setPermissionDraft] = useState<
     Partial<Record<Permission, boolean>>
   >({});
@@ -67,6 +72,7 @@ const BusinessAccessManagement: React.FC = () => {
     event.preventDefault();
     setSaving(true);
     setError('');
+    setNotice('');
     try {
       await apiPost('/api/admin/business-access', {
         ...form,
@@ -75,6 +81,7 @@ const BusinessAccessManagement: React.FC = () => {
       setShowForm(false);
       setForm({ name: '', phone: '', role: 'manager', pin: '' });
       setPage(1);
+      setNotice('Acesso gerencial cadastrado. O número deverá confirmar o PIN no WhatsApp.');
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Falha ao criar acesso');
@@ -83,33 +90,50 @@ const BusinessAccessManagement: React.FC = () => {
     }
   };
 
-  const action = async (path: string, body: unknown = {}) => {
+  const action = async (path: string, body: unknown = {}, successMessage: string, id?: string) => {
     setError('');
+    setNotice('');
+    setActionId(id || path);
     try {
       await apiPost(path, body);
+      setNotice(successMessage);
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Operação não concluída');
+    } finally {
+      setActionId(null);
     }
   };
 
   const toggle = async (item: AccessUser) => {
+    setActionId(item.id);
+    setError('');
+    setNotice('');
     try {
       await apiPatch(`/api/admin/business-access/${item.id}`, { isActive: !item.isActive });
+      setNotice(item.isActive ? 'Acesso desativado e sessões revogadas.' : 'Acesso reativado.');
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Operação não concluída');
+    } finally {
+      setActionId(null);
     }
   };
 
-  const resetPin = async (item: AccessUser) => {
-    const pin = window.prompt(`Novo PIN para ${item.name} (6 a 12 dígitos):`);
-    if (!pin) return;
-    if (!/^\d{6,12}$/.test(pin)) {
+  const resetPin = async () => {
+    if (!resetPinFor) return;
+    if (!/^\d{6,12}$/.test(newPin)) {
       setError('O PIN deve conter de 6 a 12 dígitos.');
       return;
     }
-    await action(`/api/admin/business-access/${item.id}/reset-pin`, { pin });
+    setSaving(true);
+    try {
+      await action(`/api/admin/business-access/${resetPinFor.id}/reset-pin`, { pin: newPin }, 'PIN atualizado e sessões revogadas.', resetPinFor.id);
+      setResetPinFor(null);
+      setNewPin('');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const openPermissions = (item: AccessUser) => {
@@ -120,11 +144,14 @@ const BusinessAccessManagement: React.FC = () => {
   const savePermissions = async () => {
     if (!editingPermissions) return;
     setSaving(true);
+    setError('');
+    setNotice('');
     try {
       await apiPatch(`/api/admin/business-access/${editingPermissions.id}`, {
         permissions: permissionDraft,
       });
       setEditingPermissions(null);
+      setNotice('Permissões atualizadas para o acesso gerencial.');
       await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Falha ao salvar permissões');
@@ -134,49 +161,41 @@ const BusinessAccessManagement: React.FC = () => {
   };
 
   return (
-    <div className="p-6 md:p-8 overflow-y-auto flex-1 bg-slate-50 dark:bg-slate-800/95">
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+    <main className="mavo-page"><div className="mavo-page-content">
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">Acessos gerenciais</h1>
-          <p className="text-sm text-slate-500 mt-1">Números autorizados para consultas pelo WhatsApp.</p>
+          <p className="text-xs font-black uppercase tracking-[.16em] text-blue-600 dark:text-blue-400">Administração</p>
+          <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Acessos gerenciais</h1>
+          <p className="mt-2 max-w-2xl text-sm text-slate-500 dark:text-slate-400">Números autorizados para consultas privadas pelo WhatsApp. Eles não entram na fila de atendimento e toda consulta é auditada.</p>
         </div>
-        <button onClick={() => setShowForm((value) => !value)} className="rounded-lg bg-blue-600 px-4 py-2.5 font-bold text-white">
-          {showForm ? 'Cancelar' : 'Novo acesso'}
+        <button type="button" onClick={() => { setShowForm(true); setError(''); }} className="mavo-button-primary">
+          Novo acesso
         </button>
       </div>
-      {error && <div className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-700">{error}</div>}
+
+      {error && <div role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">{error}</div>}
+      {notice && <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">{notice}</div>}
       {showForm && (
-        <form onSubmit={create} className="mb-6 grid grid-cols-1 md:grid-cols-5 gap-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-5">
-          <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nome" className="rounded-lg border p-3 dark:bg-slate-950 dark:border-slate-700" />
-          <input required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Telefone com DDD" className="rounded-lg border p-3 dark:bg-slate-950 dark:border-slate-700" />
-          <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="rounded-lg border p-3 dark:bg-slate-950 dark:border-slate-700">
+        <Dialog title="Novo acesso gerencial" description="O PIN é usado como confirmação adicional no WhatsApp e nunca é exibido ou armazenado em texto puro." onClose={() => { if (!saving) setShowForm(false); }}>
+        <form onSubmit={create} className="grid gap-4 p-6 sm:grid-cols-2">
+          <label className="text-sm font-bold text-slate-700 dark:text-slate-200">Nome<input autoFocus required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Nome completo" className="mavo-field mt-1" /></label>
+          <label className="text-sm font-bold text-slate-700 dark:text-slate-200">Telefone<input required value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="Telefone com DDD" inputMode="tel" className="mavo-field mt-1" /></label>
+          <label className="text-sm font-bold text-slate-700 dark:text-slate-200">Função<select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} className="mavo-field mt-1">
             <option value="owner">Proprietário</option>
             <option value="director">Diretor</option>
             <option value="manager">Gestor</option>
             <option value="analyst">Analista</option>
-          </select>
-          <input required type="password" inputMode="numeric" minLength={6} maxLength={12} value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} placeholder="PIN (mín. 6)" className="rounded-lg border p-3 dark:bg-slate-950 dark:border-slate-700" />
-          <button disabled={saving} className="rounded-lg bg-emerald-600 px-4 py-3 font-bold text-white disabled:opacity-50">{saving ? 'Salvando...' : 'Cadastrar'}</button>
-        </form>
+          </select></label>
+          <label className="text-sm font-bold text-slate-700 dark:text-slate-200">PIN<input required type="password" inputMode="numeric" minLength={6} maxLength={12} value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value.replace(/\D/g, '') })} placeholder="6 a 12 dígitos" className="mavo-field mt-1" /></label>
+          <div className="col-span-full flex flex-wrap justify-end gap-3 border-t border-slate-200 pt-4 dark:border-slate-700"><button type="button" disabled={saving} onClick={() => setShowForm(false)} className="mavo-button-secondary">Cancelar</button><button disabled={saving} className="mavo-button-primary">{saving ? 'Salvando...' : 'Cadastrar acesso'}</button></div>
+        </form></Dialog>
       )}
       {editingPermissions && (
-        <section className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-5 dark:border-blue-900 dark:bg-blue-950/30">
+        <Dialog title={`Permissões de ${editingPermissions.name}`} description={`“Herdar” usa a matriz padrão do papel ${editingPermissions.role}.`} onClose={() => { if (!saving) setEditingPermissions(null); }}><section className="p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="font-bold text-slate-900 dark:text-slate-100">
-                Permissões de {editingPermissions.name}
-              </h2>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                “Herdar” usa a matriz padrão do papel {editingPermissions.role}.
-              </p>
+              <p className="text-sm text-slate-600 dark:text-slate-400">Uma negação explícita prevalece sobre o papel padrão.</p>
             </div>
-            <button
-              type="button"
-              onClick={() => setEditingPermissions(null)}
-              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold dark:border-slate-700"
-            >
-              Fechar
-            </button>
           </div>
           <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {permissionOptions.map((permission) => {
@@ -197,7 +216,7 @@ const BusinessAccessManagement: React.FC = () => {
                         return next;
                       });
                     }}
-                    className="mt-1 block w-full rounded-lg border p-2.5 dark:border-slate-700 dark:bg-slate-950"
+                    className="mavo-field mt-1 py-2.5"
                   >
                     <option value="inherit">Herdar do papel</option>
                     <option value="true">Permitir</option>
@@ -211,18 +230,19 @@ const BusinessAccessManagement: React.FC = () => {
             type="button"
             disabled={saving}
             onClick={() => void savePermissions()}
-            className="mt-4 rounded-lg bg-blue-600 px-4 py-2.5 font-bold text-white disabled:opacity-50"
+            className="mavo-button-primary mt-4"
           >
             Salvar permissões
           </button>
-        </section>
+        </section></Dialog>
       )}
+      {resetPinFor && <Dialog title={`Redefinir PIN de ${resetPinFor.name}`} description="Essa ação encerra as sessões gerenciais ativas desse número." onClose={() => { if (!saving) { setResetPinFor(null); setNewPin(''); } }}><form className="p-6" onSubmit={(event) => { event.preventDefault(); void resetPin(); }}><label className="text-sm font-bold text-slate-700 dark:text-slate-200">Novo PIN<input autoFocus required type="password" inputMode="numeric" minLength={6} maxLength={12} value={newPin} onChange={(event) => setNewPin(event.target.value.replace(/\D/g, ''))} placeholder="6 a 12 dígitos" className="mavo-field mt-1" /></label><div className="mt-5 flex justify-end gap-3"><button type="button" disabled={saving} onClick={() => { setResetPinFor(null); setNewPin(''); }} className="mavo-button-secondary">Cancelar</button><button disabled={saving} className="mavo-button-primary">{saving ? 'Atualizando...' : 'Atualizar PIN'}</button></div></form></Dialog>}
       {loading ? (
-        <div className="py-12 text-slate-500">Carregando...</div>
+        <div className="mavo-card py-12 text-center text-slate-500 dark:text-slate-400">Carregando acessos gerenciais...</div>
       ) : items.length === 0 ? (
-        <div className="rounded-xl border border-slate-200 bg-white p-12 text-center text-slate-500">Nenhum número gerencial autorizado.</div>
+        <div className="mavo-card p-10 text-center"><p className="font-bold text-slate-800 dark:text-slate-100">Nenhum número gerencial autorizado.</p><p className="mx-auto mt-2 max-w-lg text-sm text-slate-500 dark:text-slate-400">Cadastre um responsável, defina as permissões e entregue o PIN por um canal seguro. O acesso não cria tickets nem consome o SLA de atendimento.</p><button type="button" onClick={() => setShowForm(true)} className="mavo-button-primary mt-5">Cadastrar primeiro acesso</button></div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80">
+        <div className="mavo-card overflow-x-auto p-0">
           <table className="w-full text-left text-sm">
             <thead className="border-b border-slate-200 dark:border-slate-700 text-xs uppercase text-slate-500">
               <tr><th className="p-4">Pessoa</th><th className="p-4">Telefone</th><th className="p-4">Papel</th><th className="p-4">Estado</th><th className="p-4">Último acesso</th><th className="p-4">Ações</th></tr>
@@ -232,16 +252,16 @@ const BusinessAccessManagement: React.FC = () => {
                 <tr key={item.id} className="border-b border-slate-100 dark:border-slate-800">
                   <td className="p-4 font-bold text-slate-800 dark:text-slate-100">{item.name}</td>
                   <td className="p-4 font-mono text-slate-600 dark:text-slate-300">{item.phoneNormalized}</td>
-                  <td className="p-4">{item.role}</td>
-                  <td className="p-4">{item.lockedUntil && new Date(item.lockedUntil) > new Date() ? 'Bloqueado' : item.isActive ? 'Ativo' : 'Inativo'}</td>
+                  <td className="p-4 capitalize text-slate-600 dark:text-slate-300">{item.role}</td>
+                  <td className="p-4"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${item.lockedUntil && new Date(item.lockedUntil) > new Date() ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-200' : item.isActive ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{item.lockedUntil && new Date(item.lockedUntil) > new Date() ? 'Bloqueado' : item.isActive ? 'Ativo' : 'Inativo'}</span></td>
                   <td className="p-4 text-slate-500">{item.lastAccessAt ? new Date(item.lastAccessAt).toLocaleString('pt-BR') : 'Nunca'}</td>
                   <td className="p-4">
                     <div className="flex flex-wrap gap-2">
-                      <button onClick={() => toggle(item)} className="rounded bg-slate-100 dark:bg-slate-800 px-2 py-1">{item.isActive ? 'Desativar' : 'Ativar'}</button>
-                      <button onClick={() => action(`/api/admin/business-access/${item.id}/unlock`)} className="rounded bg-slate-100 dark:bg-slate-800 px-2 py-1">Desbloquear</button>
-                      <button onClick={() => action(`/api/admin/business-access/${item.id}/revoke-sessions`)} className="rounded bg-slate-100 dark:bg-slate-800 px-2 py-1">Revogar sessões</button>
-                      <button onClick={() => resetPin(item)} className="rounded bg-slate-100 dark:bg-slate-800 px-2 py-1">Redefinir PIN</button>
-                      <button onClick={() => openPermissions(item)} className="rounded bg-blue-100 px-2 py-1 text-blue-700 dark:bg-blue-950 dark:text-blue-200">Permissões</button>
+                      <button type="button" disabled={actionId === item.id} onClick={() => void toggle(item)} className="mavo-button-secondary px-2 py-1 text-xs">{actionId === item.id ? 'Salvando...' : item.isActive ? 'Desativar' : 'Ativar'}</button>
+                      <button type="button" disabled={actionId === item.id} onClick={() => void action(`/api/admin/business-access/${item.id}/unlock`, {}, 'Acesso desbloqueado.', item.id)} className="mavo-button-secondary px-2 py-1 text-xs">Desbloquear</button>
+                      <button type="button" disabled={actionId === item.id} onClick={() => void action(`/api/admin/business-access/${item.id}/revoke-sessions`, {}, 'Sessões gerenciais revogadas.', item.id)} className="mavo-button-secondary px-2 py-1 text-xs">Revogar sessões</button>
+                      <button type="button" disabled={actionId === item.id} onClick={() => { setResetPinFor(item); setNewPin(''); }} className="mavo-button-secondary px-2 py-1 text-xs">Redefinir PIN</button>
+                      <button type="button" disabled={actionId === item.id} onClick={() => openPermissions(item)} className="mavo-button-primary px-2 py-1 text-xs">Permissões</button>
                     </div>
                   </td>
                 </tr>
@@ -260,7 +280,7 @@ const BusinessAccessManagement: React.FC = () => {
               type="button"
               disabled={page === 1}
               onClick={() => setPage((value) => Math.max(1, value - 1))}
-              className="rounded-lg border px-3 py-2 disabled:opacity-40 dark:border-slate-700"
+              className="mavo-button-secondary disabled:opacity-40"
             >
               Anterior
             </button>
@@ -268,14 +288,14 @@ const BusinessAccessManagement: React.FC = () => {
               type="button"
               disabled={page * pageSize >= total}
               onClick={() => setPage((value) => value + 1)}
-              className="rounded-lg border px-3 py-2 disabled:opacity-40 dark:border-slate-700"
+              className="mavo-button-secondary disabled:opacity-40"
             >
               Próxima
             </button>
           </div>
         </div>
       )}
-    </div>
+    </div></main>
   );
 };
 
