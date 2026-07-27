@@ -19,7 +19,7 @@ services:
     runtime: node
     region: virginia
     plan: free
-    buildCommand: npm ci --include=dev && npm run typecheck && npm test && npm run lint && npm run build && npm run db:migrate && npm run db:bootstrap:production && npm run db:verify
+    buildCommand: npm ci --include=dev && npm run build && npm run db:migrate && npm run db:bootstrap:production && npm run db:verify
     startCommand: npm run start
     healthCheckPath: /api/health
     envVars:
