@@ -1,4 +1,4 @@
-import React, { useCallback, useDeferredValue, useEffect, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
 import { apiGet, apiPost } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
@@ -39,20 +39,24 @@ const AgentsManagement: React.FC = () => {
   const [loadingEvents, setLoadingEvents] = useState(false);
   const pageSize = 25;
   const deferredSearch = useDeferredValue(search);
+  const loadRequestRef = useRef(0);
 
   const load = useCallback(async () => {
+    const request = ++loadRequestRef.current;
     setLoading(true);
     try {
       const data = await apiGet<{ items: Agent[]; total: number }>(
         `/api/admin/agents?page=${page}&pageSize=${pageSize}&q=${encodeURIComponent(deferredSearch)}&status=${encodeURIComponent(statusFilter)}`,
       );
+      if (request !== loadRequestRef.current) return;
       setItems(data.items);
       setTotal(data.total);
       setError('');
     } catch (reason) {
+      if (request !== loadRequestRef.current) return;
       setError(reason instanceof Error ? reason.message : 'Falha ao carregar agentes');
     } finally {
-      setLoading(false);
+      if (request === loadRequestRef.current) setLoading(false);
     }
   }, [page, deferredSearch, statusFilter]);
 

@@ -19,4 +19,6 @@ test("monitoramento de agentes filtra instalações no servidor e no tenant atua
   assert.match(view, /Nenhum agente encontrado/);
   assert.match(view, /md:hidden/);
   assert.match(view, /Ação recomendada/);
+  assert.match(view, /loadRequestRef/);
+  assert.match(view, /request !== loadRequestRef\.current/);
 });

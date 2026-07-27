@@ -16,4 +16,6 @@ test("acessos gerenciais filtram no servidor dentro do tenant autenticado", asyn
   assert.match(repository, /locked_until > now\(\)/);
   assert.match(view, /Buscar por nome ou telefone/);
   assert.match(view, /setPage\(1\)/);
+  assert.match(view, /loadRequestRef/);
+  assert.match(view, /request !== loadRequestRef\.current/);
 });
