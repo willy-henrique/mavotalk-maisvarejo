@@ -73,18 +73,20 @@ const BusinessAnalytics: React.FC = () => {
   };
 
   return (
-    <div className="p-6 md:p-8 overflow-y-auto flex-1 bg-slate-50 dark:bg-slate-800/95">
-      <div className="flex flex-wrap items-end justify-between gap-4 mb-6">
+    <main className="mavo-page"><div className="mavo-page-content">
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">Indicadores do negócio</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Vendas, produtos e estoque sincronizados pelo agente.</p>
+          <p className="text-xs font-black uppercase tracking-[.16em] text-blue-600 dark:text-blue-400">Negócio</p>
+          <h1 className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Indicadores do negócio</h1>
+          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Vendas, produtos e estoque sincronizados pelo agente. Os indicadores nunca usam dados simulados.</p>
         </div>
-        <label className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-          Período
+        <label htmlFor="business-period" className="text-sm font-semibold text-slate-600 dark:text-slate-300">
+          <span className="mb-1 block">Período</span>
           <select
+            id="business-period"
             value={period}
             onChange={(event) => setPeriod(event.target.value)}
-            className="ml-3 px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900"
+            className="mavo-field min-w-52"
           >
             <option>hoje</option>
             <option>últimos 7 dias</option>
@@ -98,14 +100,15 @@ const BusinessAnalytics: React.FC = () => {
         </label>
       </div>
 
-      {error && <div className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-700">{error}</div>}
+      {error && <div role="alert" className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">{error}</div>}
       {loading ? (
-        <div className="py-20 text-center text-slate-500">Carregando indicadores...</div>
+        <div className="mavo-card py-16 text-center text-slate-500 dark:text-slate-400">Carregando indicadores sincronizados...</div>
       ) : !data?.summary.totals.hasData ? (
-        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/70 p-12 text-center text-slate-500">
-          Ainda não há dados sincronizados para este período.
+        <div className="mavo-card p-10 text-center text-slate-500 dark:text-slate-400">
+          <p className="font-bold text-slate-800 dark:text-slate-100">Ainda não há dados sincronizados para este período.</p>
+          <p className="mt-2 text-sm">Verifique o agente de sincronização e o período selecionado antes de tomar decisões com estes indicadores.</p>
           {data?.freshness.lastSourceUpdate && (
-            <div className="mt-2 text-sm">Última atualização: {new Date(data.freshness.lastSourceUpdate).toLocaleString('pt-BR')}</div>
+            <div className="mt-3 text-sm">Última atualização da fonte: {new Date(data.freshness.lastSourceUpdate).toLocaleString('pt-BR')}</div>
           )}
         </div>
       ) : (
@@ -117,7 +120,7 @@ const BusinessAnalytics: React.FC = () => {
               ['Ticket médio', currency.format(data.summary.averageTicket)],
               ['Média diária', currency.format(data.summary.averagePerDay)],
             ].map(([label, value]) => (
-              <div key={label} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 p-5 shadow-sm">
+              <div key={label} className="mavo-card p-5">
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{label}</p>
                 <p className="mt-2 text-2xl font-black text-slate-800 dark:text-slate-100">{value}</p>
               </div>
@@ -125,7 +128,7 @@ const BusinessAnalytics: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-            <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 p-5">
+            <section className="mavo-card p-5">
               <h2 className="font-bold text-slate-800 dark:text-slate-100 mb-4">Evolução por dia</h2>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
@@ -133,13 +136,13 @@ const BusinessAnalytics: React.FC = () => {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                     <YAxis tickFormatter={(value) => `R$ ${Math.round(value / 1000)}k`} />
-                    <Tooltip formatter={(value) => currency.format(Number(value))} />
+                    <Tooltip formatter={(value) => currency.format(Number(value))} contentStyle={{ borderRadius: 12, border: '1px solid #475569', backgroundColor: '#0f172a', color: '#e2e8f0' }} />
                     <Line type="monotone" dataKey="netTotal" name="Vendas" stroke="#2563eb" strokeWidth={3} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             </section>
-            <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 p-5">
+            <section className="mavo-card p-5">
               <h2 className="font-bold text-slate-800 dark:text-slate-100 mb-4">Vendas por dia da semana</h2>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
@@ -147,7 +150,7 @@ const BusinessAnalytics: React.FC = () => {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="weekdayName" tick={{ fontSize: 10 }} />
                     <YAxis tickFormatter={(value) => `R$ ${Math.round(value / 1000)}k`} />
-                    <Tooltip formatter={(value) => currency.format(Number(value))} />
+                    <Tooltip formatter={(value) => currency.format(Number(value))} contentStyle={{ borderRadius: 12, border: '1px solid #475569', backgroundColor: '#0f172a', color: '#e2e8f0' }} />
                     <Bar dataKey="netTotal" name="Vendas" fill="#10b981" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
@@ -156,7 +159,7 @@ const BusinessAnalytics: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
-            <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 p-5">
+            <section className="mavo-card p-5">
               <h2 className="font-bold text-slate-800 dark:text-slate-100 mb-4">Produtos mais vendidos</h2>
               <div className="space-y-3">
                 {data.topProducts.map((item, index) => (
@@ -167,7 +170,7 @@ const BusinessAnalytics: React.FC = () => {
                 ))}
               </div>
             </section>
-            <section className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 p-5">
+            <section className="mavo-card p-5">
               <h2 className="font-bold text-slate-800 dark:text-slate-100 mb-4">Entradas de estoque</h2>
               {data.inventory.length === 0 ? (
                 <p className="text-sm text-slate-500">Nenhuma entrada no período.</p>
@@ -186,7 +189,9 @@ const BusinessAnalytics: React.FC = () => {
         </>
       )}
 
-      <section className="mt-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 p-5">
+      {data && <div className="mt-6 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400"><span className={`rounded-full px-3 py-1.5 font-bold ${data.freshness.agentStatus === 'online' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-100'}`}>Agente: {data.freshness.agentStatus || 'sem status'}</span><span className="rounded-full bg-slate-100 px-3 py-1.5 dark:bg-slate-800">Fonte: {data.freshness.lastSourceUpdate ? new Date(data.freshness.lastSourceUpdate).toLocaleString('pt-BR') : 'não informada'}</span><span className="rounded-full bg-slate-100 px-3 py-1.5 dark:bg-slate-800">Sincronização: {data.freshness.lastAgentSync ? new Date(data.freshness.lastAgentSync).toLocaleString('pt-BR') : 'não informada'}</span></div>}
+
+      <section className="mavo-card mt-6 p-5">
         <h2 className="font-bold text-slate-800 dark:text-slate-100">Pergunte sobre o negócio</h2>
         <form onSubmit={ask} className="mt-3 flex flex-col sm:flex-row gap-3">
           <input
@@ -194,15 +199,15 @@ const BusinessAnalytics: React.FC = () => {
             onChange={(event) => setQuery(event.target.value)}
             maxLength={500}
             placeholder="Ex.: Compare este mês com o período anterior"
-            className="flex-1 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-950 px-4 py-3"
+            className="mavo-field flex-1"
           />
-          <button disabled={querying} className="rounded-lg bg-blue-600 px-5 py-3 font-bold text-white disabled:opacity-50">
+          <button disabled={querying} className="mavo-button-primary">
             {querying ? 'Consultando...' : 'Consultar'}
           </button>
         </form>
-        {queryReply && <pre className="mt-4 whitespace-pre-wrap rounded-lg bg-slate-50 dark:bg-slate-950 p-4 text-sm text-slate-700 dark:text-slate-200">{queryReply}</pre>}
+        {queryReply && <pre role="status" className="mt-4 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm text-slate-700 dark:bg-slate-950 dark:text-slate-200">{queryReply}</pre>}
       </section>
-    </div>
+    </div></main>
   );
 };
 
