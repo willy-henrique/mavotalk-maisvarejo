@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { apiGet } from '../services/api';
+import { apiFetch, apiGet } from '../services/api';
 import { Dialog } from './ui/Dialog';
 
 type AuditItem = {
@@ -30,6 +30,7 @@ const BusinessAudit: React.FC = () => {
   const [selected, setSelected] = useState<AuditItem | null>(null);
   const [detail, setDetail] = useState<{ sanitizedInput: string | null; parameters: Record<string, unknown>; resultSummary: Record<string, unknown> } | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const pageSize = 25;
 
   const load = useCallback(async () => {
@@ -89,6 +90,33 @@ const BusinessAudit: React.FC = () => {
     }
   };
 
+  const exportAudit = async () => {
+    setExporting(true);
+    setError('');
+    try {
+      const params = new URLSearchParams({ format: 'csv' });
+      for (const [key, value] of Object.entries(appliedFilters)) if (value) params.set(key, value);
+      const response = await apiFetch(`/api/business/audit?${params.toString()}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error || 'Não foi possível exportar a auditoria.');
+      }
+      const blob = await response.blob();
+      const href = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = href;
+      anchor.download = 'auditoria-mavo-talk.csv';
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(href);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível exportar a auditoria.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <main className="mavo-page">
       <div className="mavo-page-content">
@@ -98,9 +126,14 @@ const BusinessAudit: React.FC = () => {
           <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Auditoria gerencial</h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Consultas pela UI, WhatsApp e MCP. Valores financeiros completos não são armazenados neste log.</p>
         </div>
-        <button type="button" onClick={() => void load()} disabled={loading} className="mavo-button-secondary">
-          {loading ? 'Atualizando...' : 'Atualizar'}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => void exportAudit()} disabled={exporting || loading} className="mavo-button-secondary">
+            {exporting ? 'Exportando...' : 'Exportar CSV'}
+          </button>
+          <button type="button" onClick={() => void load()} disabled={loading} className="mavo-button-secondary">
+            {loading ? 'Atualizando...' : 'Atualizar'}
+          </button>
+        </div>
       </div>
       <form onSubmit={applyFilters} className="mavo-card mb-5 grid gap-3 p-4 md:grid-cols-6">
         <label className="md:col-span-2"><span className="sr-only">Buscar auditoria</span><input value={query} onChange={(event) => setQuery(event.target.value)} className="mavo-field" placeholder="Buscar consulta, origem ou pessoa" /></label>

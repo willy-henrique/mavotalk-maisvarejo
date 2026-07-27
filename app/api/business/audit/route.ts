@@ -2,6 +2,17 @@ import { NextResponse } from "next/server";
 import { requireRole, requireSession } from "@/lib/api";
 import { queryTenantDatabase } from "@/lib/db";
 
+function maskPhone(phone: string | null) {
+  if (!phone) return null;
+  if (phone.length <= 4) return "••••";
+  return `${phone.slice(0, Math.min(3, phone.length - 4))}${"•".repeat(Math.max(4, phone.length - 7))}${phone.slice(-4)}`;
+}
+
+function csvCell(value: unknown) {
+  const text = String(value ?? "").replace(/\r?\n/g, " ");
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 export async function GET(request: Request) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
@@ -19,6 +30,7 @@ export async function GET(request: Request) {
   const origin = String(url.searchParams.get("origin") || "").trim().slice(0, 32);
   const from = String(url.searchParams.get("from") || "").trim();
   const to = String(url.searchParams.get("to") || "").trim();
+  const format = String(url.searchParams.get("format") || "").trim();
   const datePattern = /^\d{4}-\d{2}-\d{2}$/;
   const where = ["a.organization_id = $1"];
   const values: unknown[] = [auth.session.organizationId];
@@ -35,7 +47,7 @@ export async function GET(request: Request) {
   if (datePattern.test(from)) where.push(`a.created_at >= ${addValue(from)}::date`);
   if (datePattern.test(to)) where.push(`a.created_at < (${addValue(to)}::date + interval '1 day')`);
   const whereClause = where.join(" AND ");
-  const listValues = [...values, pageSize, offset];
+  const listValues = [...values, format === "csv" ? 10_000 : pageSize, format === "csv" ? 0 : offset];
   const [items, count] = await Promise.all([
     queryTenantDatabase<{
       id: string;
@@ -78,13 +90,12 @@ export async function GET(request: Request) {
       values,
     ),
   ]);
-  return NextResponse.json({
-    items: items.rows.map((row) => ({
+  const mappedItems = items.rows.map((row) => ({
       id: row.id,
       organizationId: row.organization_id,
       accessUserId: row.access_user_id,
       applicationUserId: row.application_user_id,
-      phoneNormalized: row.phone_normalized,
+      phoneNormalized: maskPhone(row.phone_normalized),
       actorName: row.actor_name,
       origin: row.origin,
       queryType: row.query_type,
@@ -92,7 +103,31 @@ export async function GET(request: Request) {
       errorCode: row.error_code,
       durationMs: row.duration_ms,
       createdAt: row.created_at.toISOString(),
-    })),
+    }));
+
+  if (format === "csv") {
+    const header = ["quando", "responsavel", "origem", "consulta", "estado", "codigo_erro", "duracao_ms"];
+    const rows = items.rows.map((row) => [
+      row.created_at.toISOString(),
+      row.actor_name || maskPhone(row.phone_normalized) || "Sistema",
+      row.origin,
+      row.query_type,
+      row.status,
+      row.error_code || "",
+      row.duration_ms,
+    ]);
+    const csv = `\uFEFF${[header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n")}\n`;
+    return new Response(csv, {
+      headers: {
+        "Content-Disposition": 'attachment; filename="auditoria-mavo-talk.csv"',
+        "Content-Type": "text/csv; charset=utf-8",
+        "Cache-Control": "no-store",
+      },
+    });
+  }
+
+  return NextResponse.json({
+    items: mappedItems,
     total: Number(count.rows[0]?.count || 0),
     page,
     pageSize,
