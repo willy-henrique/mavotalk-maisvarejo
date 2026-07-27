@@ -3,6 +3,7 @@ import { apiFetch, apiPost, apiPatch } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
 import { Pagination } from '../ui/Pagination';
+import { renderQuickReplyPreview } from '../../services/quickReplyPreview';
 
 type QuickReply = {
   id: string;
@@ -266,6 +267,11 @@ const QuickReplyManagement: React.FC = () => {
                     required
                   />
                 </div>
+                <section aria-live="polite" aria-label="Pré-visualização da resposta" className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 dark:border-blue-900/60 dark:bg-blue-950/20">
+                  <p className="text-xs font-bold uppercase tracking-wide text-blue-800 dark:text-blue-200">Pré-visualização</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-700 dark:text-slate-200">{formContent.trim() ? renderQuickReplyPreview(formContent) : 'Digite o conteúdo para visualizar a mensagem.'}</p>
+                  <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Exemplo local com dados fictícios; a mensagem real usa o contato e o atendimento atuais.</p>
+                </section>
                 <div>
                   <label htmlFor="quick-reply-category" className="block text-xs font-bold text-slate-500 uppercase mb-1">Categoria (opcional)</label>
                   <input
