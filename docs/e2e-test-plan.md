@@ -4,11 +4,13 @@ Data da inspeção: 2026-07-27.
 
 ## Estado atual
 
-Não existe configuração Playwright nem suíte E2E no repositório. Existem 71 testes unitários/integração estática, que passaram no ambiente Windows do checkout; eles não substituem navegação autenticada, browser real, Socket.IO ou isolamento entre tenants.
+Playwright está configurado no repositório com quatro projetos (desktop 1366×768, desktop 1920×1080, tablet e mobile 390×844). A suíte observa erros de console/JavaScript, HTTP relevante e requisições pendentes; trace e screenshot são mantidos somente em falha. Existem 77 testes unitários/integração locais, mas eles não substituem navegação autenticada, Socket.IO real ou isolamento A→B.
+
+Em 2026-07-27, o cenário anônimo de rota administrativa foi executado contra `https://mavo-talk-web.onrender.com`: as quatro dimensões confirmaram a tela de login e não expuseram conteúdo administrativo. A execução é marcada como falha pela observabilidade porque o deployment ainda emite `frame-ancestors` em uma meta CSP. A correção correspondente já existe no código-fonte e deve ser publicada antes da repetição.
 
 ## Configuração proposta
 
-- Adicionar Playwright no projeto raiz, com `QA_BASE_URL` obrigatório e `QA_EMAIL`/`QA_PASSWORD` apenas em ambiente local/CI secreto.
+- `QA_BASE_URL` define o alvo; `QA_EMAIL`/`QA_PASSWORD` ficam exclusivamente em ambiente local/CI secreto e habilitam os cenários autenticados.
 - Projetos: Chromium 1366x768, Chromium 1920x1080, tablet e mobile 390x844.
 - `storageState` separado por papel e tenant, criado por setup autenticado; não imprimir cookies, token ou senha.
 - Capturar `console.error`, `pageerror`, respostas 400/401/403/404/409/422/500 e requisições pendentes ao final de cada teste.

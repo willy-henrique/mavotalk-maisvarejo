@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 76/76 aprovados
+npm test               → 77/77 aprovados
 npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 ```
@@ -36,7 +36,7 @@ npm --prefix frontend run build → aprovado
 ## Limites conhecidos
 
 - A suíte E2E não é considerada aprovada enquanto estiver ignorada; faltam password, origem de API e tenants QA controlados.
-- A execução anônima contra o Render encontrou o aviso de console CSP da versão atualmente publicada. A causa foi corrigida no repositório (diretiva `frame-ancestors` removida da meta tag); é necessário publicar e repetir a execução para obter a evidência pós-deploy.
+- A execução anônima contra o Render alcançou a tela de login e não expôs conteúdo administrativo nas quatro dimensões, mas foi reprovada pela observabilidade devido ao aviso de console CSP da versão atualmente publicada. A causa foi corrigida no repositório (diretiva `frame-ancestors` removida da meta tag); é necessário publicar e repetir a execução para obter a evidência pós-deploy.
 - A validação de RLS foi estática/arquitetural nesta fase. O teste negativo integral A→B ainda requer dois tenants de QA controlados e credenciais locais para não tocar em dados de terceiros.
 - Ainda faltam cenários E2E para Inbox, multi-tenancy A→B, WhatsApp, agentes, auditoria e administração. O plano permanece em `docs/e2e-test-plan.md`.
 - “Menu do painel” ainda controla apenas visibilidade porque a matriz granular de leitura/criação/edição/exclusão/administrativa exige uma evolução de RBAC no backend, não uma alteração cosmética de UI.
