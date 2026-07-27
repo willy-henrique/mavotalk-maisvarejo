@@ -16,7 +16,8 @@ export function Dialog({ children, description, onClose, title }: DialogProps) {
 
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
-    const firstFocusable = containerRef.current?.querySelector<HTMLElement>(focusableSelector);
+    const firstFocusable = containerRef.current?.querySelector<HTMLElement>('[data-autofocus]')
+      ?? containerRef.current?.querySelector<HTMLElement>(focusableSelector);
     firstFocusable?.focus();
 
     const onKeyDown = (event: KeyboardEvent) => {
