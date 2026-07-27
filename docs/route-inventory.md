@@ -32,7 +32,7 @@ Data da inspeção: 2026-07-27.
 
 - A duplicidade entre `/business/sincronizacao` e `/admin/agentes` foi resolvida: a segunda URL redireciona para a canônica, mantendo compatibilidade.
 - O metadado de `/admin/menu-visibilidade` foi incluído no `AppHeader`; a tela não usa mais o fallback “Caixa de entrada”.
-- As rotas SPA não definem breadcrumbs nem atualizam o título da aba por rota.
+- O cabeçalho centraliza título, descrição, breadcrumb e título da aba por rota; novos caminhos devem entrar no mapa `pageMeta` de `AppHeader`.
 
 ## APIs por domínio
 
@@ -46,7 +46,7 @@ Data da inspeção: 2026-07-27.
 | Negócio | `/api/business/{analytics,audit,query}` | sessão, role e feature flags. |
 | Agentes | `/api/agent/v1/{config,heartbeat,sync/*}` | HMAC, nonce/timestamp e validação Zod; não cookie. |
 | Webhooks | `/api/webhooks/{twilio,n8n/ticket-upsert,cerebro/reply}` | assinatura Twilio ou token bearer específico; sem sessão de usuário. |
-| Master | `/api/mavo/{auth,overview,actions/sync-supermarket}` | autenticação master específica. |
+| Master | `/api/mavo/{auth,organizations,overview,actions/sync-supermarket}` | autenticação master específica; a organização solicitada é validada antes de leitura ou mutação. |
 | Saúde | `/api/health`, `/api/readiness` | públicos, sem dados operacionais. |
 
 ## Dados, estado e estilos
@@ -54,12 +54,12 @@ Data da inspeção: 2026-07-27.
 - Estado de sessão: `AuthService` + cookie no backend; tema: `ThemeProvider`; estados de página são locais aos componentes.
 - Serviços de HTTP: `frontend/services/api.ts`, com `credentials: include` e evento de sessão expirada em 401.
 - Tempo real: `socket.io-client` dentro do Inbox.
-- Estilos: Tailwind, com classes extensas dentro das telas. `frontend/index.css` possui somente base, foco, skeleton e scrollbar; não há tokens/componentes de design system.
+- Estilos: Tailwind, com migração incremental das telas. `frontend/index.css` centraliza tokens semânticos e primitives para página, card, botões, campos, foco, skeleton e scrollbar; componentes ainda usam classes locais onde a migração não terminou.
 - Erro global: `AppErrorBoundary`; telas têm tratamento de erro heterogêneo.
 
 ## Componentes duplicados ou acoplamentos
 
-- Botões, cards, filtros, inputs, tabelas, modais, empty states e badges são implementados por página, sem primitives compartilhadas.
+- `Dialog`, tokens e primitives de página/card/botão/campo já são compartilhados; filtros, tabelas, empty states e badges ainda possuem implementações por página e são o próximo alvo de consolidação.
 - `AgentsManagement` possui uma rota canônica; `/admin/agentes` é somente compatibilidade de URL.
 - `MENU_ITEMS` no backend e `menuItems` na sidebar são duas fontes que precisam permanecer manualmente sincronizadas.
 - A autorização simplificada da SPA (`permissionsForRole`) não é a matriz granular de permissão que o produto pede; a decisão efetiva precisa permanecer no servidor.

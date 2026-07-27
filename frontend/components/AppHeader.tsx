@@ -45,6 +45,10 @@ export default function AppHeader({ user, theme, onToggleTheme, onOpenMenu, onLo
   const canManageWhatsapp = user.role !== UserRole.AGENT;
 
   useEffect(() => {
+    document.title = `${meta.title} | Mavo Talk`;
+  }, [meta.title]);
+
+  useEffect(() => {
     const closeMenu = (event: MouseEvent | KeyboardEvent) => {
       if (event instanceof KeyboardEvent && event.key === 'Escape') {
         setUserMenuOpen(false);
@@ -67,7 +71,13 @@ export default function AppHeader({ user, theme, onToggleTheme, onOpenMenu, onLo
           <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5"><path d="M3.75 5.25a.75.75 0 0 0 0 1.5h16.5a.75.75 0 0 0 0-1.5H3.75Zm0 6a.75.75 0 0 0 0 1.5h16.5a.75.75 0 0 0 0-1.5H3.75Zm0 6a.75.75 0 0 0 0 1.5h16.5a.75.75 0 0 0 0-1.5H3.75Z" /></svg>
         </button>
         <div className="min-w-0">
-          <div className="mb-0.5 flex items-center gap-2 text-[10px] font-black uppercase tracking-[.16em] text-slate-400"><span className="hidden sm:inline">{meta.section}</span><span className="hidden h-1 w-1 rounded-full bg-slate-300 sm:inline" /><span className="truncate">Mavo Talk</span></div>
+          <nav aria-label="Breadcrumb" className="mb-0.5">
+            <ol className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[.16em] text-slate-400">
+              <li className="hidden sm:block">Mavo Talk</li>
+              <li className="hidden h-1 w-1 rounded-full bg-slate-300 sm:block" aria-hidden="true" />
+              <li className="truncate">{meta.section}</li>
+            </ol>
+          </nav>
           <h1 className="truncate text-base font-black tracking-tight text-slate-900 dark:text-white sm:text-lg">{meta.title}</h1>
           <p className="hidden truncate text-xs text-slate-500 dark:text-slate-400 lg:block">{meta.description}</p>
         </div>

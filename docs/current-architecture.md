@@ -25,7 +25,7 @@ Agentes locais ──HMAC/replay protection────────────�
 | Processo HTTP e tempo real | `server.cjs`, Socket.IO | Autentica o socket, resolve usuário/organização, entra apenas em `organization:<id>`. |
 | Dados | Postgres via `pg`; `lib/repo.ts` reexporta `lib/supabase-repo.ts` | Dados operacionais, configurações, auditoria, agentes e analytics. |
 | Isolamento secundário | `supabase/migrations/202607230004_rls_policies.sql` | RLS baseada em `app.organization_id`; `withTenantTransaction` configura o contexto transacional. |
-| Filas | BullMQ/Redis, `lib/queues.ts`, `worker.mjs` | Estrutura para SLA, webhook, limpeza de mídia e sync de agentes. |
+| Filas | BullMQ/Redis, `lib/queues.ts`, `worker.mjs` | SLA de primeira resposta é agendado e revalidado de forma idempotente; limpeza de mídia e sync de agentes usam a mesma infraestrutura. |
 | WhatsApp | Baileys e Twilio | Baileys é o padrão do Render; Twilio valida assinatura e resolve a organização pelo canal. |
 | Painel master | `app/mavo`, `components/mavo-admin.tsx` | Autenticação própria de plataforma, seletor de organização validado no servidor, visão e configuração do tenant selecionado. |
 
@@ -41,7 +41,7 @@ Agentes locais ──HMAC/replay protection────────────�
 
 - O repositório operacional recebe `organizationId` e filtra consultas por `organization_id`.
 - As migrations habilitam RLS para entidades multiempresa e definem políticas dependentes de `mavo_current_organization_id()`.
-- `withTenantTransaction` define `app.organization_id` dentro da transação. O módulo ainda possui `queryDatabase` genérico, usado por módulos que fazem filtro explícito por organização.
+- `withTenantTransaction` define `app.organization_id` dentro da transação; os fluxos administrativos críticos usam esse helper. O módulo ainda possui `queryDatabase` genérico em caminhos legados com filtro explícito por organização, que permanece item de migração e verificação dinâmica.
 - Configurações do supermercado são colunas da tabela `organizations`; `getSupermarketBotConfigForOrganization` é chamado antes de decidir respostas do bot. Não há Firestore no projeto.
 - A configuração de loja/assistente é, portanto, por organização e não fixa no código. Variáveis de ambiente continuam como fallback para bancos ainda não migrados.
 

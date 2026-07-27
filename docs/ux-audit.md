@@ -4,7 +4,7 @@ Data da inspeção: 2026-07-27. Avaliação estática baseada na SPA principal e
 
 ## Diagnóstico
 
-O produto já possui direção visual azul/verde e modo escuro, porém não possui design system. A experiência é inconsistente porque cada página decide seus próprios espaçamentos, densidade, títulos, botões, tabelas, estados vazios e modais. A consequência é uma plataforma que parece composta por telas independentes, em especial na administração.
+O produto possui direção visual azul/verde, modo escuro padrão e uma fundação de design system com tokens, `Dialog` acessível e primitives de página, card, botão e campo. A migração ainda é incremental: tabelas, filtros, badges e alguns estados continuam sendo definidos por tela, causando inconsistências residuais na administração.
 
 ## Achados priorizados
 
@@ -14,7 +14,7 @@ O produto já possui direção visual azul/verde e modo escuro, porém não poss
 | Resolvido | Duplicidade entre sincronização e agentes | `/admin/agentes` redireciona para a rota canônica `/business/sincronizacao`; a sidebar expõe uma única seção. |
 | Resolvido | Cabeçalho incorreto em Menu do painel | Metadado específico foi incluído no `AppHeader`; não há fallback de “Caixa de entrada”. |
 | Resolvido | Auditoria pouco utilizável | Filtros, paginação e ordenação server-side, detalhe acessível, contraste no tema escuro, mascaramento de telefone e exportação CSV limitada ao tenant. |
-| P2 | Sem primitives compartilhadas | Botões, cards, tabelas, modais e estados variam entre Equipe, Filas, Acessos, Agentes e Respostas rápidas. |
+| P2 | Primitives compartilhadas incompletas | Tokens, `Dialog`, páginas, cards, botões e campos foram centralizados; tabelas, filtros, badges e estados ainda variam entre Equipe, Filas, Acessos, Agentes e Respostas rápidas. |
 | P2 | Fluxos administrativos têm feedback desigual | Algumas ações têm loading/erro; outras não oferecem confirmação, prevenção uniforme de duplo envio, confirmação destrutiva ou aviso de alterações não salvas. Equipe e Filas agora expõem falhas de carregamento com tentativa novamente. |
 | P2 | Dashboard não cobre a operação declarada | Mostra cartões e volume por fila, mas faltam SLA próximo/vencido, TMR, primeira resposta, agentes online, falhas de integração e qualidade/frescor de dados. |
 | P2 | Acessibilidade de modais incompleta | Modais locais não têm focus trap, fechamento por Escape e restauração garantida de foco. |
