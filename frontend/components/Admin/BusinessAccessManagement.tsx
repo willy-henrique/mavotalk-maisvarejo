@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiGet, apiPatch, apiPost } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
+import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
 
 type Permission =
   | 'sales.read'
@@ -173,7 +174,7 @@ const BusinessAccessManagement: React.FC = () => {
         </button>
       </div>
 
-      {error && <div role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">{error}</div>}
+      {error && <ErrorState className="mb-5" description={error} action={<button type="button" onClick={() => void load()} disabled={loading || actionId !== null || saving} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
       {notice && <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">{notice}</div>}
       {showForm && (
         <Dialog title="Novo acesso gerencial" description="O PIN é usado como confirmação adicional no WhatsApp e nunca é exibido ou armazenado em texto puro." onClose={() => { if (!saving) setShowForm(false); }}>
@@ -238,9 +239,9 @@ const BusinessAccessManagement: React.FC = () => {
       )}
       {resetPinFor && <Dialog title={`Redefinir PIN de ${resetPinFor.name}`} description="Essa ação encerra as sessões gerenciais ativas desse número." onClose={() => { if (!saving) { setResetPinFor(null); setNewPin(''); } }}><form className="p-6" onSubmit={(event) => { event.preventDefault(); void resetPin(); }}><label className="text-sm font-bold text-slate-700 dark:text-slate-200">Novo PIN<input data-autofocus autoFocus required type="password" inputMode="numeric" minLength={6} maxLength={12} value={newPin} onChange={(event) => setNewPin(event.target.value.replace(/\D/g, ''))} placeholder="6 a 12 dígitos" className="mavo-field mt-1" /></label><div className="mt-5 flex justify-end gap-3"><button type="button" disabled={saving} onClick={() => { setResetPinFor(null); setNewPin(''); }} className="mavo-button-secondary">Cancelar</button><button disabled={saving} className="mavo-button-primary">{saving ? 'Atualizando...' : 'Atualizar PIN'}</button></div></form></Dialog>}
       {loading ? (
-        <div className="mavo-card py-12 text-center text-slate-500 dark:text-slate-400">Carregando acessos gerenciais...</div>
+        <LoadingState title="Carregando acessos gerenciais…" />
       ) : items.length === 0 ? (
-        <div className="mavo-card p-10 text-center"><p className="font-bold text-slate-800 dark:text-slate-100">Nenhum número gerencial autorizado.</p><p className="mx-auto mt-2 max-w-lg text-sm text-slate-500 dark:text-slate-400">Cadastre um responsável, defina as permissões e entregue o PIN por um canal seguro. O acesso não cria tickets nem consome o SLA de atendimento.</p><button type="button" onClick={() => setShowForm(true)} className="mavo-button-primary mt-5">Cadastrar primeiro acesso</button></div>
+        <EmptyState title="Nenhum número gerencial autorizado." description="Cadastre um responsável, defina as permissões e entregue o PIN por um canal seguro. O acesso não cria tickets nem consome o SLA de atendimento." action={<button type="button" onClick={() => setShowForm(true)} className="mavo-button-primary">Cadastrar primeiro acesso</button>} />
       ) : (
         <div className="mavo-card overflow-x-auto p-0">
           <table className="w-full text-left text-sm">

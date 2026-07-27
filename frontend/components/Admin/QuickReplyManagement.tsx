@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch, apiPost, apiPatch } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
+import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
 
 type QuickReply = {
   id: string;
@@ -168,19 +169,13 @@ const QuickReplyManagement: React.FC = () => {
         </button>
       </div>
 
-      {error && <div role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">{error}</div>}
+      {error && <ErrorState className="mb-5" description={error} action={<button type="button" onClick={() => void fetchItems()} disabled={loading} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
       {notice && <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">{notice}</div>}
 
       {loading ? (
-        <div className="mavo-card py-12 text-center text-slate-500 dark:text-slate-400">Carregando respostas rápidas...</div>
+        <LoadingState title="Carregando respostas rápidas…" />
       ) : items.length === 0 ? (
-        <div className="mavo-card p-10 text-center text-slate-500 dark:text-slate-400">
-          <p className="mb-2 font-bold text-slate-800 dark:text-slate-100">Nenhuma resposta rápida cadastrada.</p>
-          <p className="mb-4 text-sm">Crie atalhos consistentes para reduzir o tempo de resposta da equipe.</p>
-          <button type="button" onClick={openCreate} className="font-bold text-blue-600 hover:underline dark:text-blue-400">
-            Criar a primeira resposta rápida
-          </button>
-        </div>
+        <EmptyState title="Nenhuma resposta rápida cadastrada." description="Crie atalhos consistentes para reduzir o tempo de resposta da equipe." action={<button type="button" onClick={openCreate} className="mavo-button-primary">Criar a primeira resposta rápida</button>} />
       ) : (
         <div className="mavo-card overflow-x-auto p-0">
           <table className="w-full text-left">

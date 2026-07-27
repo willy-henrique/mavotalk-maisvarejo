@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 84/84 aprovados
+npm test               → 85/85 aprovados
 npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 npm run build           → aprovado (Next.js, 43 páginas/rotas geradas)
@@ -52,3 +52,4 @@ npm run render:validate → aprovado
 - Criação, edição e exclusão de respostas rápidas passaram a gerar auditoria por organização com nome/categoria ou campos alterados, sem persistir o conteúdo da mensagem na trilha.
 - Ações reveladas em hover de filas também se revelam por foco de teclado, e a SPA respeita `prefers-reduced-motion` para reduzir animações não essenciais.
 - O drawer de navegação em telas menores agora fecha com `Escape`, além do clique no overlay e da navegação por item.
+- Foram criados `LoadingState`, `EmptyState` e `ErrorState` compartilhados e aplicados em Indicadores do negócio, Contatos, Agentes, Acessos gerenciais e Respostas rápidas; as falhas dessas áreas agora oferecem repetição explícita.

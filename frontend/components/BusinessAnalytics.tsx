@@ -11,6 +11,7 @@ import {
   YAxis,
 } from 'recharts';
 import { apiGet, apiPost } from '../services/api';
+import { EmptyState, ErrorState, LoadingState } from './ui/PageState';
 
 type AnalyticsResponse = {
   period: { from: string; to: string; label: string };
@@ -100,17 +101,14 @@ const BusinessAnalytics: React.FC = () => {
         </label>
       </div>
 
-      {error && <div role="alert" className="mb-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">{error}</div>}
+      {error && <ErrorState className="mb-6" title="Não foi possível carregar os indicadores." description={error} action={<button type="button" onClick={() => void load()} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
       {loading ? (
-        <div className="mavo-card py-16 text-center text-slate-500 dark:text-slate-400">Carregando indicadores sincronizados...</div>
+        <LoadingState title="Carregando indicadores sincronizados…" />
       ) : !data?.summary.totals.hasData ? (
-        <div className="mavo-card p-10 text-center text-slate-500 dark:text-slate-400">
-          <p className="font-bold text-slate-800 dark:text-slate-100">Ainda não há dados sincronizados para este período.</p>
-          <p className="mt-2 text-sm">Verifique o agente de sincronização e o período selecionado antes de tomar decisões com estes indicadores.</p>
-          {data?.freshness.lastSourceUpdate && (
-            <div className="mt-3 text-sm">Última atualização da fonte: {new Date(data.freshness.lastSourceUpdate).toLocaleString('pt-BR')}</div>
-          )}
-        </div>
+        <EmptyState
+          title="Ainda não há dados sincronizados para este período."
+          description={<>{'Verifique o agente de sincronização e o período selecionado antes de tomar decisões com estes indicadores.'}{data?.freshness.lastSourceUpdate && <> Última atualização da fonte: {new Date(data.freshness.lastSourceUpdate).toLocaleString('pt-BR')}.</>}</>}
+        />
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-6">

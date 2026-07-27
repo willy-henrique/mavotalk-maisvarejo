@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiGet, apiPost } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
+import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
 
 type Agent = {
   id: string;
@@ -148,7 +149,7 @@ const AgentsManagement: React.FC = () => {
           {loading ? 'Atualizando...' : 'Atualizar'}
         </button>
       </div>
-      {error && <div role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300">{error}</div>}
+      {error && <ErrorState className="mb-5" description={error} action={<button type="button" onClick={() => void load()} disabled={loading || action !== null} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
       {credential && (
         <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-950">
           <p className="font-bold">Copie a credencial agora. O segredo não será exibido novamente.</p>
@@ -168,9 +169,9 @@ const AgentsManagement: React.FC = () => {
         <button disabled={action !== null} className="mavo-button-primary">{action === 'provision' ? 'Provisionando...' : 'Provisionar agente'}</button>
       </form>
       {loading ? (
-        <div className="py-12 text-slate-500">Carregando...</div>
+        <LoadingState title="Carregando agentes e instalações…" />
       ) : items.length === 0 ? (
-        <div className="mavo-card p-10 text-center text-slate-500 dark:text-slate-400"><p className="font-bold text-slate-800 dark:text-slate-100">Nenhum agente provisionado ainda.</p><p className="mt-2 text-sm">Crie uma instalação para sincronizar dados do ambiente da empresa com segurança.</p></div>
+        <EmptyState title="Nenhum agente provisionado ainda." description="Crie uma instalação para sincronizar dados do ambiente da empresa com segurança." />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80">
           <table className="w-full text-left text-sm">

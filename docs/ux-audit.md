@@ -14,7 +14,7 @@ O produto possui direção visual azul/verde, modo escuro padrão e uma fundaç�
 | Resolvido | Duplicidade entre sincronização e agentes | `/admin/agentes` redireciona para a rota canônica `/business/sincronizacao`; a sidebar expõe uma única seção. |
 | Resolvido | Cabeçalho incorreto em Menu do painel | Metadado específico foi incluído no `AppHeader`; não há fallback de “Caixa de entrada”. |
 | Resolvido | Auditoria pouco utilizável | Filtros, paginação e ordenação server-side, detalhe acessível, contraste no tema escuro, mascaramento de telefone e exportação CSV limitada ao tenant. |
-| P2 | Primitives compartilhadas incompletas | Tokens, `Dialog`, páginas, cards, botões e campos foram centralizados; tabelas, filtros, badges e estados ainda variam entre Equipe, Filas, Acessos, Agentes e Respostas rápidas. |
+| P2 | Primitives compartilhadas incompletas | Tokens, `Dialog`, páginas, cards, botões, campos e estados de loading/vazio/erro foram centralizados; tabelas, filtros e badges ainda variam entre Equipe, Filas, Acessos, Agentes e Respostas rápidas. |
 | P2 | Fluxos administrativos têm feedback desigual | Algumas ações têm loading/erro; outras não oferecem confirmação, prevenção uniforme de duplo envio, confirmação destrutiva ou aviso de alterações não salvas. Equipe e Filas agora expõem falhas de carregamento com tentativa novamente. |
 | P2 | Dashboard não cobre a operação declarada | Mostra cartões e volume por fila, mas faltam SLA próximo/vencido, TMR, primeira resposta, agentes online, falhas de integração e qualidade/frescor de dados. |
 | P2 | Acessibilidade de modais incompleta | Modais locais não têm focus trap, fechamento por Escape e restauração garantida de foco. |

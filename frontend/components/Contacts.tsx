@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, apiPatch, apiPost } from '../services/api';
 import { Dialog } from './ui/Dialog';
+import { EmptyState, ErrorState } from './ui/PageState';
 
 type ApiContact = {
   id: string;
@@ -98,14 +99,14 @@ const Contacts: React.FC = () => {
         <p className="text-sm text-slate-500 dark:text-slate-400">{contacts.length} contato{contacts.length === 1 ? '' : 's'} com histórico no Mavo.</p>
         <button type="button" onClick={() => void fetchContacts()} disabled={loading} className="mavo-button-secondary">{loading ? 'Atualizando...' : 'Atualizar lista'}</button>
       </div>
-      {error && <div role="alert" className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200">{error}</div>}
+      {error && <ErrorState className="mb-5" description={error} action={<button type="button" onClick={() => void fetchContacts()} disabled={loading} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
       {notice && <div role="status" className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">{notice}</div>}
       <label className="mb-6 block max-w-xl"><span className="sr-only">Buscar contatos</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome ou telefone" className="mavo-field" /></label>
 
       {loading ? (
         <div className="grid gap-3"><div className="h-16 rounded-2xl skeleton" /><div className="h-16 rounded-2xl skeleton" /><div className="h-16 rounded-2xl skeleton" /></div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-12 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900">Nenhum contato encontrado com este filtro.</div>
+        <EmptyState title="Nenhum contato encontrado com este filtro." description={search ? 'Altere a busca ou limpe o filtro para ver todos os contatos disponíveis.' : 'Os contatos aparecerão aqui depois do primeiro atendimento.'} />
       ) : (
         <div className="mavo-card overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
