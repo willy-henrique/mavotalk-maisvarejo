@@ -500,6 +500,10 @@ export function MavoAdminPanel({
                 <label className="master-config-field"><span>Link do mapa</span><input type="url" value={settingsDraft.mapsUrl} onChange={(event) => setSettingsDraft((value) => ({ ...value, mapsUrl: event.target.value }))} placeholder="https://maps.google.com/..." /></label>
                 <label className="master-config-field"><span>Telefone</span><input value={settingsDraft.phone} onChange={(event) => setSettingsDraft((value) => ({ ...value, phone: event.target.value }))} placeholder="(00) 0000-0000" /></label>
               </div>
+              <aside className="master-bot-preview" aria-live="polite">
+                <span>Prévia da saudação no WhatsApp</span>
+                <p>Eu sou a <strong>{settingsDraft.botName.trim() || "Mavo"}</strong>, assistente virtual do <strong>{settingsDraft.storeName.trim() || "seu supermercado"}</strong>.</p>
+              </aside>
             </div>
 
             <div className="master-config-card offer-config-card">
