@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const {
   configuredOrigins,
   isAllowedRequestOrigin,
+  rejectsCookieMutationWithoutOrigin,
 }: {
   configuredOrigins(environment: NodeJS.ProcessEnv): string[];
   isAllowedRequestOrigin(
@@ -13,6 +14,12 @@ const {
     allowedOrigins: string[],
     headers: Record<string, string>,
   ): boolean;
+  rejectsCookieMutationWithoutOrigin(input: {
+    method?: string;
+    origin?: string;
+    cookie?: string;
+    path?: string;
+  }): boolean;
 } = require("../../lib/config/cors.cjs");
 
 test("inclui frontend e a URL pública da própria API nas origens", () => {
@@ -49,6 +56,36 @@ test("permite a própria origem recebida pelo proxy sem liberar terceiros", () =
       ["https://mavo-talk-web.onrender.com"],
       headers,
     ),
+    false,
+  );
+});
+
+test("recusa mutação autenticada sem Origin e preserva integrações sem cookie", () => {
+  assert.equal(
+    rejectsCookieMutationWithoutOrigin({
+      method: "POST",
+      origin: "",
+      cookie: "willtalk_session=token",
+      path: "/api/queues",
+    }),
+    true,
+  );
+  assert.equal(
+    rejectsCookieMutationWithoutOrigin({
+      method: "POST",
+      origin: "",
+      cookie: "",
+      path: "/api/webhooks/twilio",
+    }),
+    false,
+  );
+  assert.equal(
+    rejectsCookieMutationWithoutOrigin({
+      method: "GET",
+      origin: "",
+      cookie: "willtalk_session=token",
+      path: "/api/queues",
+    }),
     false,
   );
 });

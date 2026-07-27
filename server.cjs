@@ -12,6 +12,7 @@ const {
 const {
   configuredOrigins,
   isAllowedRequestOrigin,
+  rejectsCookieMutationWithoutOrigin,
 } = require("./lib/config/cors.cjs");
 
 function parseCookies(value) {
@@ -54,6 +55,18 @@ app
         allowedOrigins,
         req.headers,
       );
+      if (
+        rejectsCookieMutationWithoutOrigin({
+          method: req.method,
+          origin,
+          cookie: req.headers.cookie,
+          path: req.url,
+        })
+      ) {
+        res.writeHead(403, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Origem obrigatória para esta operação" }));
+        return;
+      }
       if (origin && originAllowed) {
         res.setHeader("Access-Control-Allow-Origin", origin);
         res.setHeader("Access-Control-Allow-Credentials", "true");
