@@ -1326,8 +1326,12 @@ const RESOLVE_ORG_ID_CACHE_MS = 60_000;
  * cada build) e por scripts de seed rodados manualmente (ex.: seed-supabase.mjs).
  * Se esses dois pontos divergirem, mensagens do WhatsApp são gravadas sob uma
  * organização diferente da que o usuário logado enxerga — o ticket nunca aparece
- * no inbox, mesmo com o WhatsApp conectado. Quando isso acontece e só existe UMA
- * organização real no banco, autocorrigimos para ela e avisamos alto no log.
+ * no inbox, mesmo com o WhatsApp conectado. O bootstrap cria a organização com
+ * `ON CONFLICT DO NOTHING`, então uma execução antiga com outro valor de
+ * DEFAULT_ORG_ID deixa uma organização "órfã" sem usuário nenhum — por isso o
+ * sinal mais confiável não é "só existe uma organização", e sim "só uma
+ * organização tem usuários cadastrados". Quando o candidato não é essa
+ * organização, autocorrigimos e avisamos alto no log.
  */
 export async function resolveDefaultOrganizationId(candidateOrgId: string): Promise<string> {
   const now = Date.now();
@@ -1335,19 +1339,32 @@ export async function resolveDefaultOrganizationId(candidateOrgId: string): Prom
     return resolvedOrgIdCache.value;
   }
 
-  const { data, error } = await supa().from("organizations").select("id");
-  if (error || !data) {
+  const [orgsResult, usersResult] = await Promise.all([
+    supa().from("organizations").select("id"),
+    supa().from("users").select("organization_id"),
+  ]);
+  if (orgsResult.error || !orgsResult.data) {
     logger.error(
-      { err: error, candidateOrgId },
+      { err: orgsResult.error, candidateOrgId },
       "resolveDefaultOrganizationId: falha ao listar organizations; mantendo valor configurado",
     );
     return candidateOrgId;
   }
 
-  const knownOrgIds = data.map((row) => String(row.id));
+  const knownOrgIds = orgsResult.data.map((row) => String(row.id));
+  const orgsWithUsers = Array.from(
+    new Set((usersResult.data ?? []).map((row) => String(row.organization_id))),
+  );
+
   let resolved = candidateOrgId;
-  if (!knownOrgIds.includes(candidateOrgId)) {
-    if (knownOrgIds.length === 1) {
+  if (!orgsWithUsers.includes(candidateOrgId)) {
+    if (orgsWithUsers.length === 1) {
+      resolved = orgsWithUsers[0];
+      logger.error(
+        { configuredOrgId: candidateOrgId, actualOrgId: resolved },
+        "DEFAULT_ORG_ID aponta para uma organizacao sem usuarios cadastrados; usando a unica organizacao que possui usuarios. Corrija a variavel de ambiente DEFAULT_ORG_ID para eliminar este aviso.",
+      );
+    } else if (!knownOrgIds.includes(candidateOrgId) && knownOrgIds.length === 1) {
       resolved = knownOrgIds[0];
       logger.error(
         { configuredOrgId: candidateOrgId, actualOrgId: resolved },
@@ -1355,8 +1372,8 @@ export async function resolveDefaultOrganizationId(candidateOrgId: string): Prom
       );
     } else {
       logger.error(
-        { configuredOrgId: candidateOrgId, knownOrgIds },
-        "DEFAULT_ORG_ID nao corresponde a nenhuma organizacao existente e ha multiplas organizacoes no banco; nao foi possivel autocorrigir. Mensagens do WhatsApp podem ficar invisiveis no painel ate a variavel ser corrigida manualmente.",
+        { configuredOrgId: candidateOrgId, knownOrgIds, orgsWithUsers },
+        "DEFAULT_ORG_ID pode estar incorreto e nao foi possivel autocorrigir com seguranca (organizacoes ambiguas). Mensagens do WhatsApp podem ficar invisiveis no painel ate a variavel ser corrigida manualmente.",
       );
     }
   }
