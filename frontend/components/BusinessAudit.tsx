@@ -24,9 +24,10 @@ const BusinessAudit: React.FC = () => {
   const [query, setQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [originFilter, setOriginFilter] = useState('');
+  const [sort, setSort] = useState('recent');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [appliedFilters, setAppliedFilters] = useState({ query: '', status: '', origin: '', from: '', to: '' });
+  const [appliedFilters, setAppliedFilters] = useState({ query: '', status: '', origin: '', sort: 'recent', from: '', to: '' });
   const [selected, setSelected] = useState<AuditItem | null>(null);
   const [detail, setDetail] = useState<{ sanitizedInput: string | null; parameters: Record<string, unknown>; resultSummary: Record<string, unknown> } | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -54,6 +55,7 @@ const BusinessAudit: React.FC = () => {
   }, [load]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const hasAppliedFilters = Boolean(appliedFilters.query || appliedFilters.status || appliedFilters.origin || appliedFilters.from || appliedFilters.to || appliedFilters.sort !== 'recent');
   const rangeLabel = useMemo(() => {
     if (!total || !items.length) return 'Nenhum evento';
     const first = (page - 1) * pageSize + 1;
@@ -70,12 +72,13 @@ const BusinessAudit: React.FC = () => {
   const applyFilters = (event: React.FormEvent) => {
     event.preventDefault();
     setPage(1);
-    setAppliedFilters({ query: query.trim(), status: statusFilter, origin: originFilter, from, to });
+    setAppliedFilters({ query: query.trim(), status: statusFilter, origin: originFilter, sort, from, to });
   };
 
   const clearFilters = () => {
     setQuery(''); setStatusFilter(''); setOriginFilter(''); setFrom(''); setTo('');
-    setPage(1); setAppliedFilters({ query: '', status: '', origin: '', from: '', to: '' });
+    setSort('recent');
+    setPage(1); setAppliedFilters({ query: '', status: '', origin: '', sort: 'recent', from: '', to: '' });
   };
 
   const openDetail = async (item: AuditItem) => {
@@ -135,12 +138,13 @@ const BusinessAudit: React.FC = () => {
           </button>
         </div>
       </div>
-      <form onSubmit={applyFilters} className="mavo-card mb-5 grid gap-3 p-4 md:grid-cols-6">
+      <form onSubmit={applyFilters} className="mavo-card mb-5 grid gap-3 p-4 md:grid-cols-7">
         <label className="md:col-span-2"><span className="sr-only">Buscar auditoria</span><input value={query} onChange={(event) => setQuery(event.target.value)} className="mavo-field" placeholder="Buscar consulta, origem ou pessoa" /></label>
         <label><span className="sr-only">Estado</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mavo-field"><option value="">Todos os estados</option><option value="success">Sucesso</option><option value="empty">Sem resultado</option><option value="denied">Negado</option><option value="failed">Falha</option></select></label>
         <label><span className="sr-only">Origem</span><select value={originFilter} onChange={(event) => setOriginFilter(event.target.value)} className="mavo-field"><option value="">Todas as origens</option><option value="ui">Painel</option><option value="whatsapp">WhatsApp</option><option value="mcp">MCP</option></select></label>
+        <label><span className="sr-only">Ordenação</span><select aria-label="Ordenação" value={sort} onChange={(event) => setSort(event.target.value)} className="mavo-field"><option value="recent">Mais recentes</option><option value="oldest">Mais antigos</option><option value="duration_desc">Maior duração</option><option value="duration_asc">Menor duração</option></select></label>
         <label><span className="sr-only">Data inicial</span><input aria-label="Data inicial" type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="mavo-field" /></label>
-        <div className="flex gap-2"><label className="min-w-0 flex-1"><span className="sr-only">Data final</span><input aria-label="Data final" type="date" value={to} onChange={(event) => setTo(event.target.value)} className="mavo-field" /></label><button className="mavo-button-primary px-3" type="submit">Filtrar</button>{Object.values(appliedFilters).some(Boolean) && <button className="mavo-button-secondary px-3" type="button" onClick={clearFilters}>Limpar</button>}</div>
+        <div className="flex gap-2"><label className="min-w-0 flex-1"><span className="sr-only">Data final</span><input aria-label="Data final" type="date" value={to} onChange={(event) => setTo(event.target.value)} className="mavo-field" /></label><button className="mavo-button-primary px-3" type="submit">Filtrar</button>{hasAppliedFilters && <button className="mavo-button-secondary px-3" type="button" onClick={clearFilters}>Limpar</button>}</div>
       </form>
       {error && <div role="alert" className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300"><span>{error}</span><button type="button" onClick={() => void load()} className="font-bold underline">Tentar novamente</button></div>}
       {loading ? (

@@ -10,4 +10,7 @@ test("exportação da auditoria preserva escopo do tenant e mascara telefone", a
   assert.match(source, /Content-Disposition/);
   assert.match(source, /maskPhone\(row\.phone_normalized\)/);
   assert.match(source, /10_000/);
+  assert.match(source, /const orderBy = \{/);
+  assert.match(source, /recent: "a\.created_at DESC"/);
+  assert.match(source, /ORDER BY \$\{orderBy\}/);
 });

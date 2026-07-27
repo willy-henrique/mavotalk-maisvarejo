@@ -13,7 +13,7 @@ O produto já possui direção visual azul/verde e modo escuro, porém não poss
 | P1 | SLA não é acionado nem processado | `enqueueSlaCheck` não possui chamadores; worker só escreve log. A operação não recebe ação quando prazo vence. |
 | Resolvido | Duplicidade entre sincronização e agentes | `/admin/agentes` redireciona para a rota canônica `/business/sincronizacao`; a sidebar expõe uma única seção. |
 | Resolvido | Cabeçalho incorreto em Menu do painel | Metadado específico foi incluído no `AppHeader`; não há fallback de “Caixa de entrada”. |
-| Resolvido | Auditoria pouco utilizável | Filtros e paginação server-side, detalhe acessível, contraste no tema escuro, mascaramento de telefone e exportação CSV limitada ao tenant. |
+| Resolvido | Auditoria pouco utilizável | Filtros, paginação e ordenação server-side, detalhe acessível, contraste no tema escuro, mascaramento de telefone e exportação CSV limitada ao tenant. |
 | P2 | Sem primitives compartilhadas | Botões, cards, tabelas, modais e estados variam entre Equipe, Filas, Acessos, Agentes e Respostas rápidas. |
 | P2 | Fluxos administrativos têm feedback desigual | Algumas ações têm loading/erro; outras não oferecem confirmação, prevenção uniforme de duplo envio, confirmação destrutiva ou aviso de alterações não salvas. |
 | P2 | Dashboard não cobre a operação declarada | Mostra cartões e volume por fila, mas faltam SLA próximo/vencido, TMR, primeira resposta, agentes online, falhas de integração e qualidade/frescor de dados. |

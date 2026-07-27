@@ -31,6 +31,13 @@ export async function GET(request: Request) {
   const from = String(url.searchParams.get("from") || "").trim();
   const to = String(url.searchParams.get("to") || "").trim();
   const format = String(url.searchParams.get("format") || "").trim();
+  const sort = String(url.searchParams.get("sort") || "recent").trim();
+  const orderBy = {
+    recent: "a.created_at DESC",
+    oldest: "a.created_at ASC",
+    duration_desc: "a.duration_ms DESC, a.created_at DESC",
+    duration_asc: "a.duration_ms ASC, a.created_at DESC",
+  }[sort] || "a.created_at DESC";
   const datePattern = /^\d{4}-\d{2}-\d{2}$/;
   const where = ["a.organization_id = $1"];
   const values: unknown[] = [auth.session.organizationId];
@@ -75,7 +82,7 @@ export async function GET(request: Request) {
            ON u.id = a.application_user_id
           AND u.organization_id = a.organization_id
         WHERE ${whereClause}
-        ORDER BY a.created_at DESC
+        ORDER BY ${orderBy}
         LIMIT $${listValues.length - 1} OFFSET $${listValues.length}`,
       auth.session.organizationId,
       listValues,

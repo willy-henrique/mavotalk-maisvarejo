@@ -15,7 +15,7 @@ Data: 2026-07-27.
 - A sidebar apresenta uma única entrada “Agentes e sincronização”; `/admin/agentes` redireciona para `/business/sincronizacao` para preservar compatibilidade sem duplicar a experiência.
 - A área unificada de agentes agora expõe logs recentes por instalação, sempre filtrados pela organização da sessão; IP de origem permanece mascarado/ausente da interface.
 - As consultas de auditoria, agentes, configurações do bot/supermercado, visibilidade do menu, indicadores do negócio e acessos gerenciais passaram a executar no contexto RLS estrito da organização. O filtro explícito por `organization_id` permanece como defesa adicional.
-- A auditoria gerencial ganhou filtros server-side, paginação, detalhe em drawer, exportação CSV limitada a 10 mil registros filtrados e remoção do identificador técnico de tenant da tabela principal. Telefones sem nome associado são mascarados inclusive na exportação.
+- A auditoria gerencial ganhou filtros, paginação e ordenação server-side, detalhe em drawer, exportação CSV limitada a 10 mil registros filtrados e remoção do identificador técnico de tenant da tabela principal. Telefones sem nome associado são mascarados inclusive na exportação.
 - O dashboard operacional passou a calcular SLA próximo/vencido, resolução média, agentes online e frescor da última sincronização diretamente dos dados persistidos.
 - O menu de usuário no topo passou a funcionar por clique, com `aria-expanded`, fechamento por Escape e clique externo.
 - Contatos, equipe, respostas rápidas, filas/automações, acessos gerenciais e central de conexão foram migrados gradualmente para os mesmos tokens de página, cards, botões e campos; o tema escuro deixa de depender de estilos específicos de cada tela.
