@@ -70,6 +70,7 @@ export async function GET(request: Request) {
       created_at: Date;
       actor_name: string | null;
     }>(
+      auth.session.organizationId,
       `SELECT a.id, a.organization_id, a.access_user_id, a.application_user_id,
               a.phone_normalized, a.origin, a.query_type, a.status,
               a.error_code, a.duration_ms, a.created_at,
@@ -84,16 +85,15 @@ export async function GET(request: Request) {
         WHERE ${whereClause}
         ORDER BY ${orderBy}
         LIMIT $${listValues.length - 1} OFFSET $${listValues.length}`,
-      auth.session.organizationId,
       listValues,
     ),
     queryTenantDatabase<{ count: string }>(
+      auth.session.organizationId,
       `SELECT COUNT(*)::text AS count
          FROM business_query_audit a
          LEFT JOIN business_access_users bau ON bau.id = a.access_user_id AND bau.organization_id = a.organization_id
          LEFT JOIN users u ON u.id = a.application_user_id AND u.organization_id = a.organization_id
         WHERE ${whereClause}`,
-      auth.session.organizationId,
       values,
     ),
   ]);
