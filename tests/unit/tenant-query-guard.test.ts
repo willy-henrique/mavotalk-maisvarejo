@@ -5,13 +5,14 @@ import { readFile } from "node:fs/promises";
 const read = (path: string) => readFile(path, "utf8");
 
 test("consultas administrativas críticas executam com contexto RLS do tenant", async () => {
-  const [db, audit, auditDetail, agents, menuSettings, supermarketSettings] = await Promise.all([
+  const [db, audit, auditDetail, agents, menuSettings, supermarketSettings, analytics] = await Promise.all([
     read("lib/db.ts"),
     read("app/api/business/audit/route.ts"),
     read("app/api/business/audit/[id]/route.ts"),
     read("lib/agent-cloud/agent-repository.ts"),
     read("lib/menu-settings.ts"),
     read("lib/supermarket-settings.ts"),
+    read("lib/business-analytics/business-analytics-service.ts"),
   ]);
   assert.match(db, /function queryTenantDatabase/);
   assert.match(db, /withTenantTransaction\(organizationId/);
@@ -23,4 +24,6 @@ test("consultas administrativas críticas executam com contexto RLS do tenant", 
   assert.doesNotMatch(menuSettings, /queryDatabase/);
   assert.match(supermarketSettings, /queryTenantDatabase/);
   assert.doesNotMatch(supermarketSettings, /queryDatabase/);
+  assert.match(analytics, /queryTenantDatabase/);
+  assert.doesNotMatch(analytics, /queryDatabase/);
 });

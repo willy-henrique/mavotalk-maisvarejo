@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { queryDatabase } from "@/lib/db";
+import { queryTenantDatabase } from "@/lib/db";
 import { assertBusinessPermission } from "@/lib/business-access/business-permissions";
 import { daysInPeriod } from "@/lib/business-analytics/business-period-parser";
 import { averagePerCalendarDay } from "@/lib/business-analytics/business-calculations";
@@ -49,7 +49,8 @@ async function auditQuery(input: {
   errorCode?: string;
   resultSummary?: Record<string, unknown>;
 }): Promise<void> {
-  await queryDatabase(
+  await queryTenantDatabase(
+    input.context.organizationId,
     `INSERT INTO business_query_audit (
        id, organization_id, access_user_id, application_user_id,
        phone_normalized, conversation_reference, origin, query_type,
@@ -136,7 +137,7 @@ async function salesTotalsQuery(
   organizationId: string,
   period: BusinessPeriod,
 ): Promise<SalesTotals> {
-  const result = await queryDatabase<{
+  const result = await queryTenantDatabase<{
     gross_total: string | null;
     net_total: string | null;
     discount_total: string | null;
@@ -145,6 +146,7 @@ async function salesTotalsQuery(
     items_quantity: string | null;
     synchronized_days: string;
   }>(
+    organizationId,
     `SELECT COALESCE(SUM(gross_total), 0)::text AS gross_total,
             COALESCE(SUM(net_total), 0)::text AS net_total,
             COALESCE(SUM(discount_total), 0)::text AS discount_total,
@@ -252,7 +254,8 @@ export class BusinessAnalyticsService {
         assertBusinessPermission(context.permissions, "finance.read");
         const [totals, synchronized] = await Promise.all([
           salesTotalsQuery(context.organizationId, period),
-          queryDatabase<{ count: string }>(
+          queryTenantDatabase<{ count: string }>(
+            context.organizationId,
             `SELECT COUNT(*)::text AS count
                FROM business_sales_daily
               WHERE organization_id = $1
@@ -288,12 +291,13 @@ export class BusinessAnalyticsService {
       parameters: { limit: limited(limit, 20) },
       execute: async () => {
         assertBusinessPermission(context.permissions, "finance.read");
-        const result = await queryDatabase<{
+        const result = await queryTenantDatabase<{
           sale_date: Date | string;
           net_total: string;
           gross_total: string;
           sales_count: number;
         }>(
+          context.organizationId,
           `SELECT sale_date, net_total::text, gross_total::text, sales_count
              FROM business_sales_daily
             WHERE organization_id = $1
@@ -328,11 +332,12 @@ export class BusinessAnalyticsService {
       sanitizedInput,
       execute: async () => {
         assertBusinessPermission(context.permissions, "finance.read");
-        const result = await queryDatabase<{
+        const result = await queryTenantDatabase<{
           weekday: number;
           net_total: string;
           sales_count: string;
         }>(
+          context.organizationId,
           `SELECT EXTRACT(DOW FROM sale_date)::int AS weekday,
                   SUM(net_total)::text AS net_total,
                   SUM(sales_count)::text AS sales_count
@@ -401,13 +406,14 @@ export class BusinessAnalyticsService {
       parameters: { limit },
       execute: async () => {
         assertBusinessPermission(context.permissions, "sales.read");
-        const result = await queryDatabase<{
+        const result = await queryTenantDatabase<{
           product_id: string;
           sku: string | null;
           product_name: string;
           quantity: string;
           net_total: string;
         }>(
+          context.organizationId,
           `WITH catalog AS (
              SELECT DISTINCT ON (product_id)
                     product_id, sku, product_name
@@ -461,13 +467,14 @@ export class BusinessAnalyticsService {
       parameters: { limit: limited(limit) },
       execute: async () => {
         assertBusinessPermission(context.permissions, "inventory.read");
-        const result = await queryDatabase<{
+        const result = await queryTenantDatabase<{
           product_id: string;
           sku: string | null;
           product_name: string;
           quantity_entered: string;
           total_cost: string | null;
         }>(
+          context.organizationId,
           `SELECT product_id, MAX(sku) AS sku, MAX(product_name) AS product_name,
                   SUM(quantity_entered)::text AS quantity_entered,
                   CASE WHEN COUNT(total_cost) = 0 THEN NULL
@@ -545,11 +552,12 @@ export class BusinessAnalyticsService {
       queryType: "data_freshness",
       execute: async () => {
         assertBusinessPermission(context.permissions, "sales.read");
-        const result = await queryDatabase<{
+        const result = await queryTenantDatabase<{
           last_source_update: Date | null;
           last_agent_sync: Date | null;
           agent_status: string | null;
         }>(
+          context.organizationId,
           `SELECT (
                     SELECT MAX(source_updated_at)
                       FROM business_sales_daily
