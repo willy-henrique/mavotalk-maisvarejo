@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireMenuPermission, requireSession } from "@/lib/api";
-import { checkDatabaseConnection, queryDatabase } from "@/lib/db";
+import { checkDatabaseConnection, queryTenantDatabase } from "@/lib/db";
 import { checkRedisConnection } from "@/lib/redis";
 import { getWhatsappState } from "@/lib/whatsapp-client";
 
@@ -15,11 +15,12 @@ export async function GET() {
   const [database, redis, agents] = await Promise.all([
     checkDatabaseConnection(),
     checkRedisConnection(),
-    queryDatabase<{
+    queryTenantDatabase<{
       last_sync_at: Date | null;
       last_heartbeat_at: Date | null;
       active_agents: string;
     }>(
+      auth.session.organizationId,
       `SELECT MAX(last_sync_at) AS last_sync_at,
               MAX(last_heartbeat_at) AS last_heartbeat_at,
               COUNT(*) FILTER (WHERE revoked_at IS NULL)::text AS active_agents
