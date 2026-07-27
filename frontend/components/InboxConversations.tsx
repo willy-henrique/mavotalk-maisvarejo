@@ -78,6 +78,24 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const [linkTitle, setLinkTitle] = useState('');
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const selectConversation = useCallback((id: string) => {
+    setSelectedId(id);
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('conversation', id);
+      return next;
+    });
+  }, [setSearchParams]);
+
+  const clearSelectedConversation = useCallback(() => {
+    setSelectedId(null);
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.delete('conversation');
+      return next;
+    });
+  }, [setSearchParams]);
+
   const didInitRef = useRef(false);
   const fetchInFlightRef = useRef(false);
 
@@ -121,12 +139,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
       prev.map((c) => (c.id === id ? { ...c, status: 'encerrado' as const } : c))
     );
     if (wasSelected) {
-      setSelectedId(null);
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete('conversation');
-        return next;
-      });
+      clearSelectedConversation();
     }
     setClosing(true);
     setOperationError('');
@@ -374,14 +387,9 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   // Na aba Abertas, não manter conversa encerrada selecionada — só em Resolvidos
   useEffect(() => {
     if (tabAbertas === 'abertas' && selected?.status === 'encerrado') {
-      setSelectedId(null);
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        next.delete('conversation');
-        return next;
-      });
+      clearSelectedConversation();
     }
-  }, [tabAbertas, selected?.id, selected?.status, setSearchParams]);
+  }, [clearSelectedConversation, tabAbertas, selected?.id, selected?.status]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -462,7 +470,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     setAssigning(true);
     setOperationError('');
     const previousSelected = selectedId;
-    setSelectedId(id);
+    selectConversation(id);
     // Otimismo: marca como em_atendimento imediatamente
     setConversations((prev) =>
       prev.map((c) => (c.id === id ? { ...c, status: 'em_atendimento' as ConversationStatus } : c)),
@@ -476,7 +484,8 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
       setConversations((prev) =>
         prev.map((c) => (c.id === id ? { ...c, status: 'aguardando' as ConversationStatus } : c)),
       );
-      setSelectedId(previousSelected);
+      if (previousSelected) selectConversation(previousSelected);
+      else clearSelectedConversation();
     } finally {
       setAssigning(false);
     }
@@ -631,8 +640,13 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                   data-conversation-id={c.id}
                   role="button"
                   tabIndex={0}
-                  onClick={() => setSelectedId(c.id)}
-                  onKeyDown={(e) => e.key === 'Enter' && setSelectedId(c.id)}
+                  onClick={() => selectConversation(c.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      selectConversation(c.id);
+                    }
+                  }}
                   className={`w-full text-left p-4 hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-all relative border-l-4 cursor-pointer ${
                     isSelected ? 'bg-blue-50 dark:bg-blue-600/20 border-blue-500' : 'border-transparent hover:border-slate-300 dark:hover:border-slate-600'
                   }`}
@@ -737,7 +751,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
               <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
                 <button
                   type="button"
-                  onClick={() => setSelectedId(null)}
+                  onClick={clearSelectedConversation}
                   aria-label="Voltar para conversas"
                   className="md:hidden shrink-0 p-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700"
                 >

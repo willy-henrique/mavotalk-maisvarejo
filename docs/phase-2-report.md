@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 79/79 aprovados
+npm test               → 80/80 aprovados
 npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 ```
@@ -43,3 +43,4 @@ npm --prefix frontend run build → aprovado
 - A página de filas ainda não dispõe de modelo persistido para prioridade, horário, overflow, atendentes e reordenação drag-and-drop. Esses campos não foram simulados no frontend.
 - Equipe agora registra e exibe o último login com escopo de tenant. Convites e filas associadas ainda exigem modelagem/endpoints antes de serem exibidos como informação real.
 - O painel master passou a permitir seleção de organização somente sob sessão de plataforma. A existência da organização é confirmada antes de consultas, sincronização de filas e gravações de configuração; sessões operacionais permanecem vinculadas à organização do próprio cookie.
+- O Inbox atualiza a URL com a conversa escolhida, restaura esse contexto após refresh/deep link e aceita Enter ou Espaço para abrir uma conversa pela lista.
