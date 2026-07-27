@@ -1,4 +1,4 @@
-import { queryDatabase } from "@/lib/db";
+import { queryTenantDatabase } from "@/lib/db";
 import { getSupermarketBotConfig, type SupermarketBotConfig } from "@/lib/supermarket-bot";
 
 export type SupermarketSettings = {
@@ -59,7 +59,8 @@ export function mapSettings(row: Record<string, unknown>, fallback = getSupermar
 
 export async function getSupermarketSettings(organizationId: string): Promise<SupermarketSettings> {
   try {
-    const result = await queryDatabase<Record<string, unknown>>(
+    const result = await queryTenantDatabase<Record<string, unknown>>(
+      organizationId,
       `SELECT ${columns} FROM organizations WHERE id = $1 LIMIT 1`,
       [organizationId],
     );
@@ -81,7 +82,8 @@ export async function updateSupermarketSettings(
 ): Promise<SupermarketSettings> {
   const current = await getSupermarketSettings(organizationId);
   const next: SupermarketSettings = { ...current, ...input };
-  await queryDatabase(
+  await queryTenantDatabase(
+    organizationId,
     `UPDATE organizations SET
       bot_enabled = $2,
       bot_name = $3,
@@ -120,7 +122,8 @@ export async function updateSupermarketSettings(
 
 export async function getConfiguredBusinessHours(organizationId: string): Promise<ConfiguredHour[]> {
   try {
-    const result = await queryDatabase<Record<string, unknown>>(
+    const result = await queryTenantDatabase<Record<string, unknown>>(
+      organizationId,
       `SELECT weekday, start_time, end_time, timezone, is_active
          FROM business_hours WHERE organization_id = $1 ORDER BY weekday ASC`,
       [organizationId],
@@ -142,7 +145,8 @@ export async function updateConfiguredBusinessHours(
   hours: ConfiguredHour[],
 ): Promise<ConfiguredHour[]> {
   for (const hour of hours) {
-    await queryDatabase(
+    await queryTenantDatabase(
+      organizationId,
       `INSERT INTO business_hours (organization_id, weekday, start_time, end_time, timezone, is_active)
        VALUES ($1, $2, $3, $4, $5, $6)
        ON CONFLICT (organization_id, weekday) DO UPDATE SET

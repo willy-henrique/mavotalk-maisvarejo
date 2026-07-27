@@ -1,4 +1,4 @@
-import { queryDatabase } from "@/lib/db";
+import { queryTenantDatabase } from "@/lib/db";
 
 export type MenuRole = "admin" | "gestor" | "atendente";
 const MENU_ROLES: MenuRole[] = ["admin", "gestor", "atendente"];
@@ -67,7 +67,8 @@ function resolveVisibility(overrides: Record<string, Partial<Record<MenuRole, bo
 
 async function getOverrides(organizationId: string): Promise<Record<string, Partial<Record<MenuRole, boolean>>>> {
   try {
-    const result = await queryDatabase<{ menu_visibility_overrides: unknown }>(
+    const result = await queryTenantDatabase<{ menu_visibility_overrides: unknown }>(
+      organizationId,
       "SELECT menu_visibility_overrides FROM organizations WHERE id = $1 LIMIT 1",
       [organizationId],
     );
@@ -108,7 +109,8 @@ export async function updateMenuVisibilityOverrides(
     next[itemId] = merged;
   }
 
-  await queryDatabase(
+  await queryTenantDatabase(
+    organizationId,
     "UPDATE organizations SET menu_visibility_overrides = $2::jsonb, updated_at = now() WHERE id = $1",
     [organizationId, JSON.stringify(next)],
   );
