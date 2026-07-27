@@ -17,16 +17,16 @@ Data da inspeção: 2026-07-27.
 | `/inbox` | `InboxConversations` | todos | conversas, mensagens, filas, respostas rápidas, Socket.IO |
 | `/dashboard` | `Dashboard` | admin, gestor | `/api/dashboard/metrics` |
 | `/business` | `BusinessAnalytics` | admin, gestor | analytics e consulta gerencial |
-| `/business/sincronizacao` | `AgentsManagement` | admin | agentes cloud |
-| `/business/auditoria` | `BusinessAudit` | admin | auditoria de consultas gerenciais |
+| `/business/sincronizacao` | `AgentsManagement` | conforme matriz do tenant | agentes cloud |
+| `/business/auditoria` | `BusinessAudit` | conforme matriz do tenant | auditoria de consultas gerenciais |
 | `/contacts` | `Contacts` | todos | contatos e histórico |
 | `/painel` | `Painel` | admin, gestor | status/conexão WhatsApp |
-| `/admin/usuarios` | `UserManagement` | admin | equipe |
-| `/admin/tipos` | `TicketTypeManagement` | admin | filas e automações |
-| `/admin/respostas-rapidas` | `QuickReplyManagement` | admin | respostas rápidas |
-| `/admin/acessos-gerenciais` | `BusinessAccessManagement` | admin | acesso WhatsApp gerencial |
-| `/admin/agentes` | redirecionamento para `/business/sincronizacao` | admin | URL legada preservada para bookmarks; não monta uma segunda experiência. |
-| `/admin/menu-visibilidade` | `MenuSettings` | admin | visibilidade de navegação |
+| `/admin/usuarios` | `UserManagement` | conforme matriz do tenant | equipe |
+| `/admin/tipos` | `TicketTypeManagement` | conforme matriz do tenant | filas e automações |
+| `/admin/respostas-rapidas` | `QuickReplyManagement` | conforme matriz do tenant | respostas rápidas |
+| `/admin/acessos-gerenciais` | `BusinessAccessManagement` | conforme matriz do tenant | acesso WhatsApp gerencial |
+| `/admin/agentes` | redirecionamento para `/business/sincronizacao` | conforme matriz do tenant | URL legada preservada para bookmarks; não monta uma segunda experiência. |
+| `/admin/menu-visibilidade` | `MenuSettings` | admin imutável | visibilidade e permissões de backend |
 
 ### Inconsistências identificadas
 
@@ -39,11 +39,11 @@ Data da inspeção: 2026-07-27.
 | Domínio | Rotas | Proteção observada |
 | --- | --- | --- |
 | Sessão | `/api/auth/login`, `/api/auth/logout`, `/api/me` | login público; demais cookie de sessão. |
-| Atendimento | `/api/conversations`, `/api/conversations/[id]/{assign,close,messages,messages/upload,typing}` | `requireSession`; repositório recebe organização da sessão. |
-| Contatos | `/api/contacts`, `/api/contacts/[id]`, `/api/contacts/[id]/start-conversation` | `requireSession`. |
-| Operação | `/api/dashboard/metrics`, `/api/queues`, `/api/quick-replies`, `/api/whatsapp/*` | sessão e, onde necessário, `requireRole`. |
-| Administração | `/api/admin/{users,agents,business-access,menu-settings,supermarket-settings,system-status}` | sessão/role; configuração de supermercado aceita sessão administrativa ou sessão master. |
-| Negócio | `/api/business/{analytics,audit,query}` | sessão, role e feature flags. |
+| Atendimento | `/api/conversations`, `/api/conversations/[id]/{assign,close,messages,messages/upload,typing}` | sessão e `requireMenuPermission` por ação; repositório recebe organização da sessão. |
+| Contatos | `/api/contacts`, `/api/contacts/[id]`, `/api/contacts/[id]/start-conversation` | sessão e permissão por ação. |
+| Operação | `/api/dashboard/metrics`, `/api/queues`, `/api/quick-replies`, `/api/whatsapp/*` | sessão e matriz de permissões do tenant no servidor. |
+| Administração | `/api/admin/{users,agents,business-access,menu-settings,system-status}` | matriz por tenant; `/api/admin/supermarket-settings` mantém o guard específico para sessão administrativa ou master. |
+| Negócio | `/api/business/{analytics,audit,query}` | sessão, permissão por recurso e feature flags. |
 | Agentes | `/api/agent/v1/{config,heartbeat,sync/*}` | HMAC, nonce/timestamp e validação Zod; não cookie. |
 | Webhooks | `/api/webhooks/{twilio,n8n/ticket-upsert,cerebro/reply}` | assinatura Twilio ou token bearer específico; sem sessão de usuário. |
 | Master | `/api/mavo/{auth,organizations,overview,actions/sync-supermarket}` | autenticação master específica; a organização solicitada é validada antes de leitura ou mutação. |
@@ -62,4 +62,4 @@ Data da inspeção: 2026-07-27.
 - `Dialog`, tokens e primitives de página/card/botão/campo já são compartilhados; filtros, tabelas, empty states e badges ainda possuem implementações por página e são o próximo alvo de consolidação.
 - `AgentsManagement` possui uma rota canônica; `/admin/agentes` é somente compatibilidade de URL.
 - `MENU_ITEMS` no backend e `menuItems` na sidebar são duas fontes que precisam permanecer manualmente sincronizadas.
-- A autorização simplificada da SPA (`permissionsForRole`) não é a matriz granular de permissão que o produto pede; a decisão efetiva precisa permanecer no servidor.
+- A sidebar consulta leitura/visibilidade da matriz por organização, mas a decisão efetiva continua exclusivamente no servidor via `requireMenuPermission`.

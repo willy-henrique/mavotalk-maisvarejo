@@ -10,14 +10,14 @@ O produto possui direção visual azul/verde, modo escuro padrão e uma fundaç�
 
 | Severidade | Achado | Evidência / impacto |
 | --- | --- | --- |
-| P1 | SLA não é acionado nem processado | `enqueueSlaCheck` não possui chamadores; worker só escreve log. A operação não recebe ação quando prazo vence. |
+| Resolvido | SLA não era acionado nem processado | O agendamento por ticket, worker transacional, idempotência e auditoria foram implementados; a confirmação de execução contínua ainda depende de observabilidade no Render. |
 | Resolvido | Duplicidade entre sincronização e agentes | `/admin/agentes` redireciona para a rota canônica `/business/sincronizacao`; a sidebar expõe uma única seção. |
 | Resolvido | Cabeçalho incorreto em Menu do painel | Metadado específico foi incluído no `AppHeader`; não há fallback de “Caixa de entrada”. |
 | Resolvido | Auditoria pouco utilizável | Filtros, paginação e ordenação server-side, detalhe acessível, contraste no tema escuro, mascaramento de telefone e exportação CSV limitada ao tenant. |
 | P2 | Primitives compartilhadas incompletas | Tokens, `Dialog`, páginas, cards, botões, campos e estados de loading/vazio/erro foram centralizados; tabelas, filtros e badges ainda variam entre Equipe, Filas, Acessos, Agentes e Respostas rápidas. |
 | P2 | Fluxos administrativos têm feedback desigual | Algumas ações têm loading/erro; outras não oferecem confirmação, prevenção uniforme de duplo envio, confirmação destrutiva ou aviso de alterações não salvas. Equipe e Filas agora expõem falhas de carregamento com tentativa novamente. |
-| P2 | Dashboard não cobre a operação declarada | Mostra cartões e volume por fila, mas faltam SLA próximo/vencido, TMR, primeira resposta, agentes online, falhas de integração e qualidade/frescor de dados. |
-| P2 | Acessibilidade de modais incompleta | Modais locais não têm focus trap, fechamento por Escape e restauração garantida de foco. |
+| Resolvido | Dashboard não cobria a operação declarada | Calcula SLA próximo/vencido, resolução média, agentes online e frescor da última sincronização a partir de dados persistidos; não apresenta indicadores simulados como reais. |
+| Resolvido | Acessibilidade de modais incompleta | Os diálogos administrativos usam `Dialog` com foco inicial, focus trap, Escape e restauração do foco. |
 | P3 | Mistura de tema e contraste | O tema escuro é default no provider, mas a base do `body` é clara e páginas têm superfícies/classes próprias. A percepção muda entre telas. |
 | P3 | Estados vazios e largura | Há empty states altos em dashboards e tabelas; em monitores grandes a informação não usa largura/densidade operacional de forma consistente. |
 | P3 | Terminologia e capitalização | “Tipos de Chamado”, “Respostas Rápidas”, “Agentes cloud” e “Sincronização” não seguem mesma nomenclatura. |
@@ -26,7 +26,7 @@ O produto possui direção visual azul/verde, modo escuro padrão e uma fundaç�
 
 Pontos já presentes: foco visível global, labels em boa parte dos formulários, `role=alert` em alguns erros, navegação mobile e `aria-label` em alguns ícones.
 
-Lacunas: menus acionados por hover/focus sem padrão de dropdown acessível, modais sem semântica/dialog/focus trap, ícones em botões sem nome acessível em todos os casos, tabelas sem comportamento responsivo consistente e controles nativos na matriz de visibilidade.
+Lacunas: alguns menus acionados por hover/focus ainda não usam um dropdown compartilhado, ícones em botões ainda precisam de varredura por rota e tabelas extensas preservam rolagem horizontal em vez de uma prioridade de colunas uniforme.
 
 ## Direção de implementação
 
