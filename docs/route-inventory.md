@@ -25,13 +25,13 @@ Data da inspeção: 2026-07-27.
 | `/admin/tipos` | `TicketTypeManagement` | admin | filas e automações |
 | `/admin/respostas-rapidas` | `QuickReplyManagement` | admin | respostas rápidas |
 | `/admin/acessos-gerenciais` | `BusinessAccessManagement` | admin | acesso WhatsApp gerencial |
-| `/admin/agentes` | `AgentsManagement` | admin | agentes cloud |
+| `/admin/agentes` | redirecionamento para `/business/sincronizacao` | admin | URL legada preservada para bookmarks; não monta uma segunda experiência. |
 | `/admin/menu-visibilidade` | `MenuSettings` | admin | visibilidade de navegação |
 
 ### Inconsistências identificadas
 
-- `/business/sincronizacao` e `/admin/agentes` montam o mesmo componente, embora a sidebar os apresente como produtos distintos.
-- `AppHeader.pageMeta` não contém `/admin/menu-visibilidade`; o fallback mostra “Caixa de entrada” nessa tela.
+- A duplicidade entre `/business/sincronizacao` e `/admin/agentes` foi resolvida: a segunda URL redireciona para a canônica, mantendo compatibilidade.
+- O metadado de `/admin/menu-visibilidade` foi incluído no `AppHeader`; a tela não usa mais o fallback “Caixa de entrada”.
 - As rotas SPA não definem breadcrumbs nem atualizam o título da aba por rota.
 
 ## APIs por domínio
@@ -60,6 +60,6 @@ Data da inspeção: 2026-07-27.
 ## Componentes duplicados ou acoplamentos
 
 - Botões, cards, filtros, inputs, tabelas, modais, empty states e badges são implementados por página, sem primitives compartilhadas.
-- `AgentsManagement` é duplicado conceitualmente em duas rotas.
+- `AgentsManagement` possui uma rota canônica; `/admin/agentes` é somente compatibilidade de URL.
 - `MENU_ITEMS` no backend e `menuItems` na sidebar são duas fontes que precisam permanecer manualmente sincronizadas.
 - A autorização simplificada da SPA (`permissionsForRole`) não é a matriz granular de permissão que o produto pede; a decisão efetiva precisa permanecer no servidor.

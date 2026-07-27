@@ -12,10 +12,10 @@ Data: 2026-07-27.
 - Adicionados tokens semânticos de cor, superfície, tipografia operacional, foco, espaçamento, sombra, raio, z-index e transição. O ambiente operacional inicia em tema escuro sem flash branco.
 - Criado `Dialog` acessível reutilizável com foco inicial, focus trap, Escape, clique externo e restauração de foco; o editor de respostas rápidas foi migrado.
 - `Menu do painel` passou a usar switches acessíveis, mostra alterações não salvas, confirma salvamento e mantém explícita a diferença entre visibilidade e RBAC.
-- A sidebar apresenta uma única entrada “Agentes e sincronização”; a rota legada de agentes continua disponível para compatibilidade.
+- A sidebar apresenta uma única entrada “Agentes e sincronização”; `/admin/agentes` redireciona para `/business/sincronizacao` para preservar compatibilidade sem duplicar a experiência.
 - A área unificada de agentes agora expõe logs recentes por instalação, sempre filtrados pela organização da sessão; IP de origem permanece mascarado/ausente da interface.
 - As consultas de auditoria, agentes, configurações do bot/supermercado, visibilidade do menu, indicadores do negócio e acessos gerenciais passaram a executar no contexto RLS estrito da organização. O filtro explícito por `organization_id` permanece como defesa adicional.
-- A auditoria gerencial ganhou filtros server-side, paginação, detalhe em drawer e remoção do identificador técnico de tenant da tabela principal.
+- A auditoria gerencial ganhou filtros server-side, paginação, detalhe em drawer, exportação CSV limitada a 10 mil registros filtrados e remoção do identificador técnico de tenant da tabela principal. Telefones sem nome associado são mascarados inclusive na exportação.
 - O dashboard operacional passou a calcular SLA próximo/vencido, resolução média, agentes online e frescor da última sincronização diretamente dos dados persistidos.
 - O menu de usuário no topo passou a funcionar por clique, com `aria-expanded`, fechamento por Escape e clique externo.
 - Contatos, equipe, respostas rápidas, filas/automações, acessos gerenciais e central de conexão foram migrados gradualmente para os mesmos tokens de página, cards, botões e campos; o tema escuro deixa de depender de estilos específicos de cada tela.
