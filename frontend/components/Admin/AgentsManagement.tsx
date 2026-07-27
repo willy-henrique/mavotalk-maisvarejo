@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useState } from 'react';
 import { apiGet, apiPost } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
@@ -23,6 +23,8 @@ type AgentEvent = { id: string; eventType: string; status: 'success' | 'rejected
 const AgentsManagement: React.FC = () => {
   const [items, setItems] = useState<Agent[]>([]);
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -35,12 +37,13 @@ const AgentsManagement: React.FC = () => {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
   const pageSize = 25;
+  const deferredSearch = useDeferredValue(search);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await apiGet<{ items: Agent[]; total: number }>(
-        `/api/admin/agents?page=${page}&pageSize=${pageSize}`,
+        `/api/admin/agents?page=${page}&pageSize=${pageSize}&q=${encodeURIComponent(deferredSearch)}&status=${encodeURIComponent(statusFilter)}`,
       );
       setItems(data.items);
       setTotal(data.total);
@@ -50,11 +53,15 @@ const AgentsManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, deferredSearch, statusFilter]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [deferredSearch, statusFilter]);
 
   const provision = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -158,6 +165,10 @@ const AgentsManagement: React.FC = () => {
         </button>
       </div>
       {error && <ErrorState className="mb-5" description={error} action={<button type="button" onClick={() => void load()} disabled={loading || action !== null} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
+      <div className="mb-5 flex flex-wrap gap-3">
+        <label className="min-w-[15rem] flex-1"><span className="sr-only">Buscar agentes</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome ou instalação" className="mavo-field" /></label>
+        <label><span className="sr-only">Filtrar por estado do agente</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mavo-field"><option value="">Todos os estados</option><option value="online">Online e saudável</option><option value="attention">Requer atenção</option><option value="revoked">Revogado</option></select></label>
+      </div>
       {credential && (
         <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-5 text-amber-950">
           <p className="font-bold">Copie a credencial agora. O segredo não será exibido novamente.</p>
@@ -179,7 +190,7 @@ const AgentsManagement: React.FC = () => {
       {loading ? (
         <LoadingState title="Carregando agentes e instalações…" />
       ) : items.length === 0 ? (
-        <EmptyState title="Nenhum agente provisionado ainda." description="Crie uma instalação para sincronizar dados do ambiente da empresa com segurança." />
+        <EmptyState title={search || statusFilter ? 'Nenhum agente encontrado.' : 'Nenhum agente provisionado ainda.'} description={search || statusFilter ? 'Altere a busca ou limpe os filtros para visualizar as instalações.' : 'Crie uma instalação para sincronizar dados do ambiente da empresa com segurança.'} action={search || statusFilter ? <button type="button" onClick={() => { setSearch(''); setStatusFilter(''); }} className="mavo-button-secondary">Limpar filtros</button> : undefined} />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80">
           <table className="w-full min-w-[920px] text-left text-sm">

@@ -288,12 +288,34 @@ export async function updateAgentHeartbeat(
 
 export async function listAgents(
   organizationId: string,
-  options: { page: number; pageSize: number },
+  options: { page: number; pageSize: number; query?: string; status?: "online" | "attention" | "revoked" },
 ): Promise<{
   items: Array<AgentInstallation & { receivedRecords: number; lastBatchError: string | null }>;
   total: number;
 }> {
   const offset = (options.page - 1) * options.pageSize;
+  const conditions = ["ai.organization_id = $1"];
+  const countConditions = ["organization_id = $1"];
+  const values: unknown[] = [organizationId];
+  const query = options.query?.trim();
+  if (query) {
+    values.push(`%${query}%`);
+    const parameter = `$${values.length}`;
+    conditions.push(`(ai.name ILIKE ${parameter} OR ai.installation_key ILIKE ${parameter})`);
+    countConditions.push(`(name ILIKE ${parameter} OR installation_key ILIKE ${parameter})`);
+  }
+  if (options.status === "online") {
+    conditions.push("ai.revoked_at IS NULL AND ai.status IN ('active', 'online') AND ai.last_error_code IS NULL");
+    countConditions.push("revoked_at IS NULL AND status IN ('active', 'online') AND last_error_code IS NULL");
+  }
+  if (options.status === "attention") {
+    conditions.push("ai.revoked_at IS NULL AND (ai.status NOT IN ('active', 'online') OR ai.last_error_code IS NOT NULL)");
+    countConditions.push("revoked_at IS NULL AND (status NOT IN ('active', 'online') OR last_error_code IS NOT NULL)");
+  }
+  if (options.status === "revoked") {
+    conditions.push("ai.revoked_at IS NOT NULL");
+    countConditions.push("revoked_at IS NOT NULL");
+  }
   const [result, count] = await Promise.all([
     queryTenantDatabase<
       AgentRow & { received_records: string; last_batch_error: string | null }
@@ -311,18 +333,18 @@ export async function listAgents(
               ) AS last_batch_error
          FROM agent_installations ai
          LEFT JOIN agent_sync_batches asb ON asb.agent_id = ai.id
-        WHERE ai.organization_id = $1
+        WHERE ${conditions.join(" AND ")}
         GROUP BY ai.id
         ORDER BY ai.created_at DESC
-        LIMIT $2 OFFSET $3`,
-      [organizationId, options.pageSize, offset],
+        LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      [...values, options.pageSize, offset],
     ),
     queryTenantDatabase<{ count: string }>(
       organizationId,
       `SELECT COUNT(*)::text AS count
          FROM agent_installations
-        WHERE organization_id = $1`,
-      [organizationId],
+        WHERE ${countConditions.join(" AND ")}`,
+      values,
     ),
   ]);
   return {
