@@ -13,6 +13,13 @@ export type SupermarketSettingsPatch = {
 };
 
 type ParseResult = { data: SupermarketSettingsPatch; error?: string };
+export type BusinessHourPatch = {
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  timezone: string;
+  isActive: boolean;
+};
 
 function text(value: unknown, max: number): string | null {
   if (value == null) return null;
@@ -75,5 +82,45 @@ export function parseSupermarketSettingsPatch(body: Record<string, unknown>): Pa
     data[key] = parsed.value;
   }
 
+  return { data };
+}
+
+const VALID_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
+function minutes(value: string) {
+  const [hour, minute] = value.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+/** Horários fora do expediente são avaliados pelo bot no fuso da operação. */
+export function parseBusinessHoursPatch(value: unknown): { data?: BusinessHourPatch[]; error?: string } {
+  if (value === undefined) return {};
+  if (!Array.isArray(value)) return { error: "Horários de funcionamento devem ser uma lista." };
+
+  const weekdays = new Set<number>();
+  const data: BusinessHourPatch[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") return { error: "Cada horário de funcionamento deve ser válido." };
+    const row = item as Record<string, unknown>;
+    const weekday = Number(row.weekday);
+    const startTime = String(row.startTime || "");
+    const endTime = String(row.endTime || "");
+    const isActive = row.isActive !== false;
+    if (!Number.isInteger(weekday) || weekday < 0 || weekday > 6 || weekdays.has(weekday)) {
+      return { error: "Cada dia da semana deve aparecer uma única vez." };
+    }
+    if (!VALID_TIME.test(startTime) || !VALID_TIME.test(endTime)) {
+      return { error: "Informe horários válidos no formato HH:MM." };
+    }
+    if (isActive && minutes(startTime) >= minutes(endTime)) {
+      return { error: "O horário de abertura deve ser anterior ao horário de fechamento." };
+    }
+    const timezone = String(row.timezone || "America/Sao_Paulo");
+    if (timezone !== "America/Sao_Paulo") {
+      return { error: "O fuso horário da operação deve ser America/Sao_Paulo." };
+    }
+    weekdays.add(weekday);
+    data.push({ weekday, startTime, endTime, timezone, isActive });
+  }
   return { data };
 }
