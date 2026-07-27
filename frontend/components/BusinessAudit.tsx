@@ -3,6 +3,7 @@ import { apiFetch, apiGet } from '../services/api';
 import { Dialog } from './ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from './ui/PageState';
 import { Pagination } from './ui/Pagination';
+import { StatusBadge, type StatusTone } from './ui/StatusBadge';
 
 type AuditItem = {
   id: string;
@@ -16,6 +17,17 @@ type AuditItem = {
   durationMs: number;
   createdAt: string;
 };
+
+const auditStatusTone = (status: string): StatusTone => {
+  const normalized = status.toLowerCase();
+  if (normalized === 'success' || normalized === 'ok') return 'success';
+  if (normalized === 'error' || normalized === 'failed') return 'error';
+  return 'warning';
+};
+
+const AuditStatusBadge: React.FC<{ item: AuditItem; className?: string }> = ({ item, className = '' }) => (
+  <StatusBadge tone={auditStatusTone(item.status)} className={className}>{item.status}{item.errorCode ? ` · ${item.errorCode}` : ''}</StatusBadge>
+);
 
 const BusinessAudit: React.FC = () => {
   const [items, setItems] = useState<AuditItem[]>([]);
@@ -62,13 +74,6 @@ const BusinessAudit: React.FC = () => {
   }, [load]);
 
   const hasAppliedFilters = Boolean(appliedFilters.query || appliedFilters.status || appliedFilters.origin || appliedFilters.from || appliedFilters.to || appliedFilters.sort !== 'recent');
-
-  const statusClass = (status: string) => {
-    const normalized = status.toLowerCase();
-    if (normalized === 'success' || normalized === 'ok') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300';
-    if (normalized === 'error' || normalized === 'failed') return 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300';
-    return 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300';
-  };
 
   const applyFilters = (event: React.FormEvent) => {
     event.preventDefault();
@@ -173,14 +178,14 @@ const BusinessAudit: React.FC = () => {
                   <td className="p-4 font-medium text-slate-800 dark:text-slate-100">{item.actorName || item.phoneNormalized || 'Sistema'}</td>
                   <td className="p-4 font-medium uppercase text-slate-700 dark:text-slate-200">{item.origin}</td>
                   <td className="p-4 text-slate-700 dark:text-slate-200">{item.queryType}</td>
-                  <td className="p-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(item.status)}`}>{item.status}{item.errorCode ? ` · ${item.errorCode}` : ''}</span></td>
+                  <td className="p-4"><AuditStatusBadge item={item} /></td>
                   <td className="p-4 tabular-nums text-slate-700 dark:text-slate-200">{item.durationMs} ms</td>
                   <td className="p-4"><button type="button" className="rounded-lg px-2 py-1 text-xs font-bold text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/30" onClick={() => void openDetail(item)}>Ver detalhe</button></td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div><div className="grid gap-3 md:hidden">{items.map((item) => <article key={item.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{item.queryType}</h3><p className="mt-1 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString('pt-BR')}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(item.status)}`}>{item.status}{item.errorCode ? ` · ${item.errorCode}` : ''}</span></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Responsável</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{item.actorName || item.phoneNormalized || 'Sistema'}</dd></div><div><dt className="font-semibold text-slate-500">Origem</dt><dd className="mt-1 uppercase text-slate-700 dark:text-slate-200">{item.origin}</dd></div><div><dt className="font-semibold text-slate-500">Duração</dt><dd className="mt-1 tabular-nums text-slate-700 dark:text-slate-200">{item.durationMs} ms</dd></div></dl><button type="button" className="mavo-button-secondary min-h-0 px-3 py-2 text-xs" onClick={() => void openDetail(item)}>Ver detalhe</button></article>)}</div></>
+        </div><div className="grid gap-3 md:hidden">{items.map((item) => <article key={item.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{item.queryType}</h3><p className="mt-1 text-xs text-slate-500">{new Date(item.createdAt).toLocaleString('pt-BR')}</p></div><AuditStatusBadge item={item} className="shrink-0" /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Responsável</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{item.actorName || item.phoneNormalized || 'Sistema'}</dd></div><div><dt className="font-semibold text-slate-500">Origem</dt><dd className="mt-1 uppercase text-slate-700 dark:text-slate-200">{item.origin}</dd></div><div><dt className="font-semibold text-slate-500">Duração</dt><dd className="mt-1 tabular-nums text-slate-700 dark:text-slate-200">{item.durationMs} ms</dd></div></dl><button type="button" className="mavo-button-secondary min-h-0 px-3 py-2 text-xs" onClick={() => void openDetail(item)}>Ver detalhe</button></article>)}</div></>
       )}
       {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="eventos" onPageChange={setPage} />}
       {selected && <Dialog title="Detalhe de auditoria" description={`${selected.queryType} · ${new Date(selected.createdAt).toLocaleString('pt-BR')}`} onClose={closeDetail}><div className="space-y-4 p-6 text-sm"><dl className="grid grid-cols-2 gap-3"><div><dt className="text-xs font-bold uppercase text-slate-500">Origem</dt><dd className="mt-1 text-slate-900 dark:text-white">{selected.origin}</dd></div><div><dt className="text-xs font-bold uppercase text-slate-500">Duração</dt><dd className="mt-1 text-slate-900 dark:text-white">{selected.durationMs} ms</dd></div><div><dt className="text-xs font-bold uppercase text-slate-500">Estado</dt><dd className="mt-1 text-slate-900 dark:text-white">{selected.status}</dd></div><div><dt className="text-xs font-bold uppercase text-slate-500">Responsável</dt><dd className="mt-1 text-slate-900 dark:text-white">{selected.actorName || 'Sistema'}</dd></div></dl>{loadingDetail ? <p className="text-slate-500">Carregando dados mascarados…</p> : detail && <><div><h3 className="text-xs font-bold uppercase text-slate-500">Entrada sanitizada</h3><p className="mt-1 rounded-lg bg-slate-100 p-3 text-slate-700 dark:bg-slate-950 dark:text-slate-200">{detail.sanitizedInput || 'Não registrada'}</p></div><div><h3 className="text-xs font-bold uppercase text-slate-500">Parâmetros</h3><pre className="mt-1 overflow-auto rounded-lg bg-slate-100 p-3 text-xs text-slate-700 dark:bg-slate-950 dark:text-slate-200">{JSON.stringify(detail.parameters, null, 2)}</pre></div><div><h3 className="text-xs font-bold uppercase text-slate-500">Resumo</h3><pre className="mt-1 overflow-auto rounded-lg bg-slate-100 p-3 text-xs text-slate-700 dark:bg-slate-950 dark:text-slate-200">{JSON.stringify(detail.resultSummary, null, 2)}</pre></div></>}</div></Dialog>}

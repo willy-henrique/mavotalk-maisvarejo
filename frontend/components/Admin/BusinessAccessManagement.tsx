@@ -3,6 +3,7 @@ import { apiGet, apiPatch, apiPost } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
 import { Pagination } from '../ui/Pagination';
+import { StatusBadge, type StatusTone } from '../ui/StatusBadge';
 
 type Permission =
   | 'sales.read'
@@ -22,6 +23,17 @@ type AccessUser = {
   lastAccessAt: string | null;
   permissions: Partial<Record<Permission, boolean>>;
 };
+
+const accessStatusTone = (item: AccessUser): StatusTone => {
+  if (item.lockedUntil && new Date(item.lockedUntil) > new Date()) return 'error';
+  return item.isActive ? 'success' : 'neutral';
+};
+
+const AccessStatusBadge: React.FC<{ item: AccessUser; className?: string }> = ({ item, className = '' }) => (
+  <StatusBadge tone={accessStatusTone(item)} className={className}>
+    {item.lockedUntil && new Date(item.lockedUntil) > new Date() ? 'Bloqueado' : item.isActive ? 'Ativo' : 'Inativo'}
+  </StatusBadge>
+);
 
 const permissionOptions: Array<{ key: Permission; label: string }> = [
   { key: 'sales.read', label: 'Vendas e quantidades' },
@@ -272,7 +284,7 @@ const BusinessAccessManagement: React.FC = () => {
                   <td className="p-4 font-bold text-slate-800 dark:text-slate-100">{item.name}</td>
                   <td className="p-4 font-mono text-slate-600 dark:text-slate-300">{item.phoneNormalized}</td>
                   <td className="p-4 capitalize text-slate-600 dark:text-slate-300">{item.role}</td>
-                  <td className="p-4"><span className={`rounded-full px-2.5 py-1 text-xs font-bold ${item.lockedUntil && new Date(item.lockedUntil) > new Date() ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-200' : item.isActive ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{item.lockedUntil && new Date(item.lockedUntil) > new Date() ? 'Bloqueado' : item.isActive ? 'Ativo' : 'Inativo'}</span></td>
+                  <td className="p-4"><AccessStatusBadge item={item} /></td>
                   <td className="p-4 text-slate-500">{item.lastAccessAt ? new Date(item.lastAccessAt).toLocaleString('pt-BR') : 'Nunca'}</td>
                   <td className="p-4">
                     <div className="flex flex-wrap gap-2">
@@ -287,7 +299,7 @@ const BusinessAccessManagement: React.FC = () => {
               ))}
             </tbody>
           </table>
-        </div><div className="grid gap-3 md:hidden">{items.map((item) => <article key={item.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{item.name}</h3><p className="mt-1 font-mono text-xs text-slate-600 dark:text-slate-300">{item.phoneNormalized}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${item.lockedUntil && new Date(item.lockedUntil) > new Date() ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-200' : item.isActive ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{item.lockedUntil && new Date(item.lockedUntil) > new Date() ? 'Bloqueado' : item.isActive ? 'Ativo' : 'Inativo'}</span></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Papel</dt><dd className="mt-1 capitalize text-slate-700 dark:text-slate-200">{item.role}</dd></div><div><dt className="font-semibold text-slate-500">Último acesso</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{item.lastAccessAt ? new Date(item.lastAccessAt).toLocaleString('pt-BR') : 'Nunca'}</dd></div></dl><div className="flex flex-wrap gap-2"><button type="button" disabled={actionId === item.id} onClick={() => void toggle(item)} className="mavo-button-secondary min-h-0 px-2 py-1 text-xs">{actionId === item.id ? 'Salvando...' : item.isActive ? 'Desativar' : 'Ativar'}</button><button type="button" disabled={actionId === item.id} onClick={() => void action(`/api/admin/business-access/${item.id}/unlock`, {}, 'Acesso desbloqueado.', item.id)} className="mavo-button-secondary min-h-0 px-2 py-1 text-xs">Desbloquear</button><button type="button" disabled={actionId === item.id} onClick={() => void action(`/api/admin/business-access/${item.id}/revoke-sessions`, {}, 'Sessões gerenciais revogadas.', item.id)} className="mavo-button-secondary min-h-0 px-2 py-1 text-xs">Revogar sessões</button><button type="button" disabled={actionId === item.id} onClick={() => { setResetPinFor(item); setNewPin(''); }} className="mavo-button-secondary min-h-0 px-2 py-1 text-xs">Redefinir PIN</button><button type="button" disabled={actionId === item.id} onClick={() => openPermissions(item)} className="mavo-button-primary min-h-0 px-2 py-1 text-xs">Permissões</button></div></article>)}</div></>
+        </div><div className="grid gap-3 md:hidden">{items.map((item) => <article key={item.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{item.name}</h3><p className="mt-1 font-mono text-xs text-slate-600 dark:text-slate-300">{item.phoneNormalized}</p></div><AccessStatusBadge item={item} className="shrink-0" /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Papel</dt><dd className="mt-1 capitalize text-slate-700 dark:text-slate-200">{item.role}</dd></div><div><dt className="font-semibold text-slate-500">Último acesso</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{item.lastAccessAt ? new Date(item.lastAccessAt).toLocaleString('pt-BR') : 'Nunca'}</dd></div></dl><div className="flex flex-wrap gap-2"><button type="button" disabled={actionId === item.id} onClick={() => void toggle(item)} className="mavo-button-secondary min-h-0 px-2 py-1 text-xs">{actionId === item.id ? 'Salvando...' : item.isActive ? 'Desativar' : 'Ativar'}</button><button type="button" disabled={actionId === item.id} onClick={() => void action(`/api/admin/business-access/${item.id}/unlock`, {}, 'Acesso desbloqueado.', item.id)} className="mavo-button-secondary min-h-0 px-2 py-1 text-xs">Desbloquear</button><button type="button" disabled={actionId === item.id} onClick={() => void action(`/api/admin/business-access/${item.id}/revoke-sessions`, {}, 'Sessões gerenciais revogadas.', item.id)} className="mavo-button-secondary min-h-0 px-2 py-1 text-xs">Revogar sessões</button><button type="button" disabled={actionId === item.id} onClick={() => { setResetPinFor(item); setNewPin(''); }} className="mavo-button-secondary min-h-0 px-2 py-1 text-xs">Redefinir PIN</button><button type="button" disabled={actionId === item.id} onClick={() => openPermissions(item)} className="mavo-button-primary min-h-0 px-2 py-1 text-xs">Permissões</button></div></article>)}</div></>
       )}
       {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="acessos" onPageChange={setPage} />}
     </div></main>

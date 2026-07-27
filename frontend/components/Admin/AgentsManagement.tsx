@@ -3,6 +3,7 @@ import { apiGet, apiPost } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
 import { Pagination } from '../ui/Pagination';
+import { StatusBadge, type StatusTone } from '../ui/StatusBadge';
 
 type Agent = {
   id: string;
@@ -20,6 +21,17 @@ type Agent = {
 
 type Credential = { agentId: string; secret: string; keyVersion: number; agent: Agent };
 type AgentEvent = { id: string; eventType: string; status: 'success' | 'rejected' | 'failed'; errorCode: string | null; durationMs: number | null; createdAt: string };
+
+const agentStatusTone = (agent: Agent): StatusTone => {
+  if (agent.revokedAt) return 'neutral';
+  if (agent.lastBatchError) return 'error';
+  if (agent.status.toLowerCase() === 'active' || agent.status.toLowerCase() === 'online') return 'success';
+  return 'warning';
+};
+
+const AgentStatusBadge: React.FC<{ agent: Agent; className?: string }> = ({ agent, className = '' }) => (
+  <StatusBadge tone={agentStatusTone(agent)} className={className}>{agent.revokedAt ? 'Revogado' : agent.status}</StatusBadge>
+);
 
 const AgentsManagement: React.FC = () => {
   const [items, setItems] = useState<Agent[]>([]);
@@ -151,13 +163,6 @@ const AgentsManagement: React.FC = () => {
     setEvents([]);
   };
 
-  const statusClass = (agent: Agent) => {
-    if (agent.revokedAt) return 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300';
-    if (agent.lastBatchError) return 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300';
-    if (agent.status.toLowerCase() === 'active' || agent.status.toLowerCase() === 'online') return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300';
-    return 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300';
-  };
-
   const recommendedAction = (agent: Agent) => {
     if (agent.revokedAt) return 'Provisionar uma nova instalação';
     if (agent.lastBatchError) return 'Abrir logs e corrigir a última falha';
@@ -222,7 +227,7 @@ const AgentsManagement: React.FC = () => {
               {items.map((item) => (
                 <tr key={item.id} className="border-b border-slate-100 dark:border-slate-800">
                   <td className="p-4"><strong className="block">{item.name}</strong><span className="text-xs font-mono text-slate-500">{item.installationKey}</span></td>
-                  <td className="p-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(item)}`}>{item.revokedAt ? 'revogado' : item.status}</span>{item.lastBatchError && <p className="mt-2 max-w-52 text-xs text-rose-600 dark:text-rose-300" title={item.lastBatchError}>Último erro: {item.lastBatchError}</p>}</td>
+                  <td className="p-4"><AgentStatusBadge agent={item} />{item.lastBatchError && <p className="mt-2 max-w-52 text-xs text-rose-600 dark:text-rose-300" title={item.lastBatchError}>Último erro: {item.lastBatchError}</p>}</td>
                   <td className="p-4">{item.agentVersion || '—'} / schema {item.schemaVersion || '—'}</td>
                   <td className="p-4">{item.lastHeartbeatAt ? new Date(item.lastHeartbeatAt).toLocaleString('pt-BR') : 'Nunca'}</td>
                   <td className="p-4">{item.lastSyncAt ? new Date(item.lastSyncAt).toLocaleString('pt-BR') : 'Nunca'}</td>
@@ -233,7 +238,7 @@ const AgentsManagement: React.FC = () => {
               ))}
             </tbody>
           </table>
-        </div><div className="grid gap-3 md:hidden">{items.map((item) => <article key={item.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-900 dark:text-white">{item.name}</h3><p className="mt-1 truncate font-mono text-xs text-slate-500">{item.installationKey}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(item)}`}>{item.revokedAt ? 'revogado' : item.status}</span></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Última sync</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{item.lastSyncAt ? new Date(item.lastSyncAt).toLocaleString('pt-BR') : 'Nunca'}</dd></div><div><dt className="font-semibold text-slate-500">Registros</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{item.receivedRecords}</dd></div><div className="col-span-2"><dt className="font-semibold text-slate-500">Ação recomendada</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{recommendedAction(item)}</dd></div></dl>{item.lastBatchError && <p className="rounded-lg bg-rose-50 p-2 text-xs text-rose-700 dark:bg-rose-950/30 dark:text-rose-200">Último erro: {item.lastBatchError}</p>}{agentActions(item, true)}</article>)}</div></>
+        </div><div className="grid gap-3 md:hidden">{items.map((item) => <article key={item.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-900 dark:text-white">{item.name}</h3><p className="mt-1 truncate font-mono text-xs text-slate-500">{item.installationKey}</p></div><AgentStatusBadge agent={item} className="shrink-0" /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Última sync</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{item.lastSyncAt ? new Date(item.lastSyncAt).toLocaleString('pt-BR') : 'Nunca'}</dd></div><div><dt className="font-semibold text-slate-500">Registros</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{item.receivedRecords}</dd></div><div className="col-span-2"><dt className="font-semibold text-slate-500">Ação recomendada</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{recommendedAction(item)}</dd></div></dl>{item.lastBatchError && <p className="rounded-lg bg-rose-50 p-2 text-xs text-rose-700 dark:bg-rose-950/30 dark:text-rose-200">Último erro: {item.lastBatchError}</p>}{agentActions(item, true)}</article>)}</div></>
       )}
       {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="agentes" onPageChange={setPage} />}
       {eventsFor && (
@@ -241,7 +246,7 @@ const AgentsManagement: React.FC = () => {
           <div className="max-h-[60vh] overflow-auto p-5">
             {loadingEvents ? <p className="text-sm text-slate-500 dark:text-slate-400">Carregando eventos…</p> : events.length === 0 ? <p className="text-sm text-slate-500 dark:text-slate-400">Nenhum evento de auditoria disponível para este agente.</p> : (
               <ol className="space-y-3">
-                {events.map((event) => <li key={event.id} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><div className="flex items-center justify-between gap-3"><strong className="text-sm text-slate-900 dark:text-white">{event.eventType}</strong><span className={`rounded-full px-2 py-1 text-xs font-bold ${event.status === 'success' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'}`}>{event.status}</span></div><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{new Date(event.createdAt).toLocaleString('pt-BR')}{event.durationMs !== null ? ` · ${event.durationMs} ms` : ''}{event.errorCode ? ` · ${event.errorCode}` : ''}</p></li>)}
+                {events.map((event) => <li key={event.id} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><div className="flex items-center justify-between gap-3"><strong className="text-sm text-slate-900 dark:text-white">{event.eventType}</strong><StatusBadge tone={event.status === 'success' ? 'success' : 'error'}>{event.status}</StatusBadge></div><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{new Date(event.createdAt).toLocaleString('pt-BR')}{event.durationMs !== null ? ` · ${event.durationMs} ms` : ''}{event.errorCode ? ` · ${event.errorCode}` : ''}</p></li>)}
               </ol>
             )}
           </div>

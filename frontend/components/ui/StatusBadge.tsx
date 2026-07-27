@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-type StatusTone = 'success' | 'warning' | 'error' | 'info' | 'neutral';
+export type StatusTone = 'success' | 'warning' | 'error' | 'info' | 'neutral';
 
 type StatusBadgeProps = {
   children: ReactNode;
