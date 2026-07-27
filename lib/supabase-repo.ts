@@ -1238,10 +1238,11 @@ export async function updateTicketByConversation(
 // ---------------------------------------------------------------------------
 
 export async function dashboardMetrics(organizationId: string) {
-  const [{ data: convRows }, { data: ticketRows }, { data: queueRows }] = await Promise.all([
+  const [{ data: convRows }, { data: ticketRows }, { data: queueRows }, { data: agentRows }] = await Promise.all([
     supa().from("conversations").select("status").eq("organization_id", organizationId),
-    supa().from("tickets").select("queue_id, created_at, first_response_at, satisfaction_score").eq("organization_id", organizationId),
+    supa().from("tickets").select("queue_id, created_at, closed_at, first_response_at, first_response_due_at, satisfaction_score").eq("organization_id", organizationId),
     supa().from("queues").select("id, name, color_hex").eq("organization_id", organizationId),
+    supa().from("agent_installations").select("status, last_heartbeat_at, last_sync_at").eq("organization_id", organizationId),
   ]);
 
   let totalAguardando = 0;
@@ -1259,6 +1260,11 @@ export async function dashboardMetrics(organizationId: string) {
   let responseCount = 0;
   let ratingSum = 0;
   let ratingCount = 0;
+  let resolutionSum = 0;
+  let resolutionCount = 0;
+  let slaAtRisk = 0;
+  let slaOverdue = 0;
+  const now = Date.now();
 
   for (const t of ticketRows ?? []) {
     const queueId = t.queue_id || "none";
@@ -1278,9 +1284,34 @@ export async function dashboardMetrics(organizationId: string) {
       responseCount++;
     }
 
+    if (t.created_at && t.closed_at) {
+      const diff = (new Date(t.closed_at).getTime() - new Date(t.created_at).getTime()) / 60000;
+      if (Number.isFinite(diff) && diff >= 0) {
+        resolutionSum += diff;
+        resolutionCount++;
+      }
+    }
+
+    if (!t.first_response_at && !t.closed_at && t.first_response_due_at) {
+      const dueAt = new Date(t.first_response_due_at).getTime();
+      if (dueAt <= now) slaOverdue++;
+      else if (dueAt - now <= 15 * 60 * 1000) slaAtRisk++;
+    }
+
     if (typeof t.satisfaction_score === "number" && t.satisfaction_score >= 1 && t.satisfaction_score <= 5) {
       ratingSum += t.satisfaction_score;
       ratingCount++;
+    }
+  }
+
+  let agentsOnline = 0;
+  let lastDataSyncAt: string | null = null;
+  for (const agent of agentRows ?? []) {
+    const heartbeatAt = agent.last_heartbeat_at ? new Date(agent.last_heartbeat_at).getTime() : 0;
+    if (String(agent.status || "").toLowerCase() === "online" && heartbeatAt > now - 5 * 60 * 1000) agentsOnline++;
+    if (agent.last_sync_at) {
+      const syncAt = new Date(agent.last_sync_at).toISOString();
+      if (!lastDataSyncAt || syncAt > lastDataSyncAt) lastDataSyncAt = syncAt;
     }
   }
 
@@ -1289,6 +1320,11 @@ export async function dashboardMetrics(organizationId: string) {
     totalAtendimento,
     totalEncerrado,
     firstResponseAverageMinutes: responseCount > 0 ? Math.round(responseSum / responseCount) : null,
+    resolutionAverageMinutes: resolutionCount > 0 ? Math.round(resolutionSum / resolutionCount) : null,
+    slaAtRisk,
+    slaOverdue,
+    agentsOnline,
+    lastDataSyncAt,
     volumeByDemand: Array.from(volumeCounter.values()).sort((a, b) => b.total - a.total),
     satisfactionAverage: ratingCount > 0 ? Number((ratingSum / ratingCount).toFixed(2)) : null,
   };

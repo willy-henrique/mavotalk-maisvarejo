@@ -7,7 +7,12 @@ type SupportMetrics = {
   totalAtendimento: number;
   totalEncerrado: number;
   firstResponseAverageMinutes: number | null;
+  resolutionAverageMinutes: number | null;
   satisfactionAverage: number | null;
+  slaAtRisk: number;
+  slaOverdue: number;
+  agentsOnline: number;
+  lastDataSyncAt: string | null;
   volumeByDemand: Array<{ queueName: string; colorHex: string; total: number }>;
 };
 
@@ -36,20 +41,23 @@ const Dashboard: React.FC = () => {
     { label: 'Em atendimento', value: metrics.totalAtendimento, accent: 'bg-blue-500', hint: 'Conversas em andamento pela equipe' },
     { label: 'Resolvidos', value: metrics.totalEncerrado, accent: 'bg-emerald-500', hint: 'Conversas encerradas no período' },
     { label: '1ª resposta', value: metrics.firstResponseAverageMinutes == null ? '—' : `${metrics.firstResponseAverageMinutes} min`, accent: 'bg-violet-500', hint: 'Média até o primeiro retorno' },
-    { label: 'Satisfação', value: metrics.satisfactionAverage == null ? '—' : `${metrics.satisfactionAverage.toFixed(1)} / 5`, accent: 'bg-rose-500', hint: 'Avaliação média recebida' },
+    { label: 'SLA próximo', value: metrics.slaAtRisk, accent: 'bg-amber-500', hint: 'Primeiras respostas nos próximos 15 min' },
+    { label: 'SLA vencido', value: metrics.slaOverdue, accent: 'bg-rose-500', hint: 'Tickets sem primeira resposta no prazo' },
+    { label: 'Resolução', value: metrics.resolutionAverageMinutes == null ? '—' : `${metrics.resolutionAverageMinutes} min`, accent: 'bg-cyan-500', hint: 'Média até o encerramento' },
+    { label: 'Agentes online', value: metrics.agentsOnline, accent: 'bg-emerald-500', hint: 'Heartbeat confirmado nos últimos 5 min' },
   ] : [];
 
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50 p-5 dark:bg-slate-800/95 sm:p-8">
+    <main className="mavo-page"><div className="mavo-page-content">
       <div className="mb-7 flex flex-wrap items-center justify-between gap-4">
         <div><p className="text-sm text-slate-500 dark:text-slate-400">Acompanhe o ritmo da operação e distribua a atenção onde ela é necessária.</p></div>
-        <button type="button" onClick={() => void load()} disabled={loading} className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800">{loading ? 'Atualizando...' : 'Atualizar dados'}</button>
+        <div className="flex items-center gap-3"><p className="text-xs text-slate-500 dark:text-slate-400">Dados de sync: {metrics?.lastDataSyncAt ? new Date(metrics.lastDataSyncAt).toLocaleString('pt-BR') : 'ainda indisponíveis'}</p><button type="button" onClick={() => void load()} disabled={loading} className="mavo-button-secondary">{loading ? 'Atualizando...' : 'Atualizar dados'}</button></div>
       </div>
 
       {error && <div role="alert" className="mb-6 flex items-center justify-between gap-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200"><span>{error}</span><button type="button" onClick={() => void load()} className="whitespace-nowrap rounded-lg bg-white px-3 py-2 text-xs font-black text-rose-700 shadow-sm dark:bg-slate-900 dark:text-rose-200">Tentar novamente</button></div>}
 
-      {loading && !metrics ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{Array.from({ length: 5 }, (_, index) => <div key={index} className="h-36 rounded-3xl skeleton" />)}</div> : metrics && <><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">{cards.map((card) => <article key={card.label} className="group rounded-3xl border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-700 dark:bg-slate-900"><div className={`mb-5 h-2 w-12 rounded-full ${card.accent}`} /><p className="text-[10px] font-black uppercase tracking-[.16em] text-slate-400">{card.label}</p><p className="mt-2 text-3xl font-black tracking-tight text-slate-900 dark:text-white">{card.value}</p><p className="mt-3 text-xs leading-5 text-slate-500 dark:text-slate-400">{card.hint}</p></article>)}</section><section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900 sm:p-6"><div className="mb-6 flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-black text-slate-900 dark:text-white">Distribuição por fila</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Identifique onde a demanda está concentrada.</p></div><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{metrics.volumeByDemand.reduce((total, item) => total + item.total, 0)} tickets</span></div>{metrics.volumeByDemand.length === 0 ? <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-slate-300 text-sm text-slate-500 dark:border-slate-700">Ainda não há tickets para exibir neste painel.</div> : <div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={metrics.volumeByDemand} margin={{ top: 8, right: 8, left: -20, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, .25)" /><XAxis dataKey="queueName" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis allowDecimals={false} axisLine={false} tickLine={false} /><Tooltip cursor={{ fill: 'rgba(37, 99, 235, .06)' }} contentStyle={{ borderRadius: 16, border: '1px solid #e2e8f0' }} /><Bar dataKey="total" name="Tickets" fill="#2563eb" radius={[8, 8, 2, 2]} /></BarChart></ResponsiveContainer></div>}</section></>}
-    </div>
+      {loading && !metrics ? <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 8 }, (_, index) => <div key={index} className="h-36 rounded-3xl skeleton" />)}</div> : metrics && <><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{cards.map((card) => <article key={card.label} className="mavo-card group p-5 transition hover:-translate-y-0.5 hover:shadow-lg"><div className={`mb-5 h-2 w-12 rounded-full ${card.accent}`} /><p className="text-[10px] font-black uppercase tracking-[.16em] text-slate-400">{card.label}</p><p className="mt-2 text-3xl font-black tracking-tight text-slate-900 dark:text-white">{card.value}</p><p className="mt-3 text-xs leading-5 text-slate-500 dark:text-slate-400">{card.hint}</p></article>)}</section><section className="mavo-card mt-6 p-5 sm:p-6"><div className="mb-6 flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-black text-slate-900 dark:text-white">Distribuição por fila</h2><p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Identifique onde a demanda está concentrada.</p></div><span className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{metrics.volumeByDemand.reduce((total, item) => total + item.total, 0)} tickets</span></div>{metrics.volumeByDemand.length === 0 ? <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-slate-300 text-sm text-slate-500 dark:border-slate-700">Ainda não há tickets para exibir neste painel.</div> : <div className="h-72"><ResponsiveContainer width="100%" height="100%"><BarChart data={metrics.volumeByDemand} margin={{ top: 8, right: 8, left: -20, bottom: 8 }}><CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(148, 163, 184, .25)" /><XAxis dataKey="queueName" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} /><YAxis allowDecimals={false} axisLine={false} tickLine={false} /><Tooltip cursor={{ fill: 'rgba(37, 99, 235, .06)' }} contentStyle={{ borderRadius: 16, border: '1px solid #e2e8f0' }} /><Bar dataKey="total" name="Tickets" fill="#2563eb" radius={[8, 8, 2, 2]} /></BarChart></ResponsiveContainer></div>}</section></>}
+    </div></main>
   );
 };
 
