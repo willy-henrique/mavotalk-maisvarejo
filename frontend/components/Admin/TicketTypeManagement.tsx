@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch, apiPost, apiPatch } from '../../services/api';
 import { Icons } from '../../constants';
+import { Dialog } from '../ui/Dialog';
 
 type Queue = {
   id: string;
@@ -98,28 +99,29 @@ const TicketTypeManagement: React.FC = () => {
   };
 
   return (
-    <div className="p-8 flex-1 overflow-y-auto bg-white">
-      <div className="flex justify-between items-end mb-10">
+    <main className="mavo-page"><div className="mavo-page-content">
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight">Tipos de Chamado</h1>
-          <p className="text-slate-500 font-medium">Configure as categorias e cores da triagem (menu do chatbot).</p>
+          <p className="text-xs font-black uppercase tracking-[.16em] text-blue-600 dark:text-blue-400">Administração</p>
+          <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Filas e automações</h2>
+          <p className="mt-2 text-slate-500 dark:text-slate-400">Configure a opção do menu do bot, cor operacional e SLA de primeira resposta.</p>
         </div>
         <button
           onClick={openCreate}
-          className="bg-slate-900 text-white px-6 py-3 rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-xl shadow-slate-200 flex items-center gap-2"
+          className="mavo-button-primary"
         >
           <Icons.Settings className="w-5 h-5" />
-          Nova Categoria
+          Nova fila
         </button>
       </div>
 
       {loading ? (
         <div className="text-slate-500">Carregando...</div>
       ) : queues.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 p-12 text-center text-slate-500">
-          <p className="mb-4">Nenhuma categoria cadastrada.</p>
+        <div className="mavo-card p-10 text-center text-slate-500 dark:text-slate-400">
+          <p className="mb-4">Nenhuma fila cadastrada.</p>
           <button onClick={openCreate} className="text-blue-600 font-bold hover:underline">
-            Criar a primeira categoria
+            Criar a primeira fila
           </button>
         </div>
       ) : (
@@ -129,7 +131,7 @@ const TicketTypeManagement: React.FC = () => {
             .map((q) => (
               <div
                 key={q.id}
-                className="border border-slate-200 rounded-[32px] p-6 hover:shadow-xl hover:shadow-slate-100 transition-all group"
+                className="mavo-card group p-6 transition hover:shadow-xl"
               >
                 <div className="flex justify-between items-start mb-6">
                   <div
@@ -149,16 +151,16 @@ const TicketTypeManagement: React.FC = () => {
                   </div>
                 </div>
 
-                <h3 className="text-lg font-bold text-slate-800 mb-4">{q.name}</h3>
+                <h3 className="mb-4 text-lg font-bold text-slate-800 dark:text-slate-100">{q.name}</h3>
 
                 <div className="space-y-3">
                   <div className="flex justify-between text-xs font-bold">
                     <span className="text-slate-400 uppercase tracking-widest">Opção no menu</span>
-                    <span className="text-slate-700">{q.menuOption}</span>
+                    <span className="text-slate-700 dark:text-slate-200">{q.menuOption}</span>
                   </div>
                   <div className="flex justify-between text-xs font-bold">
                     <span className="text-slate-400 uppercase tracking-widest">SLA Resposta</span>
-                    <span className="text-slate-700">{q.defaultSlaMins} min</span>
+                    <span className="text-slate-700 dark:text-slate-200">{q.defaultSlaMins} min</span>
                   </div>
                 </div>
 
@@ -178,80 +180,67 @@ const TicketTypeManagement: React.FC = () => {
       )}
 
       {showModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-          onClick={() => !submitting && closeModal()}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 className="text-xl font-bold text-slate-800 mb-4">
-              {editingId ? 'Editar categoria' : 'Nova categoria'}
-            </h2>
+        <Dialog title={editingId ? 'Editar fila' : 'Nova fila'} description="A opção escolhida será exibida no menu do bot quando a fila estiver ativa." onClose={() => { if (!submitting) closeModal(); }}>
+            <div className="p-6">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome</label>
+                <label htmlFor="queue-name" className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome</label>
                 <input
+                  id="queue-name"
                   type="text"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="Ex: Sped Fiscal"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="mavo-field"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Opção no menu (número)</label>
+                <label htmlFor="queue-menu-option" className="block text-xs font-bold text-slate-500 uppercase mb-1">Opção no menu (número)</label>
                 <input
+                  id="queue-menu-option"
                   type="number"
                   min={1}
                   max={99}
                   value={formMenuOption}
                   onChange={(e) => setFormMenuOption(Number(e.target.value))}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="mavo-field"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cor</label>
+                <label htmlFor="queue-color" className="block text-xs font-bold text-slate-500 uppercase mb-1">Cor</label>
                 <input
+                  id="queue-color"
                   type="color"
                   value={formColorHex}
                   onChange={(e) => setFormColorHex(e.target.value)}
                   className="w-full h-10 rounded-xl border border-slate-200 cursor-pointer"
                 />
-                <input
+                <input aria-label="Código hexadecimal da cor"
                   type="text"
                   value={formColorHex}
                   onChange={(e) => setFormColorHex(e.target.value)}
                   placeholder="#64748b"
-                  className="w-full mt-2 px-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                  className="mavo-field mt-2 py-2"
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">SLA Resposta (minutos)</label>
+                <label htmlFor="queue-sla" className="block text-xs font-bold text-slate-500 uppercase mb-1">SLA Resposta (minutos)</label>
                 <input
+                  id="queue-sla"
                   type="number"
                   min={5}
                   max={1440}
                   value={formDefaultSlaMins}
                   onChange={(e) => setFormDefaultSlaMins(Number(e.target.value))}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="mavo-field"
                   required
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="formIsActive"
-                  checked={formIsActive}
-                  onChange={(e) => setFormIsActive(e.target.checked)}
-                  className="rounded border-slate-300"
-                />
-                <label htmlFor="formIsActive" className="text-sm font-medium text-slate-700">
-                  Ativo no menu do chatbot
-                </label>
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                <div><p className="text-sm font-bold text-slate-800 dark:text-slate-100">Ativo no menu do chatbot</p><p className="text-xs text-slate-500 dark:text-slate-400">Filas inativas não aparecem como opção para o cliente.</p></div>
+                <button type="button" role="switch" aria-checked={formIsActive} aria-label="Alternar fila ativa no menu do chatbot" onClick={() => setFormIsActive((value) => !value)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${formIsActive ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'}`}><span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition ${formIsActive ? 'translate-x-6' : 'translate-x-1'}`} /></button>
               </div>
               {submitError && <p className="text-sm text-rose-600">{submitError}</p>}
               <div className="flex gap-2 justify-end pt-2">
@@ -259,23 +248,23 @@ const TicketTypeManagement: React.FC = () => {
                   type="button"
                   onClick={closeModal}
                   disabled={submitting}
-                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium disabled:opacity-50"
+                  className="mavo-button-secondary"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={submitting || !formName.trim()}
-                  className="px-6 py-2 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50"
+                  className="mavo-button-primary"
                 >
                   {submitting ? 'Salvando...' : editingId ? 'Atualizar' : 'Criar'}
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+            </div>
+        </Dialog>
       )}
-    </div>
+    </div></main>
   );
 };
 
