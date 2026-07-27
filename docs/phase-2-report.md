@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 112/112 aprovados
+npm test               → 113/113 aprovados
 npm run test:e2e       → 20 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 npm run build           → aprovado (Next.js, 43 páginas/rotas geradas)
@@ -89,3 +89,4 @@ npm run render:validate → aprovado
 - A configuração da empresa no painel master exige nome do assistente e do supermercado, normaliza ambos antes de salvar e aceita somente URLs `http`/`https` para mapa e encarte. A mesma validação é aplicada no servidor dentro do tenant resolvido pela sessão.
 - Horários de funcionamento agora são validados de forma estrita antes de gravar: dias não podem duplicar, intervalos ativos precisam abrir antes de fechar e o fuso operacional permanece `America/Sao_Paulo`, que é o mesmo usado pelo bot para decidir expediente.
 - O painel master mostra uma prévia acessível e em tempo real da saudação do WhatsApp com o nome do assistente e do supermercado em edição, tornando explícito o efeito da configuração antes do salvamento.
+- A atualização dos horários da empresa deixou de gravar dia a dia: um único upsert com `jsonb_to_recordset` mantém o conjunto consistente caso uma operação falhe, sempre dentro do contexto RLS da organização.

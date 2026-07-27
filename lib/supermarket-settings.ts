@@ -144,18 +144,33 @@ export async function updateConfiguredBusinessHours(
   organizationId: string,
   hours: ConfiguredHour[],
 ): Promise<ConfiguredHour[]> {
-  for (const hour of hours) {
-    await queryTenantDatabase(
+  if (!hours.length) return getConfiguredBusinessHours(organizationId);
+  await queryTenantDatabase(
+    organizationId,
+    `INSERT INTO business_hours (organization_id, weekday, start_time, end_time, timezone, is_active)
+     SELECT $1, item.weekday, item.start_time, item.end_time, item.timezone, item.is_active
+       FROM jsonb_to_recordset($2::jsonb) AS item(
+         weekday integer,
+         start_time text,
+         end_time text,
+         timezone text,
+         is_active boolean
+       )
+     ON CONFLICT (organization_id, weekday) DO UPDATE SET
+       start_time = EXCLUDED.start_time,
+       end_time = EXCLUDED.end_time,
+       timezone = EXCLUDED.timezone,
+       is_active = EXCLUDED.is_active`,
+    [
       organizationId,
-      `INSERT INTO business_hours (organization_id, weekday, start_time, end_time, timezone, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (organization_id, weekday) DO UPDATE SET
-         start_time = EXCLUDED.start_time,
-         end_time = EXCLUDED.end_time,
-         timezone = EXCLUDED.timezone,
-         is_active = EXCLUDED.is_active`,
-      [organizationId, hour.weekday, hour.startTime, hour.endTime, hour.timezone, hour.isActive],
-    );
-  }
+      JSON.stringify(hours.map((hour) => ({
+        weekday: hour.weekday,
+        start_time: hour.startTime,
+        end_time: hour.endTime,
+        timezone: hour.timezone,
+        is_active: hour.isActive,
+      }))),
+    ],
+  );
   return getConfiguredBusinessHours(organizationId);
 }
