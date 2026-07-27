@@ -10,7 +10,7 @@ import type {
   ContactAndConversation,
 } from "@/lib/repo-types";
 import { getSupabaseClient } from "@/lib/supabase-admin";
-import type { Row, SupabaseLikeClient } from "@/lib/postgres-supabase-shim";
+import { createTenantPostgresSupabaseShim, type Row, type SupabaseLikeClient } from "@/lib/postgres-supabase-shim";
 import { DEFAULT_ORGANIZATION_ID } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { enqueueSlaCheck } from "@/lib/queues";
@@ -18,9 +18,10 @@ import { SUPERMARKET_QUEUE_PRESET } from "@/lib/supermarket-config";
 import { randomUUID } from "node:crypto";
 import { queryTenantDatabase } from "@/lib/db";
 
-// Both providers expose the fluent subset implemented by the local shim.
-// The repository normalizes every returned row before exposing it to callers.
-function supa(): SupabaseLikeClient {
+// Login e resolução inicial de canal ainda precisam de uma leitura de
+// plataforma para descobrir a organização. Todo fluxo que já recebeu um
+// organizationId usa `supa(organizationId)` para executar sob RLS.
+function platformSupa(): SupabaseLikeClient {
   return getSupabaseClient() as SupabaseLikeClient;
 }
 
@@ -28,6 +29,12 @@ function requireOrganizationId(organizationId: string): string {
   const value = String(organizationId || "").trim();
   if (!value) throw new Error("Contexto de organização ausente");
   return value;
+}
+
+function supa(organizationId?: string): SupabaseLikeClient {
+  return organizationId
+    ? createTenantPostgresSupabaseShim(requireOrganizationId(organizationId))
+    : platformSupa();
 }
 
 function iso(d: string | null | undefined): string {
@@ -54,7 +61,7 @@ export async function getUserById(
     "id" | "organizationId" | "name" | "email" | "role" | "isActive"
   > | null
 > {
-  const { data, error } = await supa()
+  const { data, error } = await supa(organizationId)
     .from("users")
     .select("id, organization_id, name, email, role, is_active")
     .eq("id", id)
@@ -73,7 +80,7 @@ export async function getUserById(
 }
 
 export async function getUserByEmail(email: string): Promise<FireUser | null> {
-  const { data, error } = await supa()
+  const { data, error } = await platformSupa()
     .from("users")
     .select("*")
     .ilike("email", email.trim().toLowerCase())
@@ -96,7 +103,7 @@ export async function getUserByEmail(email: string): Promise<FireUser | null> {
 
 export async function listUsers(organizationId: string): Promise<FireUser[]> {
   const orgId = requireOrganizationId(organizationId);
-  const { data, error } = await supa()
+  const { data, error } = await supa(orgId)
     .from("users")
     .select("*")
     .eq("organization_id", orgId)
@@ -202,7 +209,10 @@ export async function createUser(
 ): Promise<{ error: "EMAIL_EXISTS" | null; user: FireUser | null }> {
   const orgId = requireOrganizationId(organizationId);
   const normalizedEmail = payload.email.toLowerCase().trim();
-  const { data: existing } = await supa()
+  // O schema atual impõe e-mail único globalmente; esta leitura de identidade
+  // evita devolver uma falha genérica de índice ao administrador. Nenhum dado
+  // da conta encontrada é exposto; a inserção permanece no contexto RLS.
+  const { data: existing } = await platformSupa()
     .from("users")
     .select("id")
     .ilike("email", normalizedEmail)
@@ -210,7 +220,7 @@ export async function createUser(
   if (existing) return { error: "EMAIL_EXISTS", user: null };
 
   const id = randomUUID();
-  const { data, error } = await supa()
+  const { data, error } = await supa(orgId)
     .from("users")
     .insert({
       id,
@@ -248,7 +258,7 @@ export async function updateUser(
   payload: Partial<{ name: string; email: string; passwordHash: string; role: Role; isActive: boolean }>,
 ): Promise<{ error: "NOT_FOUND" | "EMAIL_EXISTS" | null; user: FireUser | null }> {
   const orgId = requireOrganizationId(organizationId);
-  const { data: current } = await supa()
+  const { data: current } = await supa(orgId)
     .from("users")
     .select("*")
     .eq("id", id)
@@ -263,7 +273,9 @@ export async function updateUser(
   if (typeof payload.isActive === "boolean") updates.is_active = payload.isActive;
   if (typeof payload.email === "string") {
     const norm = payload.email.toLowerCase().trim();
-    const { data: dup } = await supa()
+    // Ver comentário em createUser: a identidade de login é global neste
+    // schema, enquanto a atualização em si permanece tenant-aware.
+    const { data: dup } = await platformSupa()
       .from("users")
       .select("id")
       .ilike("email", norm)
@@ -274,7 +286,7 @@ export async function updateUser(
   }
   updates.updated_at = new Date().toISOString();
 
-  const { data, error } = await supa()
+  const { data, error } = await supa(orgId)
     .from("users")
     .update(updates)
     .eq("id", id)
@@ -310,7 +322,7 @@ export async function deactivateUser(
 export async function recordUserLogin(organizationId: string, id: string): Promise<void> {
   const orgId = requireOrganizationId(organizationId);
   try {
-    const { error } = await supa()
+    const { error } = await supa(orgId)
       .from("users")
       .update({ last_login_at: new Date().toISOString() })
       .eq("id", id)
@@ -333,7 +345,7 @@ export async function listQueues(organizationId: string): Promise<FireQueue[]> {
   // 1) Tenta carregar filas já existentes
   let data: Row[] | null;
   {
-    const { data: rows, error } = await supa()
+    const { data: rows, error } = await supa(orgId)
       .from("queues")
       .select("*")
       .eq("organization_id", orgId)
@@ -357,7 +369,7 @@ export async function listQueues(organizationId: string): Promise<FireQueue[]> {
       is_active: true,
     }));
 
-    const { data: inserted, error: insertError } = await supa()
+    const { data: inserted, error: insertError } = await supa(orgId)
       .from("queues")
       .insert(defaults)
       .select("*")
@@ -388,7 +400,7 @@ export async function listQueues(organizationId: string): Promise<FireQueue[]> {
 export async function createQueue(organizationId: string, payload: Record<string, unknown>): Promise<FireQueue> {
   const orgId = requireOrganizationId(organizationId);
   const id = randomUUID();
-  const { data, error } = await supa()
+  const { data, error } = await supa(orgId)
     .from("queues")
     .insert({
       id,
@@ -426,7 +438,7 @@ export async function updateQueue(
   if ("defaultSlaMins" in payload) updates.default_sla_mins = Number(payload.defaultSlaMins ?? 30);
   if ("isActive" in payload) updates.is_active = (payload.isActive as boolean | undefined) ?? true;
 
-  const { data, error } = await supa()
+  const { data, error } = await supa(orgId)
     .from("queues")
     .update(updates)
     .eq("id", id)
@@ -452,14 +464,14 @@ export type DeleteQueueResult = "deleted" | "in_use" | "not_found";
 export async function deleteQueue(organizationId: string, id: string): Promise<DeleteQueueResult> {
   const orgId = requireOrganizationId(organizationId);
   const [conversationCheck, ticketCheck] = await Promise.all([
-    supa().from("conversations").select("id").eq("organization_id", orgId).eq("queue_id", id),
-    supa().from("tickets").select("id").eq("organization_id", orgId).eq("queue_id", id),
+    supa(orgId).from("conversations").select("id").eq("organization_id", orgId).eq("queue_id", id),
+    supa(orgId).from("tickets").select("id").eq("organization_id", orgId).eq("queue_id", id),
   ]);
   if (conversationCheck.error) throw conversationCheck.error;
   if (ticketCheck.error) throw ticketCheck.error;
   if ((conversationCheck.data?.length ?? 0) > 0 || (ticketCheck.data?.length ?? 0) > 0) return "in_use";
 
-  const { data, error } = await supa()
+  const { data, error } = await supa(orgId)
     .from("queues")
     .delete()
     .eq("id", id)
@@ -487,9 +499,10 @@ export async function createAuditLog(
   entityId: string,
   metadata: Record<string, unknown> = {},
 ) {
-  const { error } = await supa().from("audit_logs").insert({
+  const orgId = requireOrganizationId(organizationId);
+  const { error } = await supa(orgId).from("audit_logs").insert({
     id: randomUUID(),
-    organization_id: organizationId,
+    organization_id: orgId,
     user_id: userId,
     action,
     entity_type: entityType,
@@ -504,10 +517,11 @@ export async function createAuditLog(
 // ---------------------------------------------------------------------------
 
 export async function listQuickReplies(organizationId: string): Promise<FireQuickReply[]> {
-  const { data, error } = await supa()
+  const orgId = requireOrganizationId(organizationId);
+  const { data, error } = await supa(orgId)
     .from("quick_replies")
     .select("*")
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .order("name", { ascending: true });
   if (error) { logger.error({ err: error }, "supa listQuickReplies"); throw error; }
   return (data ?? []).map((r): FireQuickReply => ({
@@ -578,12 +592,13 @@ export async function createQuickReply(
   organizationId: string,
   payload: { name: string; content: string; category?: string | null },
 ): Promise<FireQuickReply> {
+  const orgId = requireOrganizationId(organizationId);
   const id = randomUUID();
-  const { data, error } = await supa()
+  const { data, error } = await supa(orgId)
     .from("quick_replies")
     .insert({
       id,
-      organization_id: organizationId,
+      organization_id: orgId,
       name: payload.name.trim(),
       content: payload.content,
       category: payload.category?.trim() || null,
@@ -593,7 +608,7 @@ export async function createQuickReply(
   if (error) { logger.error({ err: error }, "supa createQuickReply"); throw error; }
   return {
     id,
-    organizationId,
+    organizationId: orgId,
     name: String(data?.name ?? payload.name.trim()),
     content: String(data?.content ?? payload.content),
     category: data?.category != null ? String(data.category) : (payload.category?.trim() || null),
@@ -606,11 +621,12 @@ export async function updateQuickReply(
   id: string,
   payload: Partial<{ name: string; content: string; category: string | null }>,
 ): Promise<FireQuickReply | null> {
-  const { data: existing } = await supa()
+  const orgId = requireOrganizationId(organizationId);
+  const { data: existing } = await supa(orgId)
     .from("quick_replies")
     .select("*")
     .eq("id", id)
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .maybeSingle();
   if (!existing) return null;
 
@@ -621,25 +637,25 @@ export async function updateQuickReply(
   if (Object.keys(updates).length === 0) {
     return {
       id,
-      organizationId,
+      organizationId: orgId,
       name: String(existing.name ?? ""),
       content: String(existing.content ?? ""),
       category: existing.category != null ? String(existing.category) : null,
       createdAt: iso(existing.created_at),
     };
   }
-  const { data, error } = await supa()
+  const { data, error } = await supa(orgId)
     .from("quick_replies")
     .update(updates)
     .eq("id", id)
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .select("*")
     .maybeSingle();
   if (error) { logger.error({ err: error }, "supa updateQuickReply"); throw error; }
   if (!data) return null;
   return {
     id,
-    organizationId,
+    organizationId: orgId,
     name: String(data.name ?? ""),
     content: String(data.content ?? ""),
     category: data.category != null ? String(data.category) : null,
@@ -648,11 +664,12 @@ export async function updateQuickReply(
 }
 
 export async function deleteQuickReply(organizationId: string, id: string): Promise<boolean> {
-  const { data } = await supa()
+  const orgId = requireOrganizationId(organizationId);
+  const { data } = await supa(orgId)
     .from("quick_replies")
     .delete()
     .eq("id", id)
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .select("id")
     .maybeSingle();
   return !!data;

@@ -21,7 +21,7 @@ Data da inspeção: 2026-07-27. Esta é uma auditoria estática; validação de 
 | Severidade | Risco | Causa raiz | Correção recomendada |
 | --- | --- | --- | --- |
 | Resolvido | SLA prometido não possuía execução efetiva | O agendamento por ticket, worker transacional, idempotência e auditoria foram implementados e cobertos por teste arquitetural. A confirmação de que o worker está ativo no Render ainda exige observabilidade de produção. |
-| P1 | RLS não é uma garantia demonstrável para todos os caminhos | Os caminhos administrativos críticos, inclusive o resumo de sincronização, usam o helper tenant-aware. O repositório operacional legado ainda usa o adaptador SQL com filtro explícito em vários fluxos. A efetividade também depende de o papel de conexão não ser owner/BYPASSRLS. | migrar os fluxos legados restantes, usar papel de aplicação sem `BYPASSRLS`, considerar `FORCE ROW LEVEL SECURITY` e verificar políticas aplicadas na base QA. |
+| P1 | RLS não é uma garantia demonstrável para todos os caminhos | Os caminhos administrativos críticos, inclusive o resumo de sincronização e as mutações de usuários, filas e respostas rápidas, usam contexto RLS tenant-aware. O repositório operacional legado ainda possui fluxos de Inbox, contatos e webhooks no adaptador SQL com filtro explícito. A efetividade também depende de o papel de conexão não ser owner/BYPASSRLS. | migrar os fluxos operacionais restantes, usar papel de aplicação sem `BYPASSRLS`, considerar `FORCE ROW LEVEL SECURITY` e verificar políticas aplicadas na base QA. |
 | Resolvido | Master limitado à organização padrão | O master agora lista organizações apenas sob sessão de plataforma e valida a existência do tenant antes de overview, sincronização ou gravação de configurações. Sessões operacionais ignoram o header de seleção e permanecem no tenant autenticado. |
 | Resolvido | Menu só escondia itens, sem política configurável de ação | A configuração persistia apenas visibilidade, enquanto as APIs tinham papéis fixos. | `menu_permission_overrides` armazena overrides por organização; padrões seguros continuam no código e `requireMenuPermission` protege as rotas mapeadas. A confirmação dinâmica com dois tenants QA permanece pendente. |
 | Resolvido | Erro de ordem em consulta estrita da Auditoria | `queryTenantDatabase` aceitava dois parâmetros textuais, permitindo passar SQL como contexto sem erro de tipo. | A rota foi corrigida e o helper agora valida o identificador técnico antes de abrir a transação, falhando de forma segura. |
@@ -29,6 +29,11 @@ Data da inspeção: 2026-07-27. Esta é uma auditoria estática; validação de 
 | P2 | CSRF requer validação dinâmica no ambiente | O servidor aceita apenas origens configuradas e agora recusa mutações autenticadas por cookie sem `Origin`; webhooks e agentes sem cookie permanecem fora dessa regra. Ainda é necessário confirmar os cabeçalhos reais e a configuração `SameSite` no QA publicado. |
 | P2 | Auditoria administrativa não é uniformemente demonstrada | Configurações, filas, usuários, agentes, acessos gerenciais e respostas rápidas auditam as mutações principais com payload mascarado. Ainda falta inventariar e centralizar todas as mutações administrativas futuras em uma única política. |
 | P2 | Nome técnico de tenant aparece na experiência | IDs são usados como dado de interface em fluxos administrativos | usar nome amigável; manter ID apenas em detalhe/tooltip e logs técnicos. |
+
+### Exceções de plataforma inventariadas
+
+- A autenticação por e-mail e a verificação de e-mail duplicado usam leitura de plataforma: o schema atual possui unicidade global de `LOWER(email)` e a rota de login ainda não recebe organização. Essas leituras não devolvem dados de outra empresa; mutações de usuários continuam no contexto RLS do tenant. Permitir o mesmo e-mail em empresas distintas exige uma decisão de produto e login com escolha/identificador de organização.
+- A resolução de organização por canal WhatsApp e o bootstrap do `DEFAULT_ORG_ID` também precedem o contexto de tenant. Ambos devem continuar limitados a identificadores de roteamento, nunca a dados operacionais.
 
 ## Escopo de dados por origem
 

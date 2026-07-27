@@ -5,8 +5,10 @@ import { readFile } from "node:fs/promises";
 const read = (path: string) => readFile(path, "utf8");
 
 test("consultas administrativas críticas executam com contexto RLS do tenant", async () => {
-  const [db, audit, auditDetail, agents, menuSettings, supermarketSettings, analytics, businessAccess] = await Promise.all([
+  const [db, shim, repository, audit, auditDetail, agents, menuSettings, supermarketSettings, analytics, businessAccess] = await Promise.all([
     read("lib/db.ts"),
+    read("lib/postgres-supabase-shim.ts"),
+    read("lib/supabase-repo.ts"),
     read("app/api/business/audit/route.ts"),
     read("app/api/business/audit/[id]/route.ts"),
     read("lib/agent-cloud/agent-repository.ts"),
@@ -17,6 +19,15 @@ test("consultas administrativas críticas executam com contexto RLS do tenant", 
   ]);
   assert.match(db, /function queryTenantDatabase/);
   assert.match(db, /withTenantTransaction\(organizationId/);
+  assert.match(shim, /createTenantPostgresSupabaseShim/);
+  assert.match(shim, /queryTenantDatabase<T>\(organizationId, sql, values\)/);
+  assert.match(repository, /function supa\(organizationId\?: string\)/);
+  for (const name of ["createUser", "updateUser", "recordUserLogin", "createQueue", "updateQueue", "deleteQueue", "createQuickReply", "updateQuickReply", "deleteQuickReply"]) {
+    const start = repository.indexOf(`export async function ${name}`);
+    const end = repository.indexOf("export async function", start + 1);
+    assert.ok(start >= 0, `${name} deve existir no repositório`);
+    assert.match(repository.slice(start, end < 0 ? undefined : end), /supa\(orgId\)/, `${name} deve executar sob o tenant resolvido`);
+  }
   assert.doesNotMatch(audit, /queryDatabase/);
   assert.match(audit, /queryTenantDatabase/);
   assert.match(auditDetail, /queryTenantDatabase/);

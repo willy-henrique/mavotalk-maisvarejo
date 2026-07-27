@@ -1,5 +1,5 @@
 import type { QueryResult } from "pg";
-import { getDatabasePool } from "@/lib/db";
+import { getDatabasePool, queryTenantDatabase, requireTenantOrganizationId } from "@/lib/db";
 
 // Database rows are schema-less at this adapter boundary and are normalized by
 // the repository before reaching the rest of the application.
@@ -21,9 +21,15 @@ function quoteIdent(identifier: string): string {
   return `"${identifier.replaceAll('"', '""')}"`;
 }
 
-async function runQuery<T extends Row>(sql: string, values: unknown[]): Promise<{ data: T[] | null; error: unknown | null }> {
+async function runQuery<T extends Row>(
+  sql: string,
+  values: unknown[],
+  organizationId?: string,
+): Promise<{ data: T[] | null; error: unknown | null }> {
   try {
-    const result: QueryResult<T> = await getDatabasePool().query<T>(sql, values);
+    const result: QueryResult<T> = organizationId
+      ? await queryTenantDatabase<T>(organizationId, sql, values)
+      : await getDatabasePool().query<T>(sql, values);
     return { data: result.rows, error: null };
   } catch (error) {
     return { data: null, error };
@@ -32,6 +38,7 @@ async function runQuery<T extends Row>(sql: string, values: unknown[]): Promise<
 
 class PgQueryBuilder {
   private readonly table: string;
+  private readonly organizationId?: string;
   private operation: Operation = "select";
   private selectMode: SelectMode = "*";
   private filters: Filter[] = [];
@@ -41,8 +48,9 @@ class PgQueryBuilder {
   private updatePayload: Row | null = null;
   private returningAfterMutation = false;
 
-  constructor(table: string) {
+  constructor(table: string, organizationId?: string) {
     this.table = table;
+    this.organizationId = organizationId;
   }
 
   select(columns: string): this {
@@ -186,7 +194,7 @@ class PgQueryBuilder {
         values.push(this.rowLimit);
         sql += ` LIMIT $${values.length}`;
       }
-      return runQuery<T>(sql, values);
+      return runQuery<T>(sql, values, this.organizationId);
     }
 
     if (this.operation === "insert") {
@@ -214,7 +222,7 @@ class PgQueryBuilder {
       if (this.returningAfterMutation) {
         sql += ` RETURNING ${this.selectColumns()}`;
       }
-      return runQuery<T>(sql, values);
+      return runQuery<T>(sql, values, this.organizationId);
     }
 
     if (this.operation === "update") {
@@ -232,7 +240,7 @@ class PgQueryBuilder {
       if (this.returningAfterMutation) {
         sql += ` RETURNING ${this.selectColumns()}`;
       }
-      return runQuery<T>(sql, values);
+      return runQuery<T>(sql, values, this.organizationId);
     }
 
     let sql = `DELETE FROM ${quoteIdent(this.table)}`;
@@ -240,7 +248,7 @@ class PgQueryBuilder {
     if (this.returningAfterMutation) {
       sql += ` RETURNING ${this.selectColumns()}`;
     }
-    return runQuery<T>(sql, values);
+    return runQuery<T>(sql, values, this.organizationId);
   }
 }
 
@@ -252,6 +260,22 @@ export function createPostgresSupabaseShim(): SupabaseLikeClient {
   return {
     from(table: string) {
       return new PgQueryBuilder(table);
+    },
+  };
+}
+
+/**
+ * Cliente para fluxos que já conhecem a organização. Cada consulta instala
+ * `app.organization_id` antes do SQL para que RLS complemente os filtros
+ * explícitos do repositório.
+ */
+export function createTenantPostgresSupabaseShim(
+  organizationId: string,
+): SupabaseLikeClient {
+  const tenantId = requireTenantOrganizationId(organizationId);
+  return {
+    from(table: string) {
+      return new PgQueryBuilder(table, tenantId);
     },
   };
 }
