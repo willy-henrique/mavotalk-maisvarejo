@@ -680,10 +680,11 @@ export async function deleteQuickReply(organizationId: string, id: string): Prom
 // ---------------------------------------------------------------------------
 
 export async function listConversations(organizationId: string, status?: ConversationStatus) {
-  let query = supa()
+  const orgId = requireOrganizationId(organizationId);
+  let query = supa(orgId)
     .from("conversations")
     .select("*")
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .order("updated_at", { ascending: false })
     .limit(80);
   if (status) query = query.eq("status", status);
@@ -699,16 +700,16 @@ export async function listConversations(organizationId: string, status?: Convers
     { data: ticketRows },
     { data: userRows },
   ] = await Promise.all([
-    supa()
+    supa(orgId)
       .from("messages")
       .select("*")
-      .eq("organization_id", organizationId)
+      .eq("organization_id", orgId)
       .order("created_at", { ascending: false })
       .limit(200),
-    supa().from("contacts").select("*").eq("organization_id", organizationId),
-    supa().from("queues").select("*").eq("organization_id", organizationId),
-    supa().from("tickets").select("*").eq("organization_id", organizationId),
-    supa().from("users").select("id, name").eq("organization_id", organizationId),
+    supa(orgId).from("contacts").select("*").eq("organization_id", orgId),
+    supa(orgId).from("queues").select("*").eq("organization_id", orgId),
+    supa(orgId).from("tickets").select("*").eq("organization_id", orgId),
+    supa(orgId).from("users").select("id, name").eq("organization_id", orgId),
   ]);
 
   const contacts = new Map((contactRows ?? []).map((r) => [r.id, r]));
@@ -806,11 +807,12 @@ export async function listConversations(organizationId: string, status?: Convers
 }
 
 export async function getConversation(organizationId: string, id: string): Promise<FireConversation | null> {
-  const { data, error } = await supa()
+  const orgId = requireOrganizationId(organizationId);
+  const { data, error } = await supa(orgId)
     .from("conversations")
     .select("*")
     .eq("id", id)
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .maybeSingle();
   if (error) { logger.error({ err: error }, "supa getConversation"); throw error; }
   if (!data) return null;
@@ -827,33 +829,35 @@ export async function getConversation(organizationId: string, id: string): Promi
 }
 
 export async function assignConversation(organizationId: string, conversationId: string, userId: string) {
+  const orgId = requireOrganizationId(organizationId);
   const now = new Date().toISOString();
-  await supa()
+  await supa(orgId)
     .from("conversations")
     .update({ status: "em_atendimento", updated_at: now })
     .eq("id", conversationId)
-    .eq("organization_id", organizationId);
+    .eq("organization_id", orgId);
 
-  await supa()
+  await supa(orgId)
     .from("tickets")
     .update({ assignee_id: userId, first_response_at: now, updated_at: now })
     .eq("conversation_id", conversationId)
-    .eq("organization_id", organizationId);
+    .eq("organization_id", orgId);
 }
 
 export async function closeConversation(organizationId: string, conversationId: string, reason: string) {
+  const orgId = requireOrganizationId(organizationId);
   const now = new Date().toISOString();
-  await supa()
+  await supa(orgId)
     .from("conversations")
     .update({ status: "encerrado", closed_at: now, updated_at: now })
     .eq("id", conversationId)
-    .eq("organization_id", organizationId);
+    .eq("organization_id", orgId);
 
-  await supa()
+  await supa(orgId)
     .from("tickets")
     .update({ close_reason: reason, closed_at: now, updated_at: now })
     .eq("conversation_id", conversationId)
-    .eq("organization_id", organizationId);
+    .eq("organization_id", orgId);
 }
 
 // ---------------------------------------------------------------------------
@@ -873,18 +877,19 @@ export async function addOutboundMessage(
     cloudinaryPublicId?: string | null;
   },
 ) {
+  const orgId = requireOrganizationId(organizationId);
   if (externalId) {
-    const { data: dup } = await supa()
+    const { data: dup } = await supa(orgId)
       .from("messages")
       .select("id, content, type, author_id")
-      .eq("organization_id", organizationId)
+      .eq("organization_id", orgId)
       .eq("conversation_id", conversationId)
       .eq("external_id", externalId)
       .maybeSingle();
     if (dup) {
       return {
         id: dup.id,
-        organizationId,
+        organizationId: orgId,
         conversationId,
         direction: "outbound",
         type: String(dup.type || "text"),
@@ -896,9 +901,9 @@ export async function addOutboundMessage(
 
   const msgType = options?.type || "text";
   const id = randomUUID();
-  const { error: insertError } = await supa().from("messages").insert({
+  const { error: insertError } = await supa(orgId).from("messages").insert({
     id,
-    organization_id: organizationId,
+    organization_id: orgId,
     conversation_id: conversationId,
     direction: "outbound",
     type: msgType,
@@ -918,22 +923,22 @@ export async function addOutboundMessage(
 
   const now = new Date().toISOString();
   if (!options?.skipStatusUpdate) {
-    await supa()
+    await supa(orgId)
       .from("conversations")
       .update({ status: "em_atendimento", updated_at: now })
       .eq("id", conversationId)
-      .eq("organization_id", organizationId);
+      .eq("organization_id", orgId);
   } else {
-    await supa()
+    await supa(orgId)
       .from("conversations")
       .update({ updated_at: now })
       .eq("id", conversationId)
-      .eq("organization_id", organizationId);
+      .eq("organization_id", orgId);
   }
 
   return {
     id,
-    organizationId,
+    organizationId: orgId,
     conversationId,
     direction: "outbound",
     type: msgType,
@@ -954,10 +959,11 @@ export async function addInboundMessage(payload: {
   mimeType?: string | null;
   cloudinaryPublicId?: string | null;
 }) {
+  const orgId = requireOrganizationId(payload.organizationId);
   const id = randomUUID();
-  const { error: insertError } = await supa().from("messages").insert({
+  const { error: insertError } = await supa(orgId).from("messages").insert({
     id,
-    organization_id: payload.organizationId,
+    organization_id: orgId,
     conversation_id: payload.conversationId,
     direction: "inbound",
     type: payload.type,
@@ -979,11 +985,11 @@ export async function addInboundMessage(payload: {
     throw insertError;
   }
   const now = new Date().toISOString();
-  const { error: bumpErr } = await supa()
+  const { error: bumpErr } = await supa(orgId)
     .from("conversations")
     .update({ updated_at: now })
     .eq("id", payload.conversationId)
-    .eq("organization_id", payload.organizationId);
+    .eq("organization_id", orgId);
   if (bumpErr) {
     logger.warn(
       { err: bumpErr, conversationId: payload.conversationId },
@@ -998,10 +1004,11 @@ export async function findMessageByExternalId(
   externalId: string,
 ): Promise<{ id: string; conversationId: string } | null> {
   if (!externalId) return null;
-  const { data, error } = await supa()
+  const orgId = requireOrganizationId(organizationId);
+  const { data, error } = await supa(orgId)
     .from("messages")
     .select("id, conversation_id")
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .eq("external_id", externalId)
     .maybeSingle();
   if (error) { logger.error({ err: error }, "supa findMessageByExternalId"); return null; }
@@ -1013,10 +1020,11 @@ export async function getCloudinaryPublicIdsForConversation(
   organizationId: string,
   conversationId: string,
 ): Promise<string[]> {
-  const { data } = await supa()
+  const orgId = requireOrganizationId(organizationId);
+  const { data } = await supa(orgId)
     .from("messages")
     .select("cloudinary_public_id")
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .eq("conversation_id", conversationId)
     .not("cloudinary_public_id", "is", null);
   return (data ?? []).map((r) => String(r.cloudinary_public_id)).filter(Boolean);
@@ -1030,11 +1038,12 @@ export async function getContactById(
   organizationId: string,
   contactId: string,
 ): Promise<{ id: string; name: string; phoneNumber: string; blocked: boolean } | null> {
-  const { data } = await supa()
+  const orgId = requireOrganizationId(organizationId);
+  const { data } = await supa(orgId)
     .from("contacts")
     .select("*")
     .eq("id", contactId)
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .maybeSingle();
   if (!data) return null;
   return {
@@ -1046,16 +1055,17 @@ export async function getContactById(
 }
 
 export async function getContactByPhone(organizationId: string, phoneNumber: string) {
-  const { data } = await supa()
+  const orgId = requireOrganizationId(organizationId);
+  const { data } = await supa(orgId)
     .from("contacts")
     .select("*")
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .eq("phone_number", phoneNumber)
     .maybeSingle();
   if (!data) return null;
   return {
     id: String(data.id),
-    organizationId,
+    organizationId: orgId,
     phoneNumber: String(data.phone_number ?? phoneNumber),
     name: String(data.name ?? ""),
     blocked: Boolean(data.blocked),
@@ -1068,10 +1078,11 @@ export async function isContactBlocked(organizationId: string, phoneNumber: stri
 }
 
 export async function getOrCreateContact(organizationId: string, phoneNumber: string, name: string) {
-  const { data: existing } = await supa()
+  const orgId = requireOrganizationId(organizationId);
+  const { data: existing } = await supa(orgId)
     .from("contacts")
     .select("*")
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .eq("phone_number", phoneNumber)
     .maybeSingle();
 
@@ -1080,16 +1091,16 @@ export async function getOrCreateContact(organizationId: string, phoneNumber: st
     const newName = name.trim();
     const shouldUpdate = newName && !isPlaceholderName(newName) && newName !== currentName;
     if (shouldUpdate) {
-      await supa()
+      await supa(orgId)
         .from("contacts")
         .update({ name: newName, updated_at: new Date().toISOString() })
         .eq("id", existing.id)
-        .eq("organization_id", organizationId);
-      return { id: String(existing.id), organizationId, phoneNumber: String(existing.phone_number), name: newName };
+        .eq("organization_id", orgId);
+      return { id: String(existing.id), organizationId: orgId, phoneNumber: String(existing.phone_number), name: newName };
     }
     return {
       id: String(existing.id),
-      organizationId,
+      organizationId: orgId,
       phoneNumber: String(existing.phone_number ?? phoneNumber),
       name: currentName || newName || "Contato",
     };
@@ -1097,13 +1108,13 @@ export async function getOrCreateContact(organizationId: string, phoneNumber: st
 
   const id = randomUUID();
   const finalName = name.trim() || "Contato";
-  await supa().from("contacts").insert({
+  await supa(orgId).from("contacts").insert({
     id,
-    organization_id: organizationId,
+    organization_id: orgId,
     phone_number: phoneNumber,
     name: finalName,
   });
-  return { id, organizationId, phoneNumber, name: finalName };
+  return { id, organizationId: orgId, phoneNumber, name: finalName };
 }
 
 export async function updateContactAvatar(
@@ -1111,24 +1122,26 @@ export async function updateContactAvatar(
   contactId: string,
   avatarUrl: string | null,
 ) {
-  await supa()
+  const orgId = requireOrganizationId(organizationId);
+  await supa(orgId)
     .from("contacts")
     .update({ avatar_url: avatarUrl || null, updated_at: new Date().toISOString() })
     .eq("id", contactId)
-    .eq("organization_id", organizationId);
+    .eq("organization_id", orgId);
 }
 
 export async function listContacts(organizationId: string): Promise<ListContactItem[]> {
-  const { data: contactRows, error } = await supa()
+  const orgId = requireOrganizationId(organizationId);
+  const { data: contactRows, error } = await supa(orgId)
     .from("contacts")
     .select("*")
-    .eq("organization_id", organizationId);
+    .eq("organization_id", orgId);
   if (error) { logger.error({ err: error }, "supa listContacts"); throw error; }
   if (!contactRows || contactRows.length === 0) return [];
 
   const [{ data: convRows }, { data: msgRows }] = await Promise.all([
-    supa().from("conversations").select("id, contact_id, status, updated_at").eq("organization_id", organizationId),
-    supa().from("messages").select("conversation_id, content, created_at").eq("organization_id", organizationId).order("created_at", { ascending: false }),
+    supa(orgId).from("conversations").select("id, contact_id, status, updated_at").eq("organization_id", orgId),
+    supa(orgId).from("messages").select("conversation_id, content, created_at").eq("organization_id", orgId).order("created_at", { ascending: false }),
   ]);
 
   const convsByContact = new Map<string, Array<{ id: string; updatedAt: Date; status: string }>>();
@@ -1275,11 +1288,12 @@ export async function updateContact(
   contactId: string,
   payload: { name?: string; phoneNumber?: string; blocked?: boolean; internalNote?: string | null },
 ) {
-  const { data: existing } = await supa()
+  const orgId = requireOrganizationId(organizationId);
+  const { data: existing } = await supa(orgId)
     .from("contacts")
     .select("*")
     .eq("id", contactId)
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .maybeSingle();
   if (!existing) return null;
 
@@ -1299,11 +1313,11 @@ export async function updateContact(
     };
   }
 
-  const { data } = await supa()
+  const { data } = await supa(orgId)
     .from("contacts")
     .update(updates)
     .eq("id", contactId)
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .select("*")
     .maybeSingle();
   return data ? { id: contactId, ...data } : null;
@@ -1317,11 +1331,12 @@ async function getOpenConversation(
   organizationId: string,
   contactId: string,
 ): Promise<FireConversation | null> {
+  const orgId = requireOrganizationId(organizationId);
   // 1) Tenta encontrar uma conversa realmente aberta (aguardando / em atendimento / pendente_cliente)
-  const { data: openConv } = await supa()
+  const { data: openConv } = await supa(orgId)
     .from("conversations")
     .select("*")
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .eq("contact_id", contactId)
     .in("status", ["aguardando", "em_atendimento", "pendente_cliente"])
     .order("updated_at", { ascending: false })
@@ -1354,14 +1369,15 @@ export async function getOrCreateOpenConversation(
   contactId: string,
   contactPhone: string,
 ): Promise<FireConversation & { isNew: boolean }> {
+  const orgId = requireOrganizationId(organizationId);
   const existing = await getOpenConversation(organizationId, contactId);
   if (existing) {
     if (!existing.contactPhone) {
-      await supa()
+      await supa(orgId)
         .from("conversations")
         .update({ contact_phone: contactPhone, updated_at: new Date().toISOString() })
         .eq("id", existing.id)
-        .eq("organization_id", organizationId);
+        .eq("organization_id", orgId);
     }
     return { ...existing, contactPhone: existing.contactPhone || contactPhone, isNew: false };
   }
@@ -1370,9 +1386,9 @@ export async function getOrCreateOpenConversation(
   const ticketId = randomUUID();
   const now = new Date().toISOString();
 
-  await supa().from("conversations").insert({
+  await supa(orgId).from("conversations").insert({
     id: convId,
-    organization_id: organizationId,
+    organization_id: orgId,
     contact_id: contactId,
     contact_phone: contactPhone,
     queue_id: null,
@@ -1385,9 +1401,9 @@ export async function getOrCreateOpenConversation(
     updated_at: now,
   });
 
-  await supa().from("tickets").insert({
+  await supa(orgId).from("tickets").insert({
     id: ticketId,
-    organization_id: organizationId,
+    organization_id: orgId,
     conversation_id: convId,
     queue_id: null,
     assignee_id: null,
@@ -1401,7 +1417,7 @@ export async function getOrCreateOpenConversation(
 
   return {
     id: convId,
-    organizationId,
+    organizationId: orgId,
     contactId,
     contactPhone,
     queueId: null,
@@ -1417,13 +1433,14 @@ export async function getOrCreateContactAndOpenConversation(
   contactPhone: string,
   contactName: string,
 ): Promise<ContactAndConversation> {
+  const orgId = requireOrganizationId(organizationId);
   const finalName = contactName.trim() || "Contato";
 
   // Upsert contact
-  const { data: existingContact } = await supa()
+  const { data: existingContact } = await supa(orgId)
     .from("contacts")
     .select("*")
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .eq("phone_number", contactPhone)
     .maybeSingle();
 
@@ -1434,27 +1451,27 @@ export async function getOrCreateContactAndOpenConversation(
     const newName = contactName.trim();
     const shouldUpdate = newName && !isPlaceholderName(newName) && newName !== currentName;
     if (shouldUpdate) {
-      await supa()
+      await supa(orgId)
         .from("contacts")
         .update({ name: newName, updated_at: new Date().toISOString() })
         .eq("id", existingContact.id)
-        .eq("organization_id", organizationId);
+        .eq("organization_id", orgId);
     }
     contact = {
       id: String(existingContact.id),
-      organizationId,
+      organizationId: orgId,
       phoneNumber: contactPhone,
       name: shouldUpdate ? newName : currentName || newName || "Contato",
     };
   } else {
     const id = randomUUID();
-    await supa().from("contacts").insert({
+    await supa(orgId).from("contacts").insert({
       id,
-      organization_id: organizationId,
+      organization_id: orgId,
       phone_number: contactPhone,
       name: finalName,
     });
-    contact = { id, organizationId, phoneNumber: contactPhone, name: finalName };
+    contact = { id, organizationId: orgId, phoneNumber: contactPhone, name: finalName };
   }
 
   // Find or create open conversation
@@ -1471,17 +1488,18 @@ export async function updateConversationById(
   id: string,
   payload: Record<string, unknown>,
 ) {
+  const orgId = requireOrganizationId(organizationId);
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if ("status" in payload) updates.status = payload.status;
   if ("queueId" in payload) updates.queue_id = payload.queueId;
   if ("triageCompleted" in payload) updates.triage_completed = payload.triageCompleted;
   if ("menuAttempts" in payload) updates.menu_attempts = payload.menuAttempts;
   if ("contactPhone" in payload) updates.contact_phone = payload.contactPhone;
-  await supa()
+  await supa(orgId)
     .from("conversations")
     .update(updates)
     .eq("id", id)
-    .eq("organization_id", organizationId);
+    .eq("organization_id", orgId);
 }
 
 export async function updateTicketByConversation(
@@ -1489,6 +1507,7 @@ export async function updateTicketByConversation(
   conversationId: string,
   payload: Record<string, unknown>,
 ) {
+  const orgId = requireOrganizationId(organizationId);
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if ("queueId" in payload) updates.queue_id = payload.queueId;
   if ("assigneeId" in payload) updates.assignee_id = payload.assigneeId;
@@ -1504,11 +1523,11 @@ export async function updateTicketByConversation(
   if ("closeReason" in payload) updates.close_reason = payload.closeReason;
   if ("closedAt" in payload) updates.closed_at = payload.closedAt;
 
-  await supa()
+  await supa(orgId)
     .from("tickets")
     .update(updates)
     .eq("conversation_id", conversationId)
-    .eq("organization_id", organizationId);
+    .eq("organization_id", orgId);
 
   if ("firstResponseDueAt" in payload && payload.firstResponseDueAt) {
     const dueAt = new Date(String(payload.firstResponseDueAt));
@@ -1528,11 +1547,12 @@ export async function updateTicketByConversation(
 // ---------------------------------------------------------------------------
 
 export async function dashboardMetrics(organizationId: string) {
+  const orgId = requireOrganizationId(organizationId);
   const [{ data: convRows }, { data: ticketRows }, { data: queueRows }, { data: agentRows }] = await Promise.all([
-    supa().from("conversations").select("status").eq("organization_id", organizationId),
-    supa().from("tickets").select("queue_id, created_at, closed_at, first_response_at, first_response_due_at, satisfaction_score").eq("organization_id", organizationId),
-    supa().from("queues").select("id, name, color_hex").eq("organization_id", organizationId),
-    supa().from("agent_installations").select("status, last_heartbeat_at, last_sync_at").eq("organization_id", organizationId),
+    supa(orgId).from("conversations").select("status").eq("organization_id", orgId),
+    supa(orgId).from("tickets").select("queue_id, created_at, closed_at, first_response_at, first_response_due_at, satisfaction_score").eq("organization_id", orgId),
+    supa(orgId).from("queues").select("id, name, color_hex").eq("organization_id", orgId),
+    supa(orgId).from("agent_installations").select("status, last_heartbeat_at, last_sync_at").eq("organization_id", orgId),
   ]);
 
   let totalAguardando = 0;
@@ -1628,10 +1648,11 @@ export async function getBusinessHour(
   organizationId: string,
   weekday: number,
 ): Promise<FireBusinessHour | null> {
-  const { data } = await supa()
+  const orgId = requireOrganizationId(organizationId);
+  const { data } = await supa(orgId)
     .from("business_hours")
     .select("*")
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .eq("weekday", weekday)
     .maybeSingle();
   if (!data) return null;
@@ -1652,7 +1673,7 @@ export async function getBusinessHour(
 
 export async function resolveOrganizationByChannel(to: string | null) {
   if (!to) return DEFAULT_ORGANIZATION_ID;
-  const { data } = await supa()
+  const { data } = await platformSupa()
     .from("channels")
     .select("organization_id")
     .eq("twilio_phone_number", to)
@@ -1684,8 +1705,8 @@ export async function resolveDefaultOrganizationId(candidateOrgId: string): Prom
   }
 
   const [orgsResult, usersResult] = await Promise.all([
-    supa().from("organizations").select("id"),
-    supa().from("users").select("organization_id"),
+    platformSupa().from("organizations").select("id"),
+    platformSupa().from("users").select("organization_id"),
   ]);
   if (orgsResult.error || !orgsResult.data) {
     logger.error(
@@ -1735,24 +1756,25 @@ export async function recordSatisfactionRatingByPhone(
   phoneNumber: string,
   rawBody: string,
 ): Promise<boolean> {
+  const orgId = requireOrganizationId(organizationId);
   const body = (rawBody || "").trim();
   if (!/^[1-5]$/.test(body)) return false;
   const score = Number(body);
 
   // 1) Localiza contato pelo telefone
-  const { data: contact } = await supa()
+  const { data: contact } = await supa(orgId)
     .from("contacts")
     .select("id")
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .eq("phone_number", phoneNumber)
     .maybeSingle();
   if (!contact) return false;
 
   // 2) Pega a última conversa encerrada desse contato
-  const { data: conv } = await supa()
+  const { data: conv } = await supa(orgId)
     .from("conversations")
     .select("id")
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .eq("contact_id", contact.id)
     .eq("status", "encerrado")
     .order("updated_at", { ascending: false })
@@ -1761,10 +1783,10 @@ export async function recordSatisfactionRatingByPhone(
   if (!conv) return false;
 
   // 3) Atualiza o ticket vinculado com a nota (sem sobrescrever se já existir)
-  const { data: ticket } = await supa()
+  const { data: ticket } = await supa(orgId)
     .from("tickets")
     .select("id, satisfaction_score")
-    .eq("organization_id", organizationId)
+    .eq("organization_id", orgId)
     .eq("conversation_id", conv.id)
     .limit(1)
     .maybeSingle();
@@ -1774,11 +1796,11 @@ export async function recordSatisfactionRatingByPhone(
     return false;
   }
 
-  const { error } = await supa()
+  const { error } = await supa(orgId)
     .from("tickets")
     .update({ satisfaction_score: score, satisfaction_rated_at: new Date().toISOString() })
     .eq("id", ticket.id)
-    .eq("organization_id", organizationId);
+    .eq("organization_id", orgId);
 
   if (error) {
     logger.error({ err: error, organizationId, phoneNumber }, "Failed to record satisfaction rating");

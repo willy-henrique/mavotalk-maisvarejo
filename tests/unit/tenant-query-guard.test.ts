@@ -22,7 +22,8 @@ test("consultas administrativas críticas executam com contexto RLS do tenant", 
   assert.match(shim, /createTenantPostgresSupabaseShim/);
   assert.match(shim, /queryTenantDatabase<T>\(organizationId, sql, values\)/);
   assert.match(repository, /function supa\(organizationId\?: string\)/);
-  for (const name of ["createUser", "updateUser", "recordUserLogin", "createQueue", "updateQueue", "deleteQueue", "createQuickReply", "updateQuickReply", "deleteQuickReply"]) {
+  assert.doesNotMatch(repository, /\bsupa\(\)/, "o repositório não pode executar consultas operacionais sem tenant");
+  for (const name of ["createUser", "updateUser", "recordUserLogin", "createQueue", "updateQueue", "deleteQueue", "createQuickReply", "updateQuickReply", "deleteQuickReply", "listConversations", "getConversation", "assignConversation", "closeConversation", "addOutboundMessage", "addInboundMessage", "findMessageByExternalId", "getCloudinaryPublicIdsForConversation", "getContactById", "getContactByPhone", "getOrCreateContact", "updateContact", "getOrCreateOpenConversation", "getOrCreateContactAndOpenConversation", "updateConversationById", "updateTicketByConversation", "dashboardMetrics", "getBusinessHour", "recordSatisfactionRatingByPhone"]) {
     const start = repository.indexOf(`export async function ${name}`);
     const end = repository.indexOf("export async function", start + 1);
     assert.ok(start >= 0, `${name} deve existir no repositório`);
