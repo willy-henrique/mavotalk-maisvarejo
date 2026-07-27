@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useDeferredValue, useRef } from 'react';
 import { User, UserRole, UserStatus } from '../../types';
 import { Icons } from '../../constants';
 import { apiFetch, apiPatch, apiPost } from '../../services/api';
@@ -61,6 +61,9 @@ const UserManagement: React.FC = () => {
   const [page, setPage] = useState(1);
   const [actionUserId, setActionUserId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  const [total, setTotal] = useState(0);
+  const deferredSearch = useDeferredValue(searchTerm);
+  const requestRef = useRef(0);
 
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
@@ -68,38 +71,38 @@ const UserManagement: React.FC = () => {
   const [formRole, setFormRole] = useState<UserRole>(UserRole.AGENT);
 
   const fetchUsers = useCallback(async () => {
+    const request = ++requestRef.current;
     setLoading(true);
     setLoadError('');
     try {
-      const res = await apiFetch('/api/admin/users', { method: 'GET' });
-      const data = (await res.json()) as { users?: BackendUser[] };
-      if (res.ok && Array.isArray(data.users)) {
-        setUsers(data.users.map(toFrontendUser));
+      const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+      if (deferredSearch.trim()) params.set('q', deferredSearch.trim());
+      if (roleFilter) params.set('role', toBackendRole(roleFilter as UserRole));
+      if (statusFilter) params.set('status', statusFilter === UserStatus.ATIVO ? 'active' : 'inactive');
+      const res = await apiFetch(`/api/admin/users?${params.toString()}`, { method: 'GET' });
+      const data = (await res.json()) as { items?: BackendUser[]; total?: number };
+      if (request !== requestRef.current) return;
+      if (res.ok && Array.isArray(data.items)) {
+        setUsers(data.items.map(toFrontendUser));
+        setTotal(typeof data.total === 'number' ? data.total : 0);
       } else {
         setLoadError('Não foi possível carregar a equipe. Tente novamente.');
       }
     } catch {
+      if (request !== requestRef.current) return;
       setLoadError('Não foi possível carregar a equipe. Verifique a conexão e tente novamente.');
     } finally {
-      setLoading(false);
+      if (request === requestRef.current) setLoading(false);
     }
-  }, []);
+  }, [deferredSearch, page, roleFilter, statusFilter]);
 
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
 
-  const filteredUsers = users.filter(
-    (u) =>
-      (u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (!roleFilter || u.role === roleFilter) &&
-      (!statusFilter || u.status === statusFilter)
-  );
   const pageSize = 25;
-  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const activePage = Math.min(page, totalPages);
-  const pagedUsers = filteredUsers.slice((activePage - 1) * pageSize, activePage * pageSize);
 
   useEffect(() => {
     setPage(1);
@@ -254,7 +257,7 @@ const UserManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {pagedUsers.map((u) => (
+              {users.map((u) => (
                 <tr key={u.id} className="transition hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -285,7 +288,7 @@ const UserManagement: React.FC = () => {
                   </td>
                 </tr>
               ))}
-              {!filteredUsers.length && (
+              {!users.length && (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
                     Nenhum colaborador encontrado com os filtros atuais.
@@ -296,9 +299,9 @@ const UserManagement: React.FC = () => {
           </table>
         </div>
       )}
-      {!loading && filteredUsers.length > pageSize && (
+      {!loading && total > pageSize && (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300">
-          <span>Mostrando {(activePage - 1) * pageSize + 1}–{Math.min(activePage * pageSize, filteredUsers.length)} de {filteredUsers.length} colaboradores</span>
+          <span>Mostrando {total ? (activePage - 1) * pageSize + 1 : 0}–{Math.min(activePage * pageSize, total)} de {total} colaboradores</span>
           <div className="flex gap-2"><button type="button" disabled={activePage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Anterior</button><button type="button" disabled={activePage === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Próxima</button></div>
         </div>
       )}

@@ -16,6 +16,7 @@ import { logger } from "@/lib/logger";
 import { enqueueSlaCheck } from "@/lib/queues";
 import { SUPERMARKET_QUEUE_PRESET } from "@/lib/supermarket-config";
 import { randomUUID } from "node:crypto";
+import { queryTenantDatabase } from "@/lib/db";
 
 // Both providers expose the fluent subset implemented by the local shim.
 // The repository normalizes every returned row before exposing it to callers.
@@ -113,6 +114,86 @@ export async function listUsers(organizationId: string): Promise<FireUser[]> {
     updatedAt: (row.updated_at as string | null) ?? undefined,
     lastLoginAt: (row.last_login_at as string | null) ?? undefined,
   }));
+}
+
+/**
+ * Lista paginada usada pelo painel operacional. Mantém o contexto RLS estrito
+ * do tenant e evita enviar toda a equipe para o navegador.
+ */
+export async function listUsersPage(
+  organizationId: string,
+  options: {
+    page: number;
+    pageSize: number;
+    query?: string;
+    role?: Role;
+    status?: "active" | "inactive";
+  },
+): Promise<{ items: FireUser[]; total: number }> {
+  const orgId = requireOrganizationId(organizationId);
+  const page = Math.max(1, options.page);
+  const pageSize = Math.min(100, Math.max(1, options.pageSize));
+  const offset = (page - 1) * pageSize;
+  const clauses = ["organization_id = $1"];
+  const values: unknown[] = [orgId];
+  const add = (clause: string, value: unknown) => {
+    values.push(value);
+    clauses.push(clause.replace("?", `$${values.length}`));
+  };
+  const query = options.query?.trim();
+  if (query) {
+    values.push(`%${query}%`);
+    const parameter = `$${values.length}`;
+    clauses.push(`(name ILIKE ${parameter} OR email ILIKE ${parameter})`);
+  }
+  if (options.role) add("role = ?", options.role);
+  if (options.status === "active") clauses.push("is_active = true");
+  if (options.status === "inactive") clauses.push("is_active = false");
+  const where = clauses.join(" AND ");
+  type UserPageRow = {
+    id: string;
+    organization_id: string;
+    name: string | null;
+    email: string | null;
+    password_hash: string | null;
+    role: Role | null;
+    is_active: boolean | null;
+    created_at: string | null;
+    updated_at: string | null;
+    last_login_at: string | null;
+  };
+  const [items, count] = await Promise.all([
+    queryTenantDatabase<UserPageRow>(
+      orgId,
+      `SELECT id, organization_id, name, email, password_hash, role, is_active,
+              created_at, updated_at, last_login_at
+         FROM users
+        WHERE ${where}
+        ORDER BY name, id
+        LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      [...values, pageSize, offset],
+    ),
+    queryTenantDatabase<{ count: string }>(
+      orgId,
+      `SELECT COUNT(*)::text AS count FROM users WHERE ${where}`,
+      values,
+    ),
+  ]);
+  return {
+    items: items.rows.map((row) => ({
+      id: String(row.id),
+      organizationId: String(row.organization_id),
+      name: String(row.name ?? ""),
+      email: String(row.email ?? ""),
+      passwordHash: String(row.password_hash ?? ""),
+      role: (row.role ?? "atendente") as Role,
+      isActive: row.is_active !== false,
+      createdAt: row.created_at ?? undefined,
+      updatedAt: row.updated_at ?? undefined,
+      lastLoginAt: row.last_login_at ?? undefined,
+    })),
+    total: Number(count.rows[0]?.count || 0),
+  };
 }
 
 export async function createUser(

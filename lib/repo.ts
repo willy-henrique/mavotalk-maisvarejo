@@ -40,6 +40,7 @@ export {
   getUserByEmail,
   recordUserLogin,
   listUsers,
+  listUsersPage,
   createUser,
   updateUser,
   deactivateUser,
