@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useState } from 'react';
 import { apiGet, apiPatch, apiPost } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
@@ -33,6 +33,9 @@ const permissionOptions: Array<{ key: Permission; label: string }> = [
 const BusinessAccessManagement: React.FC = () => {
   const [items, setItems] = useState<AccessUser[]>([]);
   const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -48,12 +51,13 @@ const BusinessAccessManagement: React.FC = () => {
     Partial<Record<Permission, boolean>>
   >({});
   const pageSize = 25;
+  const deferredSearch = useDeferredValue(search);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await apiGet<{ items: AccessUser[]; total: number }>(
-        `/api/admin/business-access?page=${page}&pageSize=${pageSize}`,
+        `/api/admin/business-access?page=${page}&pageSize=${pageSize}&q=${encodeURIComponent(deferredSearch)}&role=${encodeURIComponent(roleFilter)}&status=${encodeURIComponent(statusFilter)}`,
       );
       setItems(data.items);
       setTotal(data.total);
@@ -63,11 +67,15 @@ const BusinessAccessManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, deferredSearch, roleFilter, statusFilter]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [deferredSearch, roleFilter, statusFilter]);
 
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -176,6 +184,11 @@ const BusinessAccessManagement: React.FC = () => {
 
       {error && <ErrorState className="mb-5" description={error} action={<button type="button" onClick={() => void load()} disabled={loading || actionId !== null || saving} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
       {notice && <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">{notice}</div>}
+      <div className="mb-5 flex flex-wrap gap-3">
+        <label className="min-w-[15rem] flex-1"><span className="sr-only">Buscar acesso gerencial</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome ou telefone" className="mavo-field" /></label>
+        <label><span className="sr-only">Filtrar por função</span><select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} className="mavo-field"><option value="">Todas as funções</option><option value="owner">Proprietário</option><option value="director">Diretor</option><option value="manager">Gestor</option><option value="analyst">Analista</option></select></label>
+        <label><span className="sr-only">Filtrar por estado</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mavo-field"><option value="">Todos os estados</option><option value="active">Ativo</option><option value="inactive">Inativo</option><option value="locked">Bloqueado</option></select></label>
+      </div>
       {showForm && (
         <Dialog title="Novo acesso gerencial" description="O PIN é usado como confirmação adicional no WhatsApp e nunca é exibido ou armazenado em texto puro." onClose={() => { if (!saving) setShowForm(false); }}>
         <form onSubmit={create} className="grid gap-4 p-6 sm:grid-cols-2">
@@ -241,7 +254,7 @@ const BusinessAccessManagement: React.FC = () => {
       {loading ? (
         <LoadingState title="Carregando acessos gerenciais…" />
       ) : items.length === 0 ? (
-        <EmptyState title="Nenhum número gerencial autorizado." description="Cadastre um responsável, defina as permissões e entregue o PIN por um canal seguro. O acesso não cria tickets nem consome o SLA de atendimento." action={<button type="button" onClick={() => setShowForm(true)} className="mavo-button-primary">Cadastrar primeiro acesso</button>} />
+        <EmptyState title={search || roleFilter || statusFilter ? 'Nenhum acesso encontrado.' : 'Nenhum número gerencial autorizado.'} description={search || roleFilter || statusFilter ? 'Altere a busca ou limpe os filtros para visualizar os acessos cadastrados.' : 'Cadastre um responsável, defina as permissões e entregue o PIN por um canal seguro. O acesso não cria tickets nem consome o SLA de atendimento.'} action={search || roleFilter || statusFilter ? <button type="button" onClick={() => { setSearch(''); setRoleFilter(''); setStatusFilter(''); }} className="mavo-button-secondary">Limpar filtros</button> : <button type="button" onClick={() => setShowForm(true)} className="mavo-button-primary">Cadastrar primeiro acesso</button>} />
       ) : (
         <div className="mavo-card overflow-x-auto p-0">
           <table className="w-full text-left text-sm">

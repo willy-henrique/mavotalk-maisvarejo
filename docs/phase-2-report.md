@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 93/93 aprovados
+npm test               → 94/94 aprovados
 npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 npm run build           → aprovado (Next.js, 43 páginas/rotas geradas)
@@ -63,3 +63,4 @@ npm run render:validate → aprovado
 - Filas e automações agora inclui busca e filtro de status; até oito filas ficam em cards e volumes maiores passam a uma tabela operacional, sem ordenar mutando o estado local.
 - Agentes e sincronização agora mostra uma ação recomendada derivada do estado real da instalação, sem expor endereço de rede.
 - Filas podem ser excluídas somente quando não possuem conversas ou tickets vinculados; a API usa a permissão de exclusão, registra auditoria e retorna conflito explícito em vez de apagar histórico.
+- Acessos gerenciais agora busca por nome/telefone e filtra função ou estado no servidor, sempre com `organization_id` no contexto estrito do tenant.

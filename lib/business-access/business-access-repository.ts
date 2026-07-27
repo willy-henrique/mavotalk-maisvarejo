@@ -105,25 +105,42 @@ export async function getBusinessAccessUser(
 
 export async function listBusinessAccessUsers(
   organizationId: string,
-  options: { page: number; pageSize: number },
+  options: { page: number; pageSize: number; query?: string; role?: BusinessRole; status?: "active" | "inactive" | "locked" },
 ): Promise<{ items: BusinessAccessUser[]; total: number }> {
   const offset = (options.page - 1) * options.pageSize;
+  const clauses = ["organization_id = $1"];
+  const filterValues: unknown[] = [organizationId];
+  const add = (clause: string, value: unknown) => {
+    filterValues.push(value);
+    clauses.push(clause.replace("?", `$${filterValues.length}`));
+  };
+  const query = options.query?.trim();
+  if (query) {
+    filterValues.push(`%${query}%`);
+    const parameter = `$${filterValues.length}`;
+    clauses.push(`(name ILIKE ${parameter} OR phone_normalized ILIKE ${parameter})`);
+  }
+  if (options.role) add("role = ?", options.role);
+  if (options.status === "active") clauses.push("is_active = true AND (locked_until IS NULL OR locked_until <= now())");
+  if (options.status === "inactive") clauses.push("is_active = false");
+  if (options.status === "locked") clauses.push("locked_until > now()");
+  const where = clauses.join(" AND ");
   const [items, count] = await Promise.all([
     queryTenantDatabase<UserRow>(
       organizationId,
       `SELECT *
          FROM business_access_users
-        WHERE organization_id = $1
+        WHERE ${where}
         ORDER BY name, id
-        LIMIT $2 OFFSET $3`,
-      [organizationId, options.pageSize, offset],
+        LIMIT $${filterValues.length + 1} OFFSET $${filterValues.length + 2}`,
+      [...filterValues, options.pageSize, offset],
     ),
     queryTenantDatabase<{ count: string }>(
       organizationId,
       `SELECT COUNT(*)::text AS count
          FROM business_access_users
-        WHERE organization_id = $1`,
-      [organizationId],
+        WHERE ${where}`,
+      filterValues,
     ),
   ]);
   return {

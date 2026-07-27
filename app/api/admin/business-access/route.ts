@@ -49,9 +49,21 @@ export async function GET(request: Request) {
     100,
     Math.max(1, Number(url.searchParams.get("pageSize")) || 25),
   );
+  const query = url.searchParams.get("q")?.trim().slice(0, 100) || undefined;
+  const roleValue = url.searchParams.get("role");
+  const role = roleValue && ["owner", "director", "manager", "analyst"].includes(roleValue)
+    ? roleValue as "owner" | "director" | "manager" | "analyst"
+    : undefined;
+  const statusValue = url.searchParams.get("status");
+  const status = statusValue && ["active", "inactive", "locked"].includes(statusValue)
+    ? statusValue as "active" | "inactive" | "locked"
+    : undefined;
   const result = await listBusinessAccessUsers(auth.session.organizationId, {
     page,
     pageSize,
+    query,
+    role,
+    status,
   });
   return NextResponse.json({
     items: result.items.map(publicAccessUser),
