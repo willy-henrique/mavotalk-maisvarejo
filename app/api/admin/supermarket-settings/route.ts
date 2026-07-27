@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { requireSupermarketAdmin } from "@/lib/supermarket-admin-auth";
-import { createAuditLog } from "@/lib/repo";
 import {
   getConfiguredBusinessHours,
   getSupermarketSettings,
@@ -31,10 +30,13 @@ export async function PATCH(request: Request) {
     auth.session.organizationId,
     parsedSettings.data,
     parsedHours.data,
+    {
+      userId: auth.session.userId,
+      metadata: {
+        fields: Object.keys(body),
+        origin: auth.session.userId ? "operational-admin" : "mavo-master",
+      },
+    },
   );
-  await createAuditLog(auth.session.organizationId, auth.session.userId, "update_supermarket_settings", "organization", auth.session.organizationId, {
-    fields: Object.keys(body),
-    origin: auth.session.userId ? "operational-admin" : "mavo-master",
-  });
   return NextResponse.json({ settings, businessHours });
 }

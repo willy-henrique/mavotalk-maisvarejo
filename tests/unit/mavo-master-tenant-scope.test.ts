@@ -20,4 +20,5 @@ test("painel master valida a organização antes de consultar ou alterar outro t
   assert.match(ui, /\/api\/mavo\/organizations/);
   assert.match(ui, /X-Mavo-Organization-Id/);
   assert.match(settings, /origin: auth\.session\.userId \? "operational-admin" : "mavo-master"/);
+  assert.match(settings, /updateSupermarketConfiguration/);
 });

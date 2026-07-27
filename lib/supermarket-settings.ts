@@ -189,6 +189,7 @@ export async function updateSupermarketConfiguration(
   organizationId: string,
   input: Partial<SupermarketSettings>,
   hours?: ConfiguredHour[],
+  audit?: { userId: string | null; metadata: Record<string, unknown> },
 ): Promise<{ settings: SupermarketSettings; businessHours: ConfiguredHour[] }> {
   return withTenantTransaction(organizationId, async (client) => {
     const currentResult = await client.query<Record<string, unknown>>(
@@ -198,6 +199,13 @@ export async function updateSupermarketConfiguration(
     const settings: SupermarketSettings = { ...mapSettings(currentResult.rows[0] || {}), ...input };
     await updateSettingsWithClient(client, organizationId, settings);
     if (hours?.length) await client.query(upsertBusinessHoursSql, [organizationId, hoursJson(hours)]);
+    if (audit) {
+      await client.query(
+        `INSERT INTO audit_logs (organization_id, user_id, action, entity_type, entity_id, metadata)
+         VALUES ($1, $2, 'update_supermarket_settings', 'organization', $1, $3::jsonb)`,
+        [organizationId, audit.userId, JSON.stringify(audit.metadata)],
+      );
+    }
     return { settings, businessHours: await listConfiguredBusinessHoursWithClient(client, organizationId) };
   });
 }

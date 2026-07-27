@@ -10,5 +10,6 @@ test("horários da organização são persistidos em um único upsert tenant-sco
   assert.match(source, /queryTenantDatabase\(/);
   assert.match(source, /export async function updateSupermarketConfiguration/);
   assert.match(source, /withTenantTransaction\(organizationId/);
+  assert.match(source, /INSERT INTO audit_logs/);
   assert.doesNotMatch(source, /for \(const hour of hours\)[\s\S]{0,500}INSERT INTO business_hours/);
 });
