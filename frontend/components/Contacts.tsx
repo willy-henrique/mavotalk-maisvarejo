@@ -4,6 +4,7 @@ import { apiFetch, apiPatch, apiPost } from '../services/api';
 import { Dialog } from './ui/Dialog';
 import { EmptyState, ErrorState } from './ui/PageState';
 import { Pagination } from './ui/Pagination';
+import { StatusBadge } from './ui/StatusBadge';
 
 type ApiContact = {
   id: string;
@@ -15,6 +16,12 @@ type ApiContact = {
   internalNote: string | null;
   lastConversationId: string | null;
 };
+
+const ContactStatusBadge: React.FC<{ contact: ApiContact; className?: string }> = ({ contact, className = '' }) => (
+  <StatusBadge tone={contact.blocked ? 'error' : contact.status === 'ativo' ? 'success' : 'neutral'} className={`uppercase tracking-wide ${className}`}>
+    {contact.blocked ? 'Bloqueado' : contact.status}
+  </StatusBadge>
+);
 
 const Contacts: React.FC = () => {
   const navigate = useNavigate();
@@ -132,13 +139,13 @@ const Contacts: React.FC = () => {
                   <td className="px-5 py-4 font-bold text-slate-800 dark:text-slate-100"><span className="block">{contact.name || 'Sem nome'}</span>{contact.internalNote && <span className="mt-1 block max-w-[240px] truncate text-xs font-normal text-slate-500">Nota: {contact.internalNote}</span>}</td>
                   <td className="px-5 py-4 font-mono text-xs text-slate-600 dark:text-slate-300">{contact.phoneNumber || '—'}</td>
                   <td className="px-5 py-4 text-xs text-slate-500">{contact.lastInteraction ? new Date(contact.lastInteraction).toLocaleString('pt-BR') : 'Sem histórico'}</td>
-                  <td className="px-5 py-4"><span className={`rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${contact.blocked ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-200' : contact.status === 'ativo' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{contact.blocked ? 'Bloqueado' : contact.status}</span></td>
+                  <td className="px-5 py-4"><ContactStatusBadge contact={contact} /></td>
                   <td className="px-5 py-4">{contactActions(contact)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div><div className="grid gap-3 md:hidden">{contacts.map((contact) => <article key={contact.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{contact.name || 'Sem nome'}</h3><p className="mt-1 font-mono text-xs text-slate-600 dark:text-slate-300">{contact.phoneNumber || '—'}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${contact.blocked ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-200' : contact.status === 'ativo' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{contact.blocked ? 'Bloqueado' : contact.status}</span></div>{contact.internalNote && <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-600 dark:bg-slate-800/70 dark:text-slate-300">Nota: {contact.internalNote}</p>}<p className="text-xs text-slate-500">{contact.lastInteraction ? `Última interação: ${new Date(contact.lastInteraction).toLocaleString('pt-BR')}` : 'Sem histórico de atendimento'}</p>{contactActions(contact, true)}</article>)}</div></>
+        </div><div className="grid gap-3 md:hidden">{contacts.map((contact) => <article key={contact.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{contact.name || 'Sem nome'}</h3><p className="mt-1 font-mono text-xs text-slate-600 dark:text-slate-300">{contact.phoneNumber || '—'}</p></div><ContactStatusBadge contact={contact} className="shrink-0" /></div>{contact.internalNote && <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-600 dark:bg-slate-800/70 dark:text-slate-300">Nota: {contact.internalNote}</p>}<p className="text-xs text-slate-500">{contact.lastInteraction ? `Última interação: ${new Date(contact.lastInteraction).toLocaleString('pt-BR')}` : 'Sem histórico de atendimento'}</p>{contactActions(contact, true)}</article>)}</div></>
       )}
       {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="contatos" onPageChange={setPage} />}
 

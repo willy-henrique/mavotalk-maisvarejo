@@ -3,6 +3,7 @@ import { apiDelete, apiFetch, apiPost, apiPatch } from '../../services/api';
 import { Icons } from '../../constants';
 import { Dialog } from '../ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
+import { StatusBadge } from '../ui/StatusBadge';
 
 type Queue = {
   id: string;
@@ -12,6 +13,12 @@ type Queue = {
   defaultSlaMins: number;
   isActive: boolean;
 };
+
+const QueueStatusBadge: React.FC<{ queue: Queue; label?: string; className?: string }> = ({ queue, label, className = '' }) => (
+  <StatusBadge tone={queue.isActive ? 'success' : 'neutral'} className={className}>
+    {label || (queue.isActive ? 'Ativa' : 'Inativa')}
+  </StatusBadge>
+);
 
 const TicketTypeManagement: React.FC = () => {
   const [queues, setQueues] = useState<Queue[]>([]);
@@ -178,9 +185,9 @@ const TicketTypeManagement: React.FC = () => {
         <><div className="mavo-card hidden overflow-x-auto p-0 md:block">
           <table className="w-full min-w-[720px] text-left">
             <thead><tr className="border-b border-slate-200 dark:border-slate-700"><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fila</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Menu</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">SLA</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</th><th scope="col" className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ações</th></tr></thead>
-            <tbody>{filteredQueues.map((queue) => <tr key={queue.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/80 dark:hover:bg-slate-800/50"><td className="px-4 py-3"><span className="mr-3 inline-block h-3 w-3 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><span className="font-medium text-slate-800 dark:text-slate-200">{queue.name}</span></td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.menuOption}</td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.defaultSlaMins} min</td><td className="px-4 py-3"><span className={queue.isActive ? 'rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300'}>{queue.isActive ? 'Ativa' : 'Inativa'}</span></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2"><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></td></tr>)}</tbody>
+            <tbody>{filteredQueues.map((queue) => <tr key={queue.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/80 dark:hover:bg-slate-800/50"><td className="px-4 py-3"><span className="mr-3 inline-block h-3 w-3 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><span className="font-medium text-slate-800 dark:text-slate-200">{queue.name}</span></td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.menuOption}</td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.defaultSlaMins} min</td><td className="px-4 py-3"><QueueStatusBadge queue={queue} /></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2"><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></td></tr>)}</tbody>
           </table>
-        </div><div className="grid gap-3 md:hidden">{filteredQueues.map((queue) => <article key={queue.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{queue.name}</h3></div><span className={queue.isActive ? 'shrink-0 rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300'}>{queue.isActive ? 'Ativa' : 'Inativa'}</span></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Opção no menu</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{queue.menuOption}</dd></div><div><dt className="font-semibold text-slate-500">SLA</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{queue.defaultSlaMins} min</dd></div></dl><div className="flex flex-wrap gap-2"><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></article>)}</div></>
+        </div><div className="grid gap-3 md:hidden">{filteredQueues.map((queue) => <article key={queue.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{queue.name}</h3></div><QueueStatusBadge queue={queue} className="shrink-0" /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Opção no menu</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{queue.menuOption}</dd></div><div><dt className="font-semibold text-slate-500">SLA</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{queue.defaultSlaMins} min</dd></div></dl><div className="flex flex-wrap gap-2"><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></article>)}</div></>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredQueues.map((q) => (
@@ -231,13 +238,7 @@ const TicketTypeManagement: React.FC = () => {
                 </div>
 
                 <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
-                  <span
-                    className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
-                      q.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-slate-100 text-slate-400'
-                    }`}
-                  >
-                    {q.isActive ? 'Ativo no Menu' : 'Inativo'}
-                  </span>
+                  <QueueStatusBadge queue={q} label={q.isActive ? 'Ativo no menu' : 'Inativo'} className="uppercase tracking-widest" />
                   <span className="text-[10px] font-black text-slate-400 uppercase">Cor: {q.colorHex}</span>
                 </div>
               </div>

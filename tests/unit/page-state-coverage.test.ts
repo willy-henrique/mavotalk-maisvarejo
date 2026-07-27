@@ -23,6 +23,8 @@ test("estados de página compartilhados cobrem áreas administrativas e operacio
   assert.match(states, /export function ErrorState/);
   assert.match(statusBadge, /export function StatusBadge/);
   assert.match(statusBadge, /StatusTone/);
+  assert.match(contacts, /StatusBadge/);
+  assert.match(queues, /StatusBadge/);
   assert.match(dashboard, /LoadingState/);
   assert.match(dashboard, /ErrorState/);
   assert.match(dashboard, /loadRequestRef/);
