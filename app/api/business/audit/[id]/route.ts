@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireRole, requireSession } from "@/lib/api";
-import { queryDatabase } from "@/lib/db";
+import { queryTenantDatabase } from "@/lib/db";
 
 export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireSession();
@@ -8,7 +8,7 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
   const denied = requireRole(["admin"], auth.session.role);
   if (denied) return denied;
   const { id } = await context.params;
-  const result = await queryDatabase<{
+  const result = await queryTenantDatabase<{
     id: string; origin: string; query_type: string; status: string; error_code: string | null;
     duration_ms: number; created_at: Date; sanitized_input: string | null; parameters_json: Record<string, unknown>;
     result_summary: Record<string, unknown>; actor_name: string | null;
@@ -20,6 +20,7 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
        LEFT JOIN users u ON u.id = a.application_user_id AND u.organization_id = a.organization_id
       WHERE a.id = $1 AND a.organization_id = $2
       LIMIT 1`,
+    auth.session.organizationId,
     [id, auth.session.organizationId],
   );
   const item = result.rows[0];

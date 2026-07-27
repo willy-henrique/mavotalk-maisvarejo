@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
-import { getDatabasePool, queryDatabase, withTenantTransaction } from "@/lib/db";
+import { getDatabasePool, queryDatabase, queryTenantDatabase, withTenantTransaction } from "@/lib/db";
 import {
   decryptAgentSecret,
   encryptAgentSecret,
@@ -263,7 +263,8 @@ export async function updateAgentHeartbeat(
     errorCode?: string | null;
   },
 ): Promise<void> {
-  await queryDatabase(
+  await queryTenantDatabase(
+    context.organizationId,
     `UPDATE agent_installations
         SET status = $3,
             agent_version = $4,
@@ -294,9 +295,10 @@ export async function listAgents(
 }> {
   const offset = (options.page - 1) * options.pageSize;
   const [result, count] = await Promise.all([
-    queryDatabase<
+    queryTenantDatabase<
       AgentRow & { received_records: string; last_batch_error: string | null }
     >(
+      organizationId,
       `SELECT ai.*,
               COALESCE(SUM(asb.item_count), 0)::text AS received_records,
               (
@@ -315,7 +317,8 @@ export async function listAgents(
         LIMIT $2 OFFSET $3`,
       [organizationId, options.pageSize, offset],
     ),
-    queryDatabase<{ count: string }>(
+    queryTenantDatabase<{ count: string }>(
+      organizationId,
       `SELECT COUNT(*)::text AS count
          FROM agent_installations
         WHERE organization_id = $1`,
@@ -347,7 +350,7 @@ export async function listAgentAuditEvents(
   agentId: string,
   limit = 50,
 ): Promise<AgentAuditEvent[]> {
-  const result = await queryDatabase<{
+  const result = await queryTenantDatabase<{
     id: string;
     event_type: string;
     status: AgentAuditEvent["status"];
@@ -356,6 +359,7 @@ export async function listAgentAuditEvents(
     metadata: Record<string, unknown> | null;
     created_at: Date;
   }>(
+    organizationId,
     `SELECT id, event_type, status, error_code, duration_ms, metadata, created_at
        FROM agent_audit_events
       WHERE organization_id = $1 AND agent_id = $2
@@ -387,7 +391,8 @@ export async function recordAgentAudit(input: {
   sourceIp?: string | null;
   metadata?: Record<string, string | number | boolean | null>;
 }): Promise<void> {
-  await queryDatabase(
+  await queryTenantDatabase(
+    input.organizationId,
     `INSERT INTO agent_audit_events (
        id, organization_id, agent_id, batch_id, request_id, event_type,
        status, error_code, duration_ms, source_ip, metadata

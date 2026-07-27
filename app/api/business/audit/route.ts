@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireRole, requireSession } from "@/lib/api";
-import { queryDatabase } from "@/lib/db";
+import { queryTenantDatabase } from "@/lib/db";
 
 export async function GET(request: Request) {
   const auth = await requireSession();
@@ -37,7 +37,7 @@ export async function GET(request: Request) {
   const whereClause = where.join(" AND ");
   const listValues = [...values, pageSize, offset];
   const [items, count] = await Promise.all([
-    queryDatabase<{
+    queryTenantDatabase<{
       id: string;
       organization_id: string;
       access_user_id: string | null;
@@ -65,14 +65,16 @@ export async function GET(request: Request) {
         WHERE ${whereClause}
         ORDER BY a.created_at DESC
         LIMIT $${listValues.length - 1} OFFSET $${listValues.length}`,
+      auth.session.organizationId,
       listValues,
     ),
-    queryDatabase<{ count: string }>(
+    queryTenantDatabase<{ count: string }>(
       `SELECT COUNT(*)::text AS count
          FROM business_query_audit a
          LEFT JOIN business_access_users bau ON bau.id = a.access_user_id AND bau.organization_id = a.organization_id
          LEFT JOIN users u ON u.id = a.application_user_id AND u.organization_id = a.organization_id
         WHERE ${whereClause}`,
+      auth.session.organizationId,
       values,
     ),
   ]);

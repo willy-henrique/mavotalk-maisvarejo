@@ -81,6 +81,23 @@ export async function withTenantTransaction<T>(
   }
 }
 
+/**
+ * Executa uma consulta no contexto RLS estrito do tenant. Use esta função em
+ * endpoints autenticados sempre que a consulta não puder ser atendida pelo
+ * repositório já tenant-aware. O filtro explícito por organization_id continua
+ * obrigatório: ele documenta a intenção e reduz o conjunto de linhas antes de
+ * a policy do banco atuar como segunda barreira.
+ */
+export async function queryTenantDatabase<T extends QueryResultRow = QueryResultRow>(
+  organizationId: string,
+  text: string,
+  values: readonly unknown[] = [],
+): Promise<QueryResult<T>> {
+  return withTenantTransaction(organizationId, (client) =>
+    client.query<T>(text, [...values]),
+  );
+}
+
 export async function checkDatabaseConnection(): Promise<boolean> {
   try {
     await queryDatabase("SELECT 1");
