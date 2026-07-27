@@ -9,5 +9,6 @@ test("equipe usa a paginação do servidor e retorna à primeira página ao alte
   assert.match(source, /page: String\(page\)/);
   assert.match(source, /setTotal\(/);
   assert.match(source, /\[searchTerm, roleFilter, statusFilter\]/);
-  assert.match(source, /Mostrando \{total \? \(activePage - 1\) \* pageSize \+ 1 : 0\}/);
+  assert.match(source, /import \{ Pagination \} from '\.\.\/ui\/Pagination'/);
+  assert.match(source, /<Pagination page=\{page\} pageSize=\{pageSize\} total=\{total\} itemLabel="colaboradores"/);
 });

@@ -4,6 +4,7 @@ import { Icons } from '../../constants';
 import { apiFetch, apiPatch, apiPost } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
 import { ErrorState, LoadingState } from '../ui/PageState';
+import { Pagination } from '../ui/Pagination';
 
 type BackendUser = {
   id: string;
@@ -101,8 +102,6 @@ const UserManagement: React.FC = () => {
   }, [fetchUsers]);
 
   const pageSize = 25;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const activePage = Math.min(page, totalPages);
 
   useEffect(() => {
     setPage(1);
@@ -299,12 +298,7 @@ const UserManagement: React.FC = () => {
           </table>
         </div>
       )}
-      {!loading && total > pageSize && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300">
-          <span>Mostrando {total ? (activePage - 1) * pageSize + 1 : 0}–{Math.min(activePage * pageSize, total)} de {total} colaboradores</span>
-          <div className="flex gap-2"><button type="button" disabled={activePage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Anterior</button><button type="button" disabled={activePage === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Próxima</button></div>
-        </div>
-      )}
+      {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="colaboradores" onPageChange={setPage} />}
 
       {showModal && (
         <Dialog title={editingUser ? 'Editar colaborador' : 'Novo colaborador'} description={editingUser ? 'A senha é opcional; preencha somente para redefini-la.' : 'O colaborador poderá acessar o Mavo Talk com o e-mail e senha definidos.'} onClose={closeModal}>

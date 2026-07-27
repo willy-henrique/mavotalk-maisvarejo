@@ -13,7 +13,8 @@ test("respostas rápidas usam busca e paginação no servidor sem perder o estad
   assert.match(source, /URLSearchParams/);
   assert.match(source, /deferredSearch/);
   assert.match(source, /Nenhuma resposta encontrada/);
-  assert.match(source, /Mostrando \{total \? \(activePage - 1\) \* pageSize \+ 1 : 0\}/);
+  assert.match(source, /import \{ Pagination \} from '\.\.\/ui\/Pagination'/);
+  assert.match(source, /<Pagination page=\{page\} pageSize=\{pageSize\} total=\{total\} itemLabel="respostas"/);
   assert.match(route, /listQuickRepliesPage\(auth\.session\.organizationId/);
   assert.match(repository, /queryTenantDatabase<QuickReplyPageRow>/);
   assert.match(repository, /content ILIKE/);

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useDeferredValue, useRef } fro
 import { apiFetch, apiPost, apiPatch } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
+import { Pagination } from '../ui/Pagination';
 
 type QuickReply = {
   id: string;
@@ -97,8 +98,6 @@ const QuickReplyManagement: React.FC = () => {
   }, [search]);
 
   const pageSize = 25;
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const activePage = Math.min(page, totalPages);
 
   const openCreate = () => {
     setEditingId(null);
@@ -231,9 +230,7 @@ const QuickReplyManagement: React.FC = () => {
           </table>
         </div>
       )}
-      {!loading && total > pageSize && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300"><span>Mostrando {total ? (activePage - 1) * pageSize + 1 : 0}–{Math.min(activePage * pageSize, total)} de {total} respostas</span><div className="flex gap-2"><button type="button" disabled={activePage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Anterior</button><button type="button" disabled={activePage === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Próxima</button></div></div>
-      )}
+      {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="respostas" onPageChange={setPage} />}
 
       {showModal && (
         <Dialog

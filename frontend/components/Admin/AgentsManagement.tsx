@@ -2,6 +2,7 @@ import React, { useCallback, useDeferredValue, useEffect, useState } from 'react
 import { apiGet, apiPost } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
+import { Pagination } from '../ui/Pagination';
 
 type Agent = {
   id: string;
@@ -218,31 +219,7 @@ const AgentsManagement: React.FC = () => {
           </table>
         </div>
       )}
-      {total > pageSize && (
-        <div className="mt-4 flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
-          <span>
-            Página {page} de {Math.ceil(total / pageSize)} — {total} agentes
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={page === 1}
-              onClick={() => setPage((value) => Math.max(1, value - 1))}
-              className="rounded-lg border px-3 py-2 disabled:opacity-40 dark:border-slate-700"
-            >
-              Anterior
-            </button>
-            <button
-              type="button"
-              disabled={page * pageSize >= total}
-              onClick={() => setPage((value) => value + 1)}
-              className="rounded-lg border px-3 py-2 disabled:opacity-40 dark:border-slate-700"
-            >
-              Próxima
-            </button>
-          </div>
-        </div>
-      )}
+      {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="agentes" onPageChange={setPage} />}
       {eventsFor && (
         <Dialog title={`Logs de ${eventsFor.name}`} description="Eventos recentes da instalação. Endereços de origem não são exibidos nesta tela." onClose={() => setEventsFor(null)}>
           <div className="max-h-[60vh] overflow-auto p-5">

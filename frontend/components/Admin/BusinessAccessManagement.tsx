@@ -2,6 +2,7 @@ import React, { useCallback, useDeferredValue, useEffect, useState } from 'react
 import { apiGet, apiPatch, apiPost } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
+import { Pagination } from '../ui/Pagination';
 
 type Permission =
   | 'sales.read'
@@ -284,31 +285,7 @@ const BusinessAccessManagement: React.FC = () => {
           </table>
         </div>
       )}
-      {total > pageSize && (
-        <div className="mt-4 flex items-center justify-between text-sm text-slate-600 dark:text-slate-300">
-          <span>
-            Página {page} de {Math.ceil(total / pageSize)} — {total} acessos
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={page === 1}
-              onClick={() => setPage((value) => Math.max(1, value - 1))}
-              className="mavo-button-secondary disabled:opacity-40"
-            >
-              Anterior
-            </button>
-            <button
-              type="button"
-              disabled={page * pageSize >= total}
-              onClick={() => setPage((value) => value + 1)}
-              className="mavo-button-secondary disabled:opacity-40"
-            >
-              Próxima
-            </button>
-          </div>
-        </div>
-      )}
+      {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="acessos" onPageChange={setPage} />}
     </div></main>
   );
 };

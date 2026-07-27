@@ -22,6 +22,7 @@ test("contatos pesquisam e paginam no servidor dentro do tenant autenticado", as
   assert.match(view, /deferredSearch/);
   assert.match(view, /Estado do contato/);
   assert.match(view, /md:hidden/);
-  assert.match(view, /Mostrando \{\(activePage - 1\) \* pageSize \+ 1\}/);
+  assert.match(view, /import \{ Pagination \} from '\.\/ui\/Pagination'/);
+  assert.match(view, /<Pagination page=\{page\} pageSize=\{pageSize\} total=\{total\} itemLabel="contatos"/);
   assert.doesNotMatch(view, /const filtered = contacts\.filter/);
 });

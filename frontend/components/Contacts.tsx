@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiFetch, apiPatch, apiPost } from '../services/api';
 import { Dialog } from './ui/Dialog';
 import { EmptyState, ErrorState } from './ui/PageState';
+import { Pagination } from './ui/Pagination';
 
 type ApiContact = {
   id: string;
@@ -58,8 +59,6 @@ const Contacts: React.FC = () => {
 
   useEffect(() => { void fetchContacts(); }, [fetchContacts]);
   useEffect(() => { setPage(1); }, [search, statusFilter]);
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const activePage = Math.min(page, totalPages);
 
   const openConversation = (contact: ApiContact) => {
     navigate(contact.lastConversationId ? `/inbox?conversation=${contact.lastConversationId}` : '/inbox');
@@ -141,7 +140,7 @@ const Contacts: React.FC = () => {
           </table>
         </div><div className="grid gap-3 md:hidden">{contacts.map((contact) => <article key={contact.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{contact.name || 'Sem nome'}</h3><p className="mt-1 font-mono text-xs text-slate-600 dark:text-slate-300">{contact.phoneNumber || '—'}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-wide ${contact.blocked ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-200' : contact.status === 'ativo' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>{contact.blocked ? 'Bloqueado' : contact.status}</span></div>{contact.internalNote && <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-600 dark:bg-slate-800/70 dark:text-slate-300">Nota: {contact.internalNote}</p>}<p className="text-xs text-slate-500">{contact.lastInteraction ? `Última interação: ${new Date(contact.lastInteraction).toLocaleString('pt-BR')}` : 'Sem histórico de atendimento'}</p>{contactActions(contact, true)}</article>)}</div></>
       )}
-      {!loading && total > 0 && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300"><span aria-live="polite">Mostrando {(activePage - 1) * pageSize + 1}–{Math.min(activePage * pageSize, total)} de {total} contatos</span>{total > pageSize && <div className="flex gap-2"><button type="button" disabled={activePage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Anterior</button><button type="button" disabled={activePage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Próxima</button></div>}</div>}
+      {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="contatos" onPageChange={setPage} />}
 
       {noteModal && <Dialog title="Nota interna" description={noteModal.name} onClose={() => { if (!savingNote) setNoteModal(null); }}><form onSubmit={(event) => { event.preventDefault(); void saveNote(); }} className="p-6"><label htmlFor="contact-internal-note" className="sr-only">Nota interna</label><textarea id="contact-internal-note" value={noteValue} onChange={(event) => setNoteValue(event.target.value)} rows={5} placeholder="Informação visível somente para a equipe" className="mavo-field" /><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setNoteModal(null)} disabled={savingNote} className="mavo-button-secondary">Cancelar</button><button disabled={savingNote} className="mavo-button-primary">{savingNote ? 'Salvando...' : 'Salvar nota'}</button></div></form></Dialog>}
     </div></main>
