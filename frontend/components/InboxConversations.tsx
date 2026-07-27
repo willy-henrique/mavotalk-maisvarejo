@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { User } from '../types';
 import { apiFetch, apiPatch, apiPost, getApiBaseUrl, getApiUrl, getSocketUrl } from '../services/api';
+import { Dialog } from './ui/Dialog';
 
 type ConversationStatus = 'aguardando' | 'em_atendimento' | 'pendente_cliente' | 'encerrado';
 
@@ -49,6 +50,9 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const [searchParams, setSearchParams] = useSearchParams();
   const [conversations, setConversations] = useState<ApiConversation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [operationError, setOperationError] = useState('');
+  const [socketStatus, setSocketStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'offline'>('connecting');
   const [tabAbertas, setTabAbertas] = useState<'abertas' | 'resolvidos'>('abertas');
   /** Filtro por status dentro de "Abertas": null = todos, 'em_atendimento' | 'aguardando' */
   const [statusFilter, setStatusFilter] = useState<'em_atendimento' | 'aguardando' | null>(null);
@@ -75,14 +79,18 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const didInitRef = useRef(false);
+  const fetchInFlightRef = useRef(false);
 
   const fetchConversations = useCallback(async (showLoading = true) => {
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
     if (showLoading) setLoading(true);
     try {
       const res = await apiFetch('/api/conversations', { method: 'GET' });
       const data = (await res.json()) as { conversations?: ApiConversation[] };
       if (res.ok && Array.isArray(data.conversations)) {
         setConversations(data.conversations);
+        setLoadError('');
         // Só seleciona automaticamente na carga inicial da tela.
         if (!didInitRef.current) {
           const firstOpen = data.conversations.find((c) => c.status !== 'encerrado');
@@ -92,10 +100,13 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
           }
           didInitRef.current = true;
         }
+      } else {
+        setLoadError('Não foi possível atualizar as conversas. Tente novamente.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setLoadError('Não foi possível atualizar as conversas. Verifique sua conexão.');
     } finally {
+      fetchInFlightRef.current = false;
       if (showLoading) setLoading(false);
     }
   }, []);
@@ -118,12 +129,13 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
       });
     }
     setClosing(true);
+    setOperationError('');
     try {
       await apiPost(`/api/conversations/${id}/close`, { reason: 'Finalizado pelo atendente', sendSurvey });
       // Reload em background, sem travar o botão.
       void fetchConversations(false);
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setOperationError('Não foi possível finalizar o chamado. A conversa foi recarregada para evitar perda de estado.');
       void fetchConversations(false);
     } finally {
       setClosing(false);
@@ -160,7 +172,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const selectedIdRef = useRef<string | null>(null);
   selectedIdRef.current = selectedId;
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messageInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const socketRef = useRef<ReturnType<typeof io> | null>(null);
 
   const fetchQuickReplies = useCallback(async () => {
@@ -190,7 +202,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     messageInputRef.current?.focus();
   };
 
-  const handleMessageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMessageInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const v = e.target.value;
     setMessageInput(v);
     if (v.startsWith('/')) {
@@ -299,15 +311,21 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     }
   };
 
-  const handleMessageKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (!showQuickReplies || !quickReplyOpen || filteredQuickReplies.length === 0) return;
+  const handleMessageKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (!showQuickReplies || !quickReplyOpen || filteredQuickReplies.length === 0) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        e.currentTarget.form?.requestSubmit();
+      }
+      return;
+    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setQuickReplyIndex((i) => (i + 1) % filteredQuickReplies.length);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setQuickReplyIndex((i) => (i - 1 + filteredQuickReplies.length) % filteredQuickReplies.length);
-    } else if (e.key === 'Enter' && filteredQuickReplies[quickReplyIndex]) {
+    } else if (e.key === 'Enter' && !e.shiftKey && filteredQuickReplies[quickReplyIndex]) {
       e.preventDefault();
       handleQuickReplySelect(filteredQuickReplies[quickReplyIndex].content);
     } else if (e.key === 'Escape') {
@@ -394,6 +412,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
       timeout: 10000,
     });
     socketRef.current = socket;
+    setSocketStatus('connecting');
     socket.on('conversation.created', () => fetchConversations(false));
     socket.on('conversation.updated', () => fetchConversations(false));
     socket.on('message.created', (payload: { conversationId?: string }) => {
@@ -412,7 +431,10 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
       if (payload.conversationId !== selectedIdRef.current) return;
       setTypingAgent(payload.isTyping ? { name: payload.userName } : null);
     });
-    socket.on('connect', () => fetchConversations(false));
+    socket.on('connect', () => { setSocketStatus('connected'); void fetchConversations(false); });
+    socket.on('reconnect_attempt', () => setSocketStatus('reconnecting'));
+    socket.on('disconnect', () => setSocketStatus('offline'));
+    socket.on('connect_error', () => setSocketStatus('offline'));
     const t = setInterval(() => fetchConversations(false), 15000);
     return () => {
       socketRef.current = null;
@@ -424,12 +446,13 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const handleAssign = async () => {
     if (!selectedId) return;
     setAssigning(true);
+    setOperationError('');
     try {
       await apiPost(`/api/conversations/${selectedId}/assign`, {});
       // Realtime + otimismo já atualizam; não bloquear a UI esperando reload completo.
       void fetchConversations(false);
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setOperationError('Não foi possível assumir este atendimento. Atualize a lista e tente novamente.');
     } finally {
       setAssigning(false);
     }
@@ -437,6 +460,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
 
   const handleAssignFromList = async (id: string) => {
     setAssigning(true);
+    setOperationError('');
     const previousSelected = selectedId;
     setSelectedId(id);
     // Otimismo: marca como em_atendimento imediatamente
@@ -446,8 +470,8 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     try {
       await apiPost(`/api/conversations/${id}/assign`, {});
       void fetchConversations(false);
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setOperationError('Não foi possível assumir este atendimento. O estado foi restaurado.');
       // Reverte em caso de erro
       setConversations((prev) =>
         prev.map((c) => (c.id === id ? { ...c, status: 'aguardando' as ConversationStatus } : c)),
@@ -558,7 +582,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                 <path fillRule="evenodd" d="M5.25 9a6.75 6.75 0 0113.5 0v.75c0 2.123.8 4.057 2.118 5.52a.75.75 0 01-.297 1.206c-1.544.57-3.16.99-4.831 1.243a3.75 3.75 0 11-7.48 0 24.585 24.585 0 01-4.831-1.244.75.75 0 01-.298-1.206A8.217 8.217 0 005.25 9.75V9z" clipRule="evenodd" />
               </svg>
             </button>
-            <span className="flex-1 min-w-0 px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-950 text-slate-500 dark:text-slate-400 text-xs font-medium">Atualização em tempo real</span>
+            <span className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium ${socketStatus === 'connected' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200' : socketStatus === 'reconnecting' || socketStatus === 'connecting' ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-100' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-200'}`}><span className={`h-2 w-2 shrink-0 rounded-full ${socketStatus === 'connected' ? 'bg-emerald-500' : socketStatus === 'offline' ? 'bg-rose-500' : 'bg-amber-500'}`} />{socketStatus === 'connected' ? 'Atualização em tempo real' : socketStatus === 'reconnecting' ? 'Reconectando atualização' : socketStatus === 'connecting' ? 'Conectando atualização' : 'Atualização indisponível'}</span>
           </div>
           <div className="flex items-center gap-3 mt-3">
             <button
@@ -590,6 +614,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
           </div>
         </div>
         <div className="flex-1 overflow-y-auto divide-y divide-slate-200 dark:divide-slate-700/80">
+          {loadError && <div role="alert" className="m-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200"><div className="flex items-center justify-between gap-2"><span>{loadError}</span><button type="button" onClick={() => void fetchConversations(true)} className="font-bold underline">Tentar novamente</button></div></div>}
           {loading ? (
             <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm">Carregando...</div>
           ) : filtered.length === 0 ? (
@@ -754,6 +779,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                   onClick={openEditContact}
                   className="shrink-0 p-2 rounded-xl text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                   title="Editar contato"
+                  aria-label="Editar contato"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
                     <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
@@ -868,13 +894,14 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
             </div>
             {selected.status !== 'encerrado' ? (
               <form onSubmit={handleSendMessage} className="p-2 sm:p-4 bg-white dark:bg-slate-900/80 border-t border-slate-200 dark:border-slate-700 shrink-0 transition-colors">
+                {operationError && <div role="alert" className="mb-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-300">{operationError}</div>}
                 {sendError && (
                   <div role="alert" className="mb-3 rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
                     {sendError}
                   </div>
                 )}
                 <div className="flex gap-1.5 sm:gap-2 relative">
-                  <label className="shrink-0 flex items-center justify-center w-10 h-11 sm:w-12 sm:h-12 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer disabled:opacity-50 text-slate-500 dark:text-slate-400" title="Enviar imagem">
+                  <label aria-label="Enviar imagem" className="shrink-0 flex items-center justify-center w-10 h-11 sm:w-12 sm:h-12 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer disabled:opacity-50 text-slate-500 dark:text-slate-400" title="Enviar imagem">
                     <input
                       type="file"
                       accept="image/*"
@@ -891,6 +918,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                     onClick={() => setLinkModalOpen(true)}
                     disabled={sending}
                     title="Anexar link de documento"
+                    aria-label="Anexar link de documento"
                     className="shrink-0 flex items-center justify-center w-10 h-11 sm:w-12 sm:h-12 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 text-slate-500 dark:text-slate-400"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
@@ -899,15 +927,16 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                     </svg>
                   </button>
                   <div className="flex-1 relative">
-                    <input
+                    <textarea
                       ref={messageInputRef}
-                      type="text"
                       value={messageInput}
                       onChange={handleMessageInputChange}
                       onBlur={handleMessageInputBlur}
                       onKeyDown={handleMessageKeyDown}
-                      placeholder="Mensagem..."
-                      className="w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="Mensagem... (Enter envia • Shift+Enter quebra a linha)"
+                      aria-label="Mensagem para o contato"
+                      rows={1}
+                      className="w-full resize-none rounded-xl border border-slate-300 bg-white px-4 py-3 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-500"
                     />
                     {quickReplyOpen && filteredQuickReplies.length > 0 && (
                       <div className="absolute bottom-full left-0 right-0 mb-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl shadow-xl max-h-48 overflow-y-auto z-10">
@@ -932,7 +961,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                   <button
                     type="submit"
                     disabled={sending || !messageInput.trim()}
-                    className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold disabled:opacity-50"
+                    className="mavo-button-primary min-h-11 px-4 sm:px-6"
                   >
                     {sending ? '...' : 'Enviar'}
                   </button>
@@ -947,114 +976,104 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
         )}
 
         {linkModalOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/50"
-            onClick={() => setLinkModalOpen(false)}
-          >
-            <div
-              className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md p-6"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-4">Anexar link de documento</h3>
-              <form onSubmit={handleSendLink} className="space-y-3">
+          <Dialog title="Anexar link de documento" description="O link será enviado ao contato como uma mensagem do atendimento." onClose={() => { if (!sending) { setLinkModalOpen(false); setLinkUrl(''); setLinkTitle(''); } }}>
+              <form onSubmit={handleSendLink} className="space-y-3 p-6">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">URL do documento *</label>
+                  <label htmlFor="document-link-url" className="mb-1 block text-xs font-bold uppercase text-slate-500">URL do documento *</label>
                   <input
+                    id="document-link-url"
+                    data-autofocus
                     type="url"
                     value={linkUrl}
                     onChange={(e) => setLinkUrl(e.target.value)}
                     required
                     autoFocus
                     placeholder="https://docs.google.com/..."
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="mavo-field"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Título (opcional)</label>
+                  <label htmlFor="document-link-title" className="mb-1 block text-xs font-bold uppercase text-slate-500">Título (opcional)</label>
                   <input
+                    id="document-link-title"
                     type="text"
                     value={linkTitle}
                     onChange={(e) => setLinkTitle(e.target.value)}
                     placeholder="Ex: Proposta comercial"
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="mavo-field"
                   />
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
                   <button
                     type="button"
                     onClick={() => { setLinkModalOpen(false); setLinkUrl(''); setLinkTitle(''); }}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-medium"
+                    disabled={sending}
+                    className="mavo-button-secondary"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    disabled={!linkUrl.trim()}
-                    className="px-6 py-2.5 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50"
+                    disabled={sending || !linkUrl.trim()}
+                    className="mavo-button-primary"
                   >
-                    Enviar link
+                    {sending ? 'Enviando...' : 'Enviar link'}
                   </button>
                 </div>
               </form>
-            </div>
-          </div>
+          </Dialog>
         )}
 
         {editContactOpen && selected?.contact && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-            onClick={() => !savingContact && setEditContactOpen(false)}
-          >
-            <div
-              className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-lg font-bold text-slate-800 mb-4">Editar contato</h3>
-              <form onSubmit={handleSaveContact} className="space-y-4">
+          <Dialog title="Editar contato" description="Alterações são aplicadas somente ao contato desta organização." onClose={() => { if (!savingContact) setEditContactOpen(false); }}>
+              <form onSubmit={handleSaveContact} className="space-y-4 p-6">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome</label>
+                  <label htmlFor="edit-contact-name" className="mb-1 block text-xs font-bold uppercase text-slate-500">Nome</label>
                   <input
+                    id="edit-contact-name"
+                    data-autofocus
                     type="text"
                     value={editContactName}
                     onChange={(e) => setEditContactName(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="mavo-field"
                     placeholder="Nome do contato"
                     disabled={savingContact}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Telefone (WhatsApp)</label>
+                  <label htmlFor="edit-contact-phone" className="mb-1 block text-xs font-bold uppercase text-slate-500">Telefone (WhatsApp)</label>
                   <input
+                    id="edit-contact-phone"
                     type="text"
                     value={editContactPhone}
                     onChange={(e) => setEditContactPhone(e.target.value)}
-                    className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="mavo-field"
                     placeholder="whatsapp:+5562999999999"
                     disabled={savingContact}
                   />
                 </div>
                 {editContactError && (
-                  <p className="text-sm text-rose-600 font-medium">{editContactError}</p>
+                  <p role="alert" className="text-sm font-medium text-rose-600 dark:text-rose-300">{editContactError}</p>
                 )}
                 <div className="flex gap-2 justify-end pt-2">
                   <button
                     type="button"
                     onClick={() => !savingContact && setEditContactOpen(false)}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 font-medium"
+                    disabled={savingContact}
+                    className="mavo-button-secondary"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
                     disabled={savingContact || (!editContactName.trim() && !editContactPhone.trim())}
-                    className="px-6 py-2.5 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 disabled:opacity-50"
+                    className="mavo-button-primary"
                   >
                     {savingContact ? 'Salvando...' : 'Salvar'}
                   </button>
                 </div>
               </form>
-            </div>
-          </div>
+          </Dialog>
         )}
       </div>
     </div>
