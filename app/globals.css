@@ -28,7 +28,13 @@
 .master-hours-editor input { border: 1px solid var(--line-strong); border-radius: 9px; padding: 8px; color: var(--ink); background: var(--surface-soft); }
 .master-hours-editor button { border: 1px solid var(--line); background: var(--surface-soft); border-radius: 9px; color: var(--muted); padding: 8px 5px; cursor: pointer; font-size: 11px; font-weight: 700; }
 .master-config-footer { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 2px; }
-.master-check { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.master-switch-control { align-items: center; color: var(--muted); display: inline-flex; font-size: 12px; gap: 8px; }
+.master-switch { align-items: center; background: #c7ccd8; border: 0; border-radius: 999px; cursor: pointer; display: inline-flex; height: 24px; padding: 3px; transition: background 160ms ease; width: 44px; }
+.master-switch i { background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(17, 24, 39, .25); height: 18px; transform: translateX(0); transition: transform 160ms ease; width: 18px; }
+.master-switch.is-on { background: var(--primary); }
+.master-switch.is-on i { transform: translateX(20px); }
+.master-switch:focus-visible { box-shadow: 0 0 0 3px rgb(108 92 231 / .25); outline: 0; }
+.master-switch:disabled { cursor: not-allowed; opacity: .55; }
 .master-save-button { margin-left: auto; background: var(--primary); color: #fff; padding: 12px 18px; }
 .master-save-button:disabled, .master-upload-button:has(input:disabled), .master-remove-button:disabled { opacity: .55; cursor: not-allowed; }
 .queue-item-actions { display: flex; align-items: center; gap: 8px; }

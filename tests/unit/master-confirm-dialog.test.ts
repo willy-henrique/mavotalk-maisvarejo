@@ -13,3 +13,12 @@ test("sincronização master usa confirmação acessível em vez de diálogo nat
   assert.match(source, /syncTriggerRef/);
   assert.match(source, /Sincronizar filas/);
 });
+
+test("configuração do bot usa switches acessíveis em vez de checkboxes nativos", async () => {
+  const source = await readFile("components/mavo-admin.tsx", "utf8");
+
+  assert.doesNotMatch(source, /type="checkbox"/);
+  assert.match(source, /role="switch"/);
+  assert.match(source, /aria-checked=\{settingsDraft\.enabled\}/);
+  assert.match(source, /aria-checked=\{settingsDraft\.aiFallbackEnabled\}/);
+});

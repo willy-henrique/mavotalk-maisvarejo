@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 101/101 aprovados
+npm test               → 102/102 aprovados
 npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 npm run build           → aprovado (Next.js, 43 páginas/rotas geradas)
@@ -70,3 +70,4 @@ npm run render:validate → aprovado
 - A listagem e exportação da Auditoria gerencial agora passam o contexto do tenant na ordem correta para a consulta RLS; isso corrige uma falha de execução que o TypeScript não detectava por envolver parâmetros textuais.
 - A Auditoria gerencial foi alinhada aos estados compartilhados, ganhou tabela com contraste reforçado/caption semântico e ignora respostas defasadas ao alterar filtros ou páginas rapidamente.
 - Filas BullMQ sem produtor e sem processamento efetivo (`webhooks` e `agent-sync`) foram removidas; SLA e limpeza de mídia permanecem como os únicos workers ativos e verificáveis.
+- Os controles do bot no painel master deixaram de usar checkboxes nativos e agora utilizam switches acessíveis, com nome, estado e foco visível.

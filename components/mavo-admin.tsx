@@ -462,7 +462,17 @@ export function MavoAdminPanel({
               </div>
             </div>
 
-            <div className="master-config-footer"><label className="master-check"><input type="checkbox" checked={settingsDraft.enabled} onChange={(event) => setSettingsDraft((value) => ({ ...value, enabled: event.target.checked }))} /><span>Bot Mavo ativo</span></label><label className="master-check"><input type="checkbox" checked={settingsDraft.aiFallbackEnabled} onChange={(event) => setSettingsDraft((value) => ({ ...value, aiFallbackEnabled: event.target.checked }))} /><span>Usar IA para mensagens não reconhecidas</span></label><button type="submit" className="master-save-button" disabled={settingsBusy !== null}>{settingsBusy === "save" ? "Salvando..." : "Salvar configurações"}</button></div>
+            <div className="master-config-footer">
+              <div className="master-switch-control">
+                <span id="mavo-bot-enabled-label">Bot Mavo ativo</span>
+                <button type="button" role="switch" aria-checked={settingsDraft.enabled} aria-labelledby="mavo-bot-enabled-label" disabled={settingsBusy !== null} onClick={() => setSettingsDraft((value) => ({ ...value, enabled: !value.enabled }))} className={`master-switch ${settingsDraft.enabled ? "is-on" : ""}`}><i /></button>
+              </div>
+              <div className="master-switch-control">
+                <span id="mavo-ai-fallback-label">Usar IA para mensagens não reconhecidas</span>
+                <button type="button" role="switch" aria-checked={settingsDraft.aiFallbackEnabled} aria-labelledby="mavo-ai-fallback-label" disabled={settingsBusy !== null} onClick={() => setSettingsDraft((value) => ({ ...value, aiFallbackEnabled: !value.aiFallbackEnabled }))} className={`master-switch ${settingsDraft.aiFallbackEnabled ? "is-on" : ""}`}><i /></button>
+              </div>
+              <button type="submit" className="master-save-button" disabled={settingsBusy !== null}>{settingsBusy === "save" ? "Salvando..." : "Salvar configurações"}</button>
+            </div>
           </form>
           <div className="supermarket-readiness ready"><span><Icon name="check" size={22} /></span><div><strong>Menu restante configurável</strong><p>Produtos e disponibilidade, setores frescos, trocas e atendimento humano são administrados em Demandas e filas. “Entregas e pedidos” foi removido do menu do cliente.</p></div></div>
         </section>
