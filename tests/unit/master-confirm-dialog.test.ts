@@ -22,3 +22,13 @@ test("configuração do bot usa switches acessíveis em vez de checkboxes nativo
   assert.match(source, /aria-checked=\{settingsDraft\.enabled\}/);
   assert.match(source, /aria-checked=\{settingsDraft\.aiFallbackEnabled\}/);
 });
+
+test("master avisa antes de descartar a configuração não salva", async () => {
+  const source = await readFile("components/mavo-admin.tsx", "utf8");
+
+  assert.match(source, /const settingsDirty =/);
+  assert.match(source, /window\.addEventListener\("beforeunload", onBeforeUnload\)/);
+  assert.match(source, /Descartar alterações não salvas\?/);
+  assert.match(source, /Descartar e continuar/);
+  assert.match(source, /Alterações não salvas/);
+});

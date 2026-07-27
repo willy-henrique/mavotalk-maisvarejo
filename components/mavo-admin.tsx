@@ -63,6 +63,14 @@ function settingsDraftFromOverview(overview: MavoSystemOverview) {
   };
 }
 
+function hoursDraftFromOverview(overview: MavoSystemOverview) {
+  return defaultBusinessHours.map(
+    (fallback) => overview.businessHours.find((item) => item.weekday === fallback.weekday) || fallback,
+  );
+}
+
+type DiscardAction = { type: "organization"; organizationId: string } | { type: "refresh" } | { type: "sync" };
+
 export function MavoMasterLogin({ configured }: { configured: boolean }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -159,17 +167,19 @@ export function MavoAdminPanel({
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [settingsBusy, setSettingsBusy] = useState<"save" | "upload" | null>(null);
   const [confirmSync, setConfirmSync] = useState(false);
+  const [discardAction, setDiscardAction] = useState<DiscardAction | null>(null);
   const confirmButtonRef = useRef<HTMLButtonElement>(null);
   const confirmDialogRef = useRef<HTMLElement>(null);
   const syncTriggerRef = useRef<HTMLButtonElement>(null);
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([{ id: initialOverview.organization.id, name: initialOverview.organization.name }]);
   const [settingsDraft, setSettingsDraft] = useState(() => settingsDraftFromOverview(initialOverview));
-  const [hoursDraft, setHoursDraft] = useState(() => defaultBusinessHours.map((fallback) => initialOverview.businessHours.find((item) => item.weekday === fallback.weekday) || fallback));
+  const [hoursDraft, setHoursDraft] = useState(() => hoursDraftFromOverview(initialOverview));
+  const settingsDirty = JSON.stringify(settingsDraft) !== JSON.stringify(settingsDraftFromOverview(overview)) || JSON.stringify(hoursDraft) !== JSON.stringify(hoursDraftFromOverview(overview));
 
   const applyOverview = (next: MavoSystemOverview) => {
     setOverview(next);
     setSettingsDraft(settingsDraftFromOverview(next));
-    setHoursDraft(defaultBusinessHours.map((fallback) => next.businessHours.find((item) => item.weekday === fallback.weekday) || fallback));
+    setHoursDraft(hoursDraftFromOverview(next));
   };
 
   useEffect(() => {
@@ -183,7 +193,7 @@ export function MavoAdminPanel({
   }, []);
 
   useEffect(() => {
-    if (!confirmSync) return;
+    if (!confirmSync && !discardAction) return;
     const previousFocus = document.activeElement as HTMLElement | null;
     const trigger = syncTriggerRef.current;
     confirmButtonRef.current?.focus();
@@ -191,6 +201,7 @@ export function MavoAdminPanel({
       if (event.key === "Escape") {
         event.preventDefault();
         setConfirmSync(false);
+        setDiscardAction(null);
         return;
       }
       if (event.key !== "Tab") return;
@@ -210,7 +221,17 @@ export function MavoAdminPanel({
       window.removeEventListener("keydown", onKeyDown);
       (trigger || previousFocus)?.focus();
     };
-  }, [confirmSync]);
+  }, [confirmSync, discardAction]);
+
+  useEffect(() => {
+    if (!settingsDirty) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [settingsDirty]);
 
   async function refresh(showFeedback = false, organizationId = overview.organization.id) {
     setBusy("refresh");
@@ -233,7 +254,42 @@ export function MavoAdminPanel({
 
   async function changeOrganization(organizationId: string) {
     if (!organizationId || organizationId === overview.organization.id) return;
+    if (settingsDirty) {
+      setDiscardAction({ type: "organization", organizationId });
+      return;
+    }
     await refresh(false, organizationId);
+  }
+
+  function requestRefresh() {
+    if (settingsDirty) {
+      setDiscardAction({ type: "refresh" });
+      return;
+    }
+    void refresh(true);
+  }
+
+  function requestSync() {
+    if (settingsDirty) {
+      setDiscardAction({ type: "sync" });
+      return;
+    }
+    setConfirmSync(true);
+  }
+
+  function discardChangesAndContinue() {
+    const action = discardAction;
+    setDiscardAction(null);
+    if (!action) return;
+    if (action.type === "organization") {
+      void refresh(false, action.organizationId);
+      return;
+    }
+    if (action.type === "sync") {
+      setConfirmSync(true);
+      return;
+    }
+    void refresh(true);
   }
 
   async function syncSupermarket() {
@@ -352,7 +408,7 @@ export function MavoAdminPanel({
           <div className="master-top-actions">
             <span className={`master-live-chip ${overview.database.status}`}><i />{overview.database.status === "online" ? "Sistema operacional" : "Atenção necessária"}</span>
             <label className="master-organization-picker"><span>Organização</span><select value={overview.organization.id} onChange={(event) => void changeOrganization(event.target.value)} disabled={busy !== null || settingsBusy !== null}>{organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.name}</option>)}</select></label>
-            <button type="button" onClick={() => refresh(true)} disabled={Boolean(busy)}><Icon name="refresh" size={16} />{busy === "refresh" ? "Atualizando..." : "Atualizar"}</button>
+            <button type="button" onClick={requestRefresh} disabled={Boolean(busy)}><Icon name="refresh" size={16} />{busy === "refresh" ? "Atualizando..." : "Atualizar"}</button>
             <a href="/dashboard">Abrir atendimento</a>
           </div>
         </header>
@@ -413,7 +469,7 @@ export function MavoAdminPanel({
           </article>
 
           <article className="master-card queue-overview-card">
-            <div className="master-card-title"><div><span>Distribuição</span><h2>Filas do atendimento</h2></div><div className="master-card-actions"><a href="/dashboard/queues">Editar filas</a><button ref={syncTriggerRef} type="button" onClick={() => setConfirmSync(true)} disabled={Boolean(busy)}>{busy === "sync" ? "Sincronizando..." : "Sincronizar menu"}</button></div></div>
+            <div className="master-card-title"><div><span>Distribuição</span><h2>Filas do atendimento</h2></div><div className="master-card-actions"><a href="/dashboard/queues">Editar filas</a><button ref={syncTriggerRef} type="button" onClick={requestSync} disabled={Boolean(busy)}>{busy === "sync" ? "Sincronizando..." : "Sincronizar menu"}</button></div></div>
             <div className="master-queue-overview">
               {overview.queues.length ? overview.queues.map((queue) => (
                 <div key={queue.id} className={!queue.isActive ? "inactive" : ""}>
@@ -471,6 +527,7 @@ export function MavoAdminPanel({
                 <span id="mavo-ai-fallback-label">Usar IA para mensagens não reconhecidas</span>
                 <button type="button" role="switch" aria-checked={settingsDraft.aiFallbackEnabled} aria-labelledby="mavo-ai-fallback-label" disabled={settingsBusy !== null} onClick={() => setSettingsDraft((value) => ({ ...value, aiFallbackEnabled: !value.aiFallbackEnabled }))} className={`master-switch ${settingsDraft.aiFallbackEnabled ? "is-on" : ""}`}><i /></button>
               </div>
+              {settingsDirty ? <span className="master-unsaved" role="status">Alterações não salvas</span> : null}
               <button type="submit" className="master-save-button" disabled={settingsBusy !== null}>{settingsBusy === "save" ? "Salvando..." : "Salvar configurações"}</button>
             </div>
           </form>
@@ -514,6 +571,7 @@ export function MavoAdminPanel({
         <footer className="master-footer"><span>Mavo Talk · Painel master protegido</span><span>Dados atualizados em {formatDate(overview.generatedAt)}</span></footer>
       </main>
       {confirmSync ? <div className="master-confirm-backdrop" role="presentation" onMouseDown={() => setConfirmSync(false)}><section ref={confirmDialogRef} className="master-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="sync-confirm-title" aria-describedby="sync-confirm-description" onMouseDown={(event) => event.stopPropagation()}><h2 id="sync-confirm-title">Sincronizar menu do supermercado?</h2><p id="sync-confirm-description">As sete filas padrão serão sincronizadas e filas fora do modelo serão pausadas. Atendimentos e histórico não serão removidos.</p><div><button type="button" onClick={() => setConfirmSync(false)}>Cancelar</button><button ref={confirmButtonRef} type="button" onClick={() => void syncSupermarket()}>Sincronizar filas</button></div></section></div> : null}
+      {discardAction ? <div className="master-confirm-backdrop" role="presentation" onMouseDown={() => setDiscardAction(null)}><section ref={confirmDialogRef} className="master-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="discard-confirm-title" aria-describedby="discard-confirm-description" onMouseDown={(event) => event.stopPropagation()}><h2 id="discard-confirm-title">Descartar alterações não salvas?</h2><p id="discard-confirm-description">As mudanças da configuração do bot ainda não foram salvas. Ao continuar, elas serão perdidas.</p><div><button type="button" onClick={() => setDiscardAction(null)}>Continuar editando</button><button ref={confirmButtonRef} type="button" onClick={discardChangesAndContinue}>Descartar e continuar</button></div></section></div> : null}
     </div>
   );
 }

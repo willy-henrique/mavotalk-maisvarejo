@@ -35,6 +35,7 @@
 .master-switch.is-on i { transform: translateX(20px); }
 .master-switch:focus-visible { box-shadow: 0 0 0 3px rgb(108 92 231 / .25); outline: 0; }
 .master-switch:disabled { cursor: not-allowed; opacity: .55; }
+.master-unsaved { align-items: center; background: #fff4d8; border: 1px solid #efd18c; border-radius: 999px; color: #75520d; display: inline-flex; font-size: 11px; font-weight: 800; padding: 6px 9px; }
 .master-save-button { margin-left: auto; background: var(--primary); color: #fff; padding: 12px 18px; }
 .master-save-button:disabled, .master-upload-button:has(input:disabled), .master-remove-button:disabled { opacity: .55; cursor: not-allowed; }
 .queue-item-actions { display: flex; align-items: center; gap: 8px; }
