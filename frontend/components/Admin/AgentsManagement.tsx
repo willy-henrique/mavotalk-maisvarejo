@@ -136,6 +136,14 @@ const AgentsManagement: React.FC = () => {
     return 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300';
   };
 
+  const recommendedAction = (agent: Agent) => {
+    if (agent.revokedAt) return 'Provisionar uma nova instalação';
+    if (agent.lastBatchError) return 'Abrir logs e corrigir a última falha';
+    if (agent.status.toLowerCase() !== 'active' && agent.status.toLowerCase() !== 'online') return 'Verificar conexão e heartbeat';
+    if (!agent.lastSyncAt) return 'Aguardar ou iniciar a primeira sincronização';
+    return 'Nenhuma ação necessária';
+  };
+
   return (
     <main className="mavo-page">
       <div className="mavo-page-content">
@@ -174,9 +182,9 @@ const AgentsManagement: React.FC = () => {
         <EmptyState title="Nenhum agente provisionado ainda." description="Crie uma instalação para sincronizar dados do ambiente da empresa com segurança." />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80">
-          <table className="w-full text-left text-sm">
+          <table className="w-full min-w-[920px] text-left text-sm">
             <thead className="border-b border-slate-200 dark:border-slate-700 text-xs uppercase text-slate-500">
-              <tr><th className="p-4">Agente</th><th className="p-4">Status</th><th className="p-4">Versão</th><th className="p-4">Último heartbeat</th><th className="p-4">Última sync</th><th className="p-4">Registros</th><th className="p-4">Ações</th></tr>
+              <tr><th className="p-4">Agente</th><th className="p-4">Status</th><th className="p-4">Versão</th><th className="p-4">Último heartbeat</th><th className="p-4">Última sync</th><th className="p-4">Registros</th><th className="p-4">Ação recomendada</th><th className="p-4">Ações</th></tr>
             </thead>
             <tbody>
               {items.map((item) => (
@@ -187,6 +195,7 @@ const AgentsManagement: React.FC = () => {
                   <td className="p-4">{item.lastHeartbeatAt ? new Date(item.lastHeartbeatAt).toLocaleString('pt-BR') : 'Nunca'}</td>
                   <td className="p-4">{item.lastSyncAt ? new Date(item.lastSyncAt).toLocaleString('pt-BR') : 'Nunca'}</td>
                   <td className="p-4">{item.receivedRecords}</td>
+                  <td className="p-4 text-xs text-slate-600 dark:text-slate-300">{recommendedAction(item)}</td>
                   <td className="p-4"><div className="flex gap-2">
                     <button type="button" disabled={Boolean(item.revokedAt) || action !== null} onClick={() => void rotate(item)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">{action === `rotate:${item.id}` ? 'Rotacionando...' : 'Rotacionar'}</button>
                     <button type="button" disabled={action !== null} onClick={() => void openEvents(item)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Logs</button>
