@@ -1171,7 +1171,7 @@ export async function listContacts(organizationId: string): Promise<ListContactI
  */
 export async function listContactsPage(
   organizationId: string,
-  options: { page: number; pageSize: number; query?: string },
+  options: { page: number; pageSize: number; query?: string; blocked?: boolean },
 ): Promise<{ items: ListContactItem[]; total: number }> {
   const orgId = requireOrganizationId(organizationId);
   const page = Math.max(1, options.page);
@@ -1184,6 +1184,10 @@ export async function listContactsPage(
     values.push(`%${query}%`);
     const parameter = `$${values.length}`;
     clauses.push(`(c.name ILIKE ${parameter} OR c.phone_number ILIKE ${parameter})`);
+  }
+  if (typeof options.blocked === "boolean") {
+    values.push(options.blocked);
+    clauses.push(`c.blocked = $${values.length}`);
   }
   const where = clauses.join(" AND ");
   type ContactPageRow = {

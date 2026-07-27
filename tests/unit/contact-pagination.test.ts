@@ -10,14 +10,18 @@ test("contatos pesquisam e paginam no servidor dentro do tenant autenticado", as
   ]);
 
   assert.match(route, /searchParams\.get\("q"\)/);
+  assert.match(route, /status === "blocked"/);
   assert.match(route, /listContactsPage\(auth\.session\.organizationId/);
   assert.match(repository, /queryTenantDatabase<ContactPageRow>/);
   assert.match(repository, /c\.organization_id = \$1/);
   assert.match(repository, /LEFT JOIN LATERAL/);
   assert.match(repository, /c\.name ILIKE[\s\S]*c\.phone_number ILIKE/);
+  assert.match(repository, /c\.blocked = \$\$\{values\.length\}/);
   assert.match(repository, /LIMIT \$\$\{values\.length \+ 1\} OFFSET/);
   assert.match(view, /URLSearchParams/);
   assert.match(view, /deferredSearch/);
+  assert.match(view, /Estado do contato/);
+  assert.match(view, /md:hidden/);
   assert.match(view, /Mostrando \{\(activePage - 1\) \* pageSize \+ 1\}/);
   assert.doesNotMatch(view, /const filtered = contacts\.filter/);
 });

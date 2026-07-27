@@ -74,4 +74,4 @@ npm run render:validate → aprovado
 - Os controles do bot no painel master deixaram de usar checkboxes nativos e agora utilizam switches acessíveis, com nome, estado e foco visível.
 - A área clara do master recebeu escala tipográfica operacional e contraste reforçado em cartões, filas, usuários e auditoria, removendo textos de 6–9 px que prejudicavam a leitura.
 - O editor de empresa no master agora sinaliza alterações não salvas, protege saída/refresh/troca de organização e oferece confirmação acessível para descarte.
-- Contatos deixou de carregar toda a base do tenant: busca e paginação ocorrem na API sob contexto RLS, e a consulta obtém apenas a última conversa/mensagem de cada contato exibido. A migration adiciona o índice para essa ordenação.
+- Contatos deixou de carregar toda a base do tenant: busca, filtro de bloqueio e paginação ocorrem na API sob contexto RLS, e a consulta obtém apenas a última conversa/mensagem de cada contato exibido. A migration adiciona o índice para essa ordenação; em mobile, a tabela dá lugar a cartões operacionais sem rolagem horizontal.
