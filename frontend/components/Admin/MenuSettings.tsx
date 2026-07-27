@@ -116,6 +116,32 @@ const MenuSettings: React.FC = () => {
     }
   };
 
+  const selectSection = (next: 'visibility' | 'permissions') => {
+    setSection(next);
+    window.requestAnimationFrame(() => document.getElementById(`menu-settings-tab-${next}`)?.focus());
+  };
+
+  const handleSectionKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    if (event.key === 'Home') return selectSection('visibility');
+    if (event.key === 'End') return selectSection('permissions');
+    return selectSection(section === 'visibility' ? 'permissions' : 'visibility');
+  };
+
+  const selectPermissionRole = (next: MenuRole) => {
+    setPermissionRole(next);
+    window.requestAnimationFrame(() => document.getElementById(`menu-settings-role-${next}`)?.focus());
+  };
+
+  const handlePermissionRoleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const current = ROLE_COLUMNS.findIndex((role) => role.key === permissionRole);
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? ROLE_COLUMNS.length - 1 : (current + (event.key === 'ArrowRight' ? 1 : -1) + ROLE_COLUMNS.length) % ROLE_COLUMNS.length;
+    selectPermissionRole(ROLE_COLUMNS[next].key);
+  };
+
   return (
     <main className="mavo-page">
       <div className="mavo-page-content">
@@ -155,11 +181,11 @@ const MenuSettings: React.FC = () => {
       ) : (
         <>
         <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Configurações de acesso">
-          <button type="button" role="tab" aria-selected={section === 'visibility'} onClick={() => setSection('visibility')} className={section === 'visibility' ? 'mavo-button-primary min-h-0 px-4 py-2 text-sm' : 'mavo-button-secondary min-h-0 px-4 py-2 text-sm'}>Visibilidade no menu</button>
-          <button type="button" role="tab" aria-selected={section === 'permissions'} onClick={() => setSection('permissions')} className={section === 'permissions' ? 'mavo-button-primary min-h-0 px-4 py-2 text-sm' : 'mavo-button-secondary min-h-0 px-4 py-2 text-sm'}>Permissões de backend</button>
+          <button id="menu-settings-tab-visibility" type="button" role="tab" tabIndex={section === 'visibility' ? 0 : -1} aria-selected={section === 'visibility'} aria-controls="menu-settings-panel-visibility" onClick={() => selectSection('visibility')} onKeyDown={handleSectionKeyDown} className={section === 'visibility' ? 'mavo-button-primary min-h-0 px-4 py-2 text-sm' : 'mavo-button-secondary min-h-0 px-4 py-2 text-sm'}>Visibilidade no menu</button>
+          <button id="menu-settings-tab-permissions" type="button" role="tab" tabIndex={section === 'permissions' ? 0 : -1} aria-selected={section === 'permissions'} aria-controls="menu-settings-panel-permissions" onClick={() => selectSection('permissions')} onKeyDown={handleSectionKeyDown} className={section === 'permissions' ? 'mavo-button-primary min-h-0 px-4 py-2 text-sm' : 'mavo-button-secondary min-h-0 px-4 py-2 text-sm'}>Permissões de backend</button>
         </div>
         {section === 'visibility' ? (
-        <div className="mavo-card overflow-x-auto" role="tabpanel">
+        <div id="menu-settings-panel-visibility" aria-labelledby="menu-settings-tab-visibility" tabIndex={0} className="mavo-card overflow-x-auto" role="tabpanel">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700">
@@ -200,14 +226,14 @@ const MenuSettings: React.FC = () => {
           </table>
         </div>
         ) : (
-        <section className="mavo-card overflow-x-auto" role="tabpanel" aria-label="Matriz de permissões">
+        <section id="menu-settings-panel-permissions" aria-labelledby="menu-settings-tab-permissions" tabIndex={0} className="mavo-card overflow-x-auto" role="tabpanel" aria-label="Matriz de permissões">
           <div className="border-b border-slate-200 px-4 py-4 dark:border-slate-700">
             <p className="text-sm text-slate-600 dark:text-slate-300">As permissões abaixo protegem as rotas e ações mesmo quando alguém tenta chamar a API manualmente.</p>
             <div className="mt-3 flex flex-wrap gap-2" role="tablist" aria-label="Perfil da matriz">
-              {ROLE_COLUMNS.map((role) => <button key={role.key} type="button" role="tab" aria-selected={permissionRole === role.key} onClick={() => setPermissionRole(role.key)} className={permissionRole === role.key ? 'mavo-button-primary min-h-0 px-3 py-2 text-xs' : 'mavo-button-secondary min-h-0 px-3 py-2 text-xs'}>{role.label}</button>)}
+              {ROLE_COLUMNS.map((role) => <button key={role.key} id={`menu-settings-role-${role.key}`} type="button" role="tab" tabIndex={permissionRole === role.key ? 0 : -1} aria-selected={permissionRole === role.key} aria-controls="menu-settings-permission-matrix" onClick={() => selectPermissionRole(role.key)} onKeyDown={handlePermissionRoleKeyDown} className={permissionRole === role.key ? 'mavo-button-primary min-h-0 px-3 py-2 text-xs' : 'mavo-button-secondary min-h-0 px-3 py-2 text-xs'}>{role.label}</button>)}
             </div>
           </div>
-          <table className="w-full min-w-[760px] text-left">
+          <table id="menu-settings-permission-matrix" className="w-full min-w-[760px] text-left">
             <thead><tr className="border-b border-slate-200 dark:border-slate-700"><th className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Recurso</th>{PERMISSION_COLUMNS.map((column) => <th key={column.key} scope="col" title={column.description} className="px-4 py-3 text-center text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">{column.label}</th>)}</tr></thead>
             <tbody>{items.map((item) => <tr key={item.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/80 dark:hover:bg-slate-800/50"><td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{item.label}</td>{PERMISSION_COLUMNS.map((column) => {
               const locked = item.lockedForAdmin && permissionRole === 'admin';

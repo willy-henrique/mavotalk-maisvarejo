@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 107/107 aprovados
+npm test               → 108/108 aprovados
 npm run test:e2e       → 16 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 npm run build           → aprovado (Next.js, 43 páginas/rotas geradas)

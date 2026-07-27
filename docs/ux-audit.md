@@ -30,7 +30,7 @@ O produto possui direção visual azul/verde, modo escuro padrão e uma fundaç�
 
 Pontos já presentes: foco visível global, labels em boa parte dos formulários, `role=alert` em alguns erros, navegação mobile e `aria-label` em alguns ícones.
 
-Lacunas: alguns menus acionados por hover/focus ainda não usam um dropdown compartilhado, ícones em botões ainda precisam de varredura por rota e tabelas extensas preservam rolagem horizontal em vez de uma prioridade de colunas uniforme.
+Lacunas: alguns menus acionados por hover/focus ainda não usam um dropdown compartilhado, ícones em botões ainda precisam de varredura por rota e a matriz multidimensional de permissões preserva rolagem horizontal por necessidade de comparação. As tabs de Menu do painel agora expõem relação tab/painel e teclado por setas, Home e End.
 
 ## Direção de implementação
 

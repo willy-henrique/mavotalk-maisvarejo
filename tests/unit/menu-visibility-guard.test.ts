@@ -12,3 +12,14 @@ test("sidebar usa a política de leitura por tenant, sem tratar visibilidade com
   assert.match(source, /if \(!visibilityOverrides \|\| !permissions\) return roleAllowed/);
   assert.match(source, /data\.permissions/);
 });
+
+test("tabs do menu do painel conectam painel e oferecem teclado", async () => {
+  const source = await readFile("frontend/components/Admin/MenuSettings.tsx", "utf8");
+
+  assert.match(source, /aria-controls="menu-settings-panel-visibility"/);
+  assert.match(source, /aria-labelledby="menu-settings-tab-visibility"/);
+  assert.match(source, /handleSectionKeyDown/);
+  assert.match(source, /handlePermissionRoleKeyDown/);
+  assert.match(source, /ArrowLeft/);
+  assert.match(source, /menu-settings-permission-matrix/);
+});
