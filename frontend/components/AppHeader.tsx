@@ -12,7 +12,7 @@ const pageMeta: Array<{ match: string; title: string; description: string; secti
   { match: '/admin/respostas-rapidas', title: 'Respostas rápidas', description: 'Padronize respostas e reduza o tempo de atendimento.', section: 'Administração' },
   { match: '/admin/usuarios', title: 'Equipe', description: 'Convide e organize as pessoas da operação.', section: 'Administração' },
   { match: '/admin/tipos', title: 'Filas e automações', description: 'Configure o menu, prioridade visual e SLA do atendimento.', section: 'Administração' },
-  { match: '/admin/agentes', title: 'Agentes cloud', description: 'Conecte a sincronização do ambiente do cliente.', section: 'Administração' },
+  { match: '/admin/agentes', title: 'Agentes e sincronização', description: 'Conecte e acompanhe a sincronização do ambiente do cliente.', section: 'Administração' },
   { match: '/admin/menu-visibilidade', title: 'Menu do painel', description: 'Defina a visibilidade da navegação sem alterar permissões de acesso.', section: 'Administração' },
   { match: '/dashboard', title: 'Visão de atendimento', description: 'Acompanhe a operação, filas e tempo de resposta.', section: 'Operação' },
   { match: '/business', title: 'Indicadores do negócio', description: 'Vendas, produtos e estoque sincronizados.', section: 'Operação' },

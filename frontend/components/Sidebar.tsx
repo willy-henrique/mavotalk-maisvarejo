@@ -71,13 +71,14 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
     .join('') || 'MT';
 
   const canSee = (item: (typeof menuItems)[0]) => {
-    if (visibilityOverrides && item.id in visibilityOverrides) {
-      return visibilityOverrides[item.id];
-    }
-    if (item.role === 'ANY') return true;
-    if (item.role === 'PAINEL') return AuthService.canAccessPainel();
-    if (item.role === 'METRICS') return user.role === UserRole.SUPERVISOR || user.role === UserRole.ADMIN;
-    return user.role === item.role;
+    const roleAllowed = item.role === 'ANY'
+      || (item.role === 'PAINEL' && AuthService.canAccessPainel())
+      || (item.role === 'METRICS' && (user.role === UserRole.SUPERVISOR || user.role === UserRole.ADMIN))
+      || user.role === item.role;
+    // A visibilidade é um refinamento de UX, nunca pode conceder acesso ou exibir
+    // uma função que o papel atual não possui.
+    if (!roleAllowed) return false;
+    return !visibilityOverrides || !(item.id in visibilityOverrides) || visibilityOverrides[item.id];
   };
 
   return (
@@ -101,6 +102,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
           onClick={() => setCollapsed((c) => !c)}
           className="shrink-0 relative z-10 p-2 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/30 transition-colors"
           title={collapsed ? 'Abrir menu' : 'Fechar menu'}
+          aria-label={collapsed ? 'Abrir menu' : 'Fechar menu'}
         >
           {collapsed ? (
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
@@ -131,6 +133,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
                   : 'hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800/50 dark:hover:text-slate-200'
               } ${collapsed ? 'justify-center' : ''}`}
               title={collapsed ? item.label : undefined}
+              aria-label={collapsed ? item.label : undefined}
             >
               <item.icon className={`w-6 h-6 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-500'}`} />
               {!collapsed && <span className="font-bold text-sm truncate">{item.label}</span>}
@@ -141,7 +144,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
         {menuItems.filter((item) => !['inbox', 'dashboard', 'business', 'contacts', 'painel'].includes(item.id)).filter(canSee).map((item) => {
           const isActive = activeTab === item.id;
           return (
-            <button key={item.id} onClick={() => { navigate(item.path); onNavigate?.(); }} className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl transition-all ${isActive ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20' : 'hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800/50 dark:hover:text-slate-200'} ${collapsed ? 'justify-center' : ''}`} title={collapsed ? item.label : undefined}>
+            <button key={item.id} onClick={() => { navigate(item.path); onNavigate?.(); }} className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl transition-all ${isActive ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20' : 'hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800/50 dark:hover:text-slate-200'} ${collapsed ? 'justify-center' : ''}`} title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined}>
               <item.icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-500'}`} />
               {!collapsed && <span className="font-bold text-sm truncate">{item.label}</span>}
             </button>
