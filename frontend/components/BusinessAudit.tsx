@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { apiFetch, apiGet } from '../services/api';
 import { Dialog } from './ui/Dialog';
+import { EmptyState, ErrorState, LoadingState } from './ui/PageState';
 
 type AuditItem = {
   id: string;
@@ -32,21 +33,25 @@ const BusinessAudit: React.FC = () => {
   const [detail, setDetail] = useState<{ sanitizedInput: string | null; parameters: Record<string, unknown>; resultSummary: Record<string, unknown> } | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const loadRequestRef = useRef(0);
   const pageSize = 25;
 
   const load = useCallback(async () => {
+    const request = ++loadRequestRef.current;
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
       for (const [key, value] of Object.entries(appliedFilters)) if (value) params.set(key, value);
       const data = await apiGet<{ items: AuditItem[]; total: number }>(`/api/business/audit?${params}`);
+      if (request !== loadRequestRef.current) return;
       setItems(data.items);
       setTotal(data.total);
       setError('');
     } catch (reason) {
+      if (request !== loadRequestRef.current) return;
       setError(reason instanceof Error ? reason.message : 'Falha ao carregar auditoria');
     } finally {
-      setLoading(false);
+      if (request === loadRequestRef.current) setLoading(false);
     }
   }, [page, appliedFilters]);
 
@@ -146,24 +151,25 @@ const BusinessAudit: React.FC = () => {
         <label><span className="sr-only">Data inicial</span><input aria-label="Data inicial" type="date" value={from} onChange={(event) => setFrom(event.target.value)} className="mavo-field" /></label>
         <div className="flex gap-2"><label className="min-w-0 flex-1"><span className="sr-only">Data final</span><input aria-label="Data final" type="date" value={to} onChange={(event) => setTo(event.target.value)} className="mavo-field" /></label><button className="mavo-button-primary px-3" type="submit">Filtrar</button>{hasAppliedFilters && <button className="mavo-button-secondary px-3" type="button" onClick={clearFilters}>Limpar</button>}</div>
       </form>
-      {error && <div role="alert" className="mb-5 flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300"><span>{error}</span><button type="button" onClick={() => void load()} className="font-bold underline">Tentar novamente</button></div>}
+      {error && <ErrorState className="mb-5" description={error} action={<button type="button" onClick={() => void load()} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
       {loading ? (
-        <div className="py-12 text-slate-500">Carregando...</div>
+        <LoadingState title="Carregando auditoria…" />
       ) : items.length === 0 ? (
-        <div className="mavo-card p-10 text-center text-slate-500 dark:text-slate-400">Nenhuma consulta encontrada com os filtros atuais.</div>
+        <EmptyState title="Nenhuma consulta encontrada." description={hasAppliedFilters ? 'Altere ou limpe os filtros para consultar outro período.' : 'As consultas gerenciais, pelo WhatsApp e pelo MCP aparecerão aqui.'} action={hasAppliedFilters ? <button type="button" onClick={clearFilters} className="mavo-button-secondary">Limpar filtros</button> : undefined} />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80">
+        <div className="mavo-card overflow-x-auto p-0">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 dark:border-slate-700 text-xs uppercase text-slate-500"><tr><th className="p-4">Quando</th><th className="p-4">Quem</th><th className="p-4">Origem</th><th className="p-4">Consulta</th><th className="p-4">Estado</th><th className="p-4">Duração</th><th className="p-4"><span className="sr-only">Detalhes</span></th></tr></thead>
+            <caption className="sr-only">Eventos de auditoria gerencial filtrados</caption>
+            <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300"><tr><th className="p-4">Quando</th><th className="p-4">Quem</th><th className="p-4">Origem</th><th className="p-4">Consulta</th><th className="p-4">Estado</th><th className="p-4">Duração</th><th className="p-4"><span className="sr-only">Detalhes</span></th></tr></thead>
             <tbody>
               {items.map((item) => (
-                <tr key={item.id} className="border-b border-slate-100 dark:border-slate-800">
-                  <td className="p-4">{new Date(item.createdAt).toLocaleString('pt-BR')}</td>
-                  <td className="p-4">{item.actorName || item.phoneNormalized || 'Sistema'}</td>
-                  <td className="p-4 uppercase">{item.origin}</td>
-                  <td className="p-4">{item.queryType}</td>
+                <tr key={item.id} className="border-b border-slate-100 transition hover:bg-slate-50/70 dark:border-slate-800 dark:hover:bg-slate-800/40">
+                  <td className="p-4 text-slate-700 dark:text-slate-200">{new Date(item.createdAt).toLocaleString('pt-BR')}</td>
+                  <td className="p-4 font-medium text-slate-800 dark:text-slate-100">{item.actorName || item.phoneNormalized || 'Sistema'}</td>
+                  <td className="p-4 font-medium uppercase text-slate-700 dark:text-slate-200">{item.origin}</td>
+                  <td className="p-4 text-slate-700 dark:text-slate-200">{item.queryType}</td>
                   <td className="p-4"><span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(item.status)}`}>{item.status}{item.errorCode ? ` · ${item.errorCode}` : ''}</span></td>
-                  <td className="p-4">{item.durationMs} ms</td>
+                  <td className="p-4 tabular-nums text-slate-700 dark:text-slate-200">{item.durationMs} ms</td>
                   <td className="p-4"><button type="button" className="rounded-lg px-2 py-1 text-xs font-bold text-blue-600 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950/30" onClick={() => void openDetail(item)}>Ver detalhe</button></td>
                 </tr>
               ))}
@@ -184,7 +190,7 @@ const BusinessAudit: React.FC = () => {
               onClick={() => {
                 setPage((value) => Math.max(1, value - 1));
               }}
-              className="rounded-lg border px-3 py-2 disabled:opacity-40 dark:border-slate-700"
+              className="mavo-button-secondary min-h-0 px-3 py-2 text-xs"
             >
               Anterior
             </button>
@@ -194,7 +200,7 @@ const BusinessAudit: React.FC = () => {
               onClick={() => {
                 setPage((value) => value + 1);
               }}
-              className="rounded-lg border px-3 py-2 disabled:opacity-40 dark:border-slate-700"
+              className="mavo-button-secondary min-h-0 px-3 py-2 text-xs"
             >
               Próxima
             </button>

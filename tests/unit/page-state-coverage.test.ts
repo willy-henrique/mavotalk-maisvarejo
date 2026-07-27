@@ -3,9 +3,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 test("estados de página compartilhados cobrem áreas administrativas e operacionais", async () => {
-  const [states, analytics, agents, quickReplies, businessAccess, contacts, users, queues, menuSettings] = await Promise.all([
+  const [states, analytics, audit, agents, quickReplies, businessAccess, contacts, users, queues, menuSettings] = await Promise.all([
     readFile("frontend/components/ui/PageState.tsx", "utf8"),
     readFile("frontend/components/BusinessAnalytics.tsx", "utf8"),
+    readFile("frontend/components/BusinessAudit.tsx", "utf8"),
     readFile("frontend/components/Admin/AgentsManagement.tsx", "utf8"),
     readFile("frontend/components/Admin/QuickReplyManagement.tsx", "utf8"),
     readFile("frontend/components/Admin/BusinessAccessManagement.tsx", "utf8"),
@@ -18,7 +19,7 @@ test("estados de página compartilhados cobrem áreas administrativas e operacio
   assert.match(states, /export function LoadingState/);
   assert.match(states, /export function EmptyState/);
   assert.match(states, /export function ErrorState/);
-  for (const source of [analytics, agents, quickReplies, businessAccess, contacts, users, queues, menuSettings]) {
+  for (const source of [analytics, audit, agents, quickReplies, businessAccess, contacts, users, queues, menuSettings]) {
     assert.match(source, /ErrorState/);
     assert.match(source, /Tentar novamente/);
   }

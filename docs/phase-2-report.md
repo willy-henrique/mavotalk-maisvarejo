@@ -68,3 +68,4 @@ npm run render:validate → aprovado
 - A sincronização do menu no painel master deixou de usar confirmação nativa; agora há diálogo semântico, foco inicial e fechamento por Escape.
 - Agentes e sincronização passou a buscar por instalação e filtrar estados online, com atenção ou revogado no servidor, preservando o escopo da organização. O estado usa o último lote sincronizado, sem manter falhas antigas como alerta atual.
 - A listagem e exportação da Auditoria gerencial agora passam o contexto do tenant na ordem correta para a consulta RLS; isso corrige uma falha de execução que o TypeScript não detectava por envolver parâmetros textuais.
+- A Auditoria gerencial foi alinhada aos estados compartilhados, ganhou tabela com contraste reforçado/caption semântico e ignora respostas defasadas ao alterar filtros ou páginas rapidamente.
