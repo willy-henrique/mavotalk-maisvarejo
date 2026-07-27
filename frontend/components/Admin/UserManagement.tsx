@@ -5,6 +5,7 @@ import { apiFetch, apiPatch, apiPost } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
 import { ErrorState, LoadingState } from '../ui/PageState';
 import { Pagination } from '../ui/Pagination';
+import { StatusBadge, type StatusTone } from '../ui/StatusBadge';
 
 type BackendUser = {
   id: string;
@@ -47,6 +48,17 @@ function toBackendRole(role: UserRole): 'admin' | 'gestor' | 'atendente' {
     default: return 'atendente';
   }
 }
+
+const userStatusTone = (status: UserStatus): StatusTone => {
+  if (status === UserStatus.ATIVO) return 'success';
+  if (status === UserStatus.INATIVO) return 'error';
+  if (status === UserStatus.PENDENTE) return 'warning';
+  return 'neutral';
+};
+
+const UserStatusBadge: React.FC<{ status: UserStatus; className?: string }> = ({ status, className = '' }) => (
+  <StatusBadge tone={userStatusTone(status)} className={`uppercase ${className}`}>{status}</StatusBadge>
+);
 
 const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -119,19 +131,6 @@ const UserManagement: React.FC = () => {
       setSubmitError(reason instanceof Error ? reason.message : 'Não foi possível atualizar o colaborador.');
     } finally {
       setActionUserId(null);
-    }
-  };
-
-  const getStatusStyle = (status: UserStatus) => {
-    switch (status) {
-      case UserStatus.ATIVO:
-        return 'border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300';
-      case UserStatus.INATIVO:
-        return 'border-rose-200 bg-rose-100 text-rose-700 dark:border-rose-900 dark:bg-rose-950/50 dark:text-rose-300';
-      case UserStatus.PENDENTE:
-        return 'border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-300';
-      default:
-        return 'border-slate-200 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300';
     }
   };
 
@@ -272,11 +271,7 @@ const UserManagement: React.FC = () => {
                       {u.role}
                     </span>
                   </td>
-                  <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded text-[10px] font-bold border ${getStatusStyle(u.status)}`}>
-                      {u.status}
-                    </span>
-                  </td>
+                  <td className="px-6 py-4"><UserStatusBadge status={u.status} /></td>
                   <td className="px-6 py-4 text-xs text-slate-500 dark:text-slate-400">
                     {u.lastLoginAt ? u.lastLoginAt.toLocaleString('pt-BR') : 'Nunca acessou'}
                   </td>
@@ -296,7 +291,7 @@ const UserManagement: React.FC = () => {
               )}
             </tbody>
           </table>
-        </div><div className="grid gap-3 md:hidden">{users.map((u) => <article key={u.id} className="mavo-card space-y-3 p-4"><div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-800 bg-blue-950 text-xs font-black text-blue-200" aria-label={`Avatar de ${u.name}`}>{u.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</div><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{u.name}</h3><p className="truncate text-xs text-slate-500 dark:text-slate-400">{u.email}</p></div><span className={`shrink-0 rounded border px-2 py-1 text-[10px] font-bold ${getStatusStyle(u.status)}`}>{u.status}</span></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Função</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{u.role}</dd></div><div><dt className="font-semibold text-slate-500">Último login</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{u.lastLoginAt ? u.lastLoginAt.toLocaleString('pt-BR') : 'Nunca acessou'}</dd></div></dl><div className="flex flex-wrap gap-2"><button type="button" onClick={() => openEdit(u)} disabled={actionUserId === u.id} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" disabled={actionUserId === u.id} onClick={() => void toggleUserStatus(u)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">{actionUserId === u.id ? 'Atualizando…' : u.status === UserStatus.ATIVO ? 'Desativar' : 'Reativar'}</button></div></article>)}</div></>
+        </div><div className="grid gap-3 md:hidden">{users.map((u) => <article key={u.id} className="mavo-card space-y-3 p-4"><div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-800 bg-blue-950 text-xs font-black text-blue-200" aria-label={`Avatar de ${u.name}`}>{u.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</div><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{u.name}</h3><p className="truncate text-xs text-slate-500 dark:text-slate-400">{u.email}</p></div><UserStatusBadge status={u.status} className="shrink-0" /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Função</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{u.role}</dd></div><div><dt className="font-semibold text-slate-500">Último login</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{u.lastLoginAt ? u.lastLoginAt.toLocaleString('pt-BR') : 'Nunca acessou'}</dd></div></dl><div className="flex flex-wrap gap-2"><button type="button" onClick={() => openEdit(u)} disabled={actionUserId === u.id} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" disabled={actionUserId === u.id} onClick={() => void toggleUserStatus(u)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">{actionUserId === u.id ? 'Atualizando…' : u.status === UserStatus.ATIVO ? 'Desativar' : 'Reativar'}</button></div></article>)}</div></>
       )}
       {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="colaboradores" onPageChange={setPage} />}
 

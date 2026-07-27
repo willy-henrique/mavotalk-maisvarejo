@@ -28,6 +28,7 @@ test("estados de página compartilhados cobrem áreas administrativas e operacio
   assert.match(agents, /StatusBadge/);
   assert.match(audit, /StatusBadge/);
   assert.match(businessAccess, /StatusBadge/);
+  assert.match(users, /StatusBadge/);
   assert.match(dashboard, /LoadingState/);
   assert.match(dashboard, /ErrorState/);
   assert.match(dashboard, /loadRequestRef/);
