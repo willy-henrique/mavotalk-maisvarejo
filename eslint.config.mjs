@@ -20,6 +20,9 @@ const eslintConfig = defineConfig([
     "build/**",
     "frontend/dist/**",
     "coverage/**",
+    "playwright-report/**",
+    "test-results/**",
+    "blob-report/**",
     "next-env.d.ts",
     "server.cjs",
     "worker.mjs",
@@ -27,4 +30,3 @@ const eslintConfig = defineConfig([
 ]);
 
 export default eslintConfig;
-
