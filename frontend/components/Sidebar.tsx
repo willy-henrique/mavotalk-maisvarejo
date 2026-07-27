@@ -49,13 +49,17 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
   const activeTab = TAB_BY_PATH[pathname] ?? 'inbox';
   const [collapsed, setCollapsed] = useState(false);
   const [visibilityOverrides, setVisibilityOverrides] = useState<Record<string, boolean> | null>(null);
+  const [permissions, setPermissions] = useState<Record<string, { read?: boolean }> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     apiFetch('/api/menu-settings', { method: 'GET' })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (!cancelled && data?.visibility) setVisibilityOverrides(data.visibility as Record<string, boolean>);
+        if (!cancelled && data?.visibility) {
+          setVisibilityOverrides(data.visibility as Record<string, boolean>);
+          setPermissions(data.permissions as Record<string, { read?: boolean }> || {});
+        }
       })
       .catch(() => {});
     return () => {
@@ -75,10 +79,11 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
       || (item.role === 'PAINEL' && AuthService.canAccessPainel())
       || (item.role === 'METRICS' && (user.role === UserRole.SUPERVISOR || user.role === UserRole.ADMIN))
       || user.role === item.role;
-    // A visibilidade é um refinamento de UX, nunca pode conceder acesso ou exibir
-    // uma função que o papel atual não possui.
-    if (!roleAllowed) return false;
-    return !visibilityOverrides || !(item.id in visibilityOverrides) || visibilityOverrides[item.id];
+    // Antes da resposta da API, o fallback preserva a matriz padrão para evitar
+    // piscadas de funções sensíveis. Depois dela, menu e leitura usam a mesma
+    // política por tenant que o servidor aplica à rota.
+    if (!visibilityOverrides || !permissions) return roleAllowed;
+    return Boolean(visibilityOverrides[item.id]) && Boolean(permissions[item.id]?.read);
   };
 
   return (

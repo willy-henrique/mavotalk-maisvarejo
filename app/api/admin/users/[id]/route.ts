@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { requireRole, requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { createAuditLog, deactivateUser, listUsers, updateUser } from "@/lib/repo";
 import { adminUpdateUserSchema } from "@/lib/schemas";
 
@@ -36,7 +36,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
 
-  const denied = requireRole(["admin"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "admin_users", "update");
   if (denied) return denied;
 
   const { id } = await context.params;
@@ -122,7 +122,7 @@ export async function DELETE(_: Request, context: { params: Promise<{ id: string
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
 
-  const denied = requireRole(["admin"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "admin_users", "delete");
   if (denied) return denied;
 
   const { id } = await context.params;

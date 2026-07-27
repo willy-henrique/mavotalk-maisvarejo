@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { updateContact } from "@/lib/repo";
 import { updateContactSchema } from "@/lib/schemas";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
+  const denied = await requireMenuPermission(auth.session, "contacts", "update");
+  if (denied) return denied;
 
   const { id } = await context.params;
   const body = await request.json();

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireRole, requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { routeBusinessQuery } from "@/lib/business-analytics/business-query-router";
 import { analyticsContextFromSession } from "@/lib/business-analytics/business-api-context";
 import { requireFeature } from "@/lib/config/mavo-config";
@@ -11,7 +11,7 @@ const schema = z.object({ query: z.string().trim().min(1).max(500) }).strict();
 export async function POST(request: Request) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
-  const denied = requireRole(["admin", "gestor"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "business", "read");
   if (denied) return denied;
   try {
     requireFeature("businessAnalyticsEnabled");

@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 89/89 aprovados
+npm test               → 90/90 aprovados
 npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 npm run build           → aprovado (Next.js, 43 páginas/rotas geradas)
@@ -41,7 +41,7 @@ npm run render:validate → aprovado
 - A execução anônima contra o Render alcançou a tela de login e não expôs conteúdo administrativo nas quatro dimensões, mas foi reprovada pela observabilidade devido ao aviso de console CSP da versão atualmente publicada. A causa foi corrigida no repositório (diretiva `frame-ancestors` removida da meta tag); é necessário publicar e repetir a execução para obter a evidência pós-deploy.
 - A validação de RLS foi estática/arquitetural nesta fase. O teste negativo integral A→B ainda requer dois tenants de QA controlados e credenciais locais para não tocar em dados de terceiros.
 - Ainda faltam cenários E2E para Inbox, multi-tenancy A→B, WhatsApp, agentes, auditoria e administração. O plano permanece em `docs/e2e-test-plan.md`.
-- “Menu do painel” ainda controla apenas visibilidade porque a matriz granular de leitura/criação/edição/exclusão/administrativa exige uma evolução de RBAC no backend, não uma alteração cosmética de UI.
+- A matriz granular preserva padrões de acesso seguros quando não há override, mas a prova dinâmica de que um override do tenant A jamais afeta o tenant B ainda exige os dois tenants QA controlados.
 - A página de filas ainda não dispõe de modelo persistido para prioridade, horário, overflow, atendentes e reordenação drag-and-drop. Esses campos não foram simulados no frontend.
 - Equipe agora registra e exibe o último login com escopo de tenant. Convites e filas associadas ainda exigem modelagem/endpoints antes de serem exibidos como informação real.
 - O painel master passou a permitir seleção de organização somente sob sessão de plataforma. A existência da organização é confirmada antes de consultas, sincronização de filas e gravações de configuração; sessões operacionais permanecem vinculadas à organização do próprio cookie.
@@ -59,3 +59,4 @@ npm run render:validate → aprovado
 - Mutações autenticadas por cookie sem cabeçalho `Origin` agora são recusadas no servidor; chamadas de webhooks e agentes, que não usam cookie de navegador, continuam explicitamente preservadas.
 - A tela de Equipe agora pagina os resultados de busca/filtro, mostra o intervalo exibido e retorna à primeira página ao alterar os critérios.
 - Respostas rápidas agora permitem busca por atalho, conteúdo ou categoria, paginação e estado vazio específico para uma busca sem correspondência.
+- O painel de Menu do painel agora separa visibilidade de navegação e permissões de backend. A matriz é resolvida por organização no servidor e passou a proteger Inbox, contatos, filas, respostas rápidas, WhatsApp, indicadores, auditoria, agentes, equipe e acessos gerenciais.

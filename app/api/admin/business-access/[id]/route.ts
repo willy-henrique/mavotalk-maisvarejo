@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireRole, requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import {
   getBusinessAccessUser,
   recordBusinessAccessAudit,
@@ -44,7 +44,7 @@ export async function PATCH(
 ) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
-  const denied = requireRole(["admin"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "admin_business_access", "update");
   if (denied) return denied;
   const requestId = requestIdFrom(request);
   const { id } = await context.params;
@@ -119,7 +119,7 @@ export async function DELETE(
 ) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
-  const denied = requireRole(["admin"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "admin_business_access", "delete");
   if (denied) return denied;
   const { id } = await context.params;
   const requestId = requestIdFrom(request);

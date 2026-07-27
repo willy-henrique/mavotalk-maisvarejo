@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { createAuditLog, getConversation } from "@/lib/repo";
 import { closeConversationSchema } from "@/lib/schemas";
 import { emitRealtime } from "@/lib/realtime";
@@ -10,6 +10,8 @@ import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
+  const denied = await requireMenuPermission(auth.session, "inbox", "update");
+  if (denied) return denied;
 
   const body = await request.json();
   const parsed = closeConversationSchema.safeParse(body);

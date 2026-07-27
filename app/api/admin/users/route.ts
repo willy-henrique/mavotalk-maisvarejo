@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { requireRole, requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { createAuditLog, createUser, listUsers } from "@/lib/repo";
 import { adminCreateUserSchema } from "@/lib/schemas";
 
@@ -30,7 +30,7 @@ export async function GET() {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
 
-  const denied = requireRole(["admin"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "admin_users", "read");
   if (denied) return denied;
 
   const users = await listUsers(auth.session.organizationId);
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
 
-  const denied = requireRole(["admin"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "admin_users", "create");
   if (denied) return denied;
 
   const body = await request.json();

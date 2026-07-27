@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireRole, requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import {
   createBusinessAccessUser,
   listBusinessAccessUsers,
@@ -41,7 +41,7 @@ function publicAccessUser<T extends { pinHash: unknown }>(
 export async function GET(request: Request) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
-  const denied = requireRole(["admin"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "admin_business_access", "read");
   if (denied) return denied;
   const url = new URL(request.url);
   const page = Math.max(1, Number(url.searchParams.get("page")) || 1);
@@ -64,7 +64,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
-  const denied = requireRole(["admin"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "admin_business_access", "create");
   if (denied) return denied;
   const requestId = requestIdFrom(request);
   let body: unknown;

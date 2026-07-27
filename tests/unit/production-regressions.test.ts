@@ -51,9 +51,13 @@ test("contatos bloqueados são filtrados nos três canais de entrada", async () 
   }
 });
 
-test("QR e diagnóstico do WhatsApp são restritos a gestor e administrador", async () => {
-  const route = await read("app/api/whatsapp/status/route.ts");
-  assert.match(route, /requireRole\(\["admin", "gestor"\]/);
+test("QR e diagnóstico do WhatsApp são restritos por permissão de painel no servidor", async () => {
+  const [route, settings] = await Promise.all([
+    read("app/api/whatsapp/status/route.ts"),
+    read("lib/menu-settings.ts"),
+  ]);
+  assert.match(route, /requireMenuPermission\(auth\.session, "painel", "read"\)/);
+  assert.match(settings, /painel: \{ read: CAN_MANAGE/);
 });
 
 test("shutdown usa a API do Baileys", async () => {
@@ -67,20 +71,20 @@ test("somente administrador altera contas e a última conta admin é protegida",
     read("app/api/admin/users/route.ts"),
     read("app/api/admin/users/[id]/route.ts"),
   ]);
-  assert.equal(
-    [...collectionRoute.matchAll(/requireRole\(\["admin"\]/g)].length,
-    2,
-  );
-  assert.equal(
-    [...itemRoute.matchAll(/requireRole\(\["admin"\]/g)].length,
-    2,
-  );
+  assert.match(collectionRoute, /"admin_users", "read"/);
+  assert.match(collectionRoute, /"admin_users", "create"/);
+  assert.match(itemRoute, /"admin_users", "update"/);
+  assert.match(itemRoute, /"admin_users", "delete"/);
   assert.match(itemRoute, /A organizacao deve manter ao menos um administrador ativo/);
 });
 
 test("métricas gerenciais não ficam disponíveis ao atendente por API direta", async () => {
-  const route = await read("app/api/dashboard/metrics/route.ts");
-  assert.match(route, /requireRole\(\["admin", "gestor"\]/);
+  const [route, settings] = await Promise.all([
+    read("app/api/dashboard/metrics/route.ts"),
+    read("lib/menu-settings.ts"),
+  ]);
+  assert.match(route, /requireMenuPermission\(auth\.session, "dashboard", "read"\)/);
+  assert.match(settings, /dashboard: \{ read: CAN_MANAGE/);
 });
 
 test("banco serializa a proteção do último administrador por tenant", async () => {

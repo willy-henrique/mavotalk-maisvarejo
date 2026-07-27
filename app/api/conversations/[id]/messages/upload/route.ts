@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import twilio from "twilio";
-import { requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { addOutboundMessage, getContactById, getConversation } from "@/lib/repo";
 import { emitRealtime } from "@/lib/realtime";
 import { sendWhatsappMessage } from "@/lib/whatsapp-client";
@@ -16,6 +16,8 @@ export async function POST(
 ) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
+  const denied = await requireMenuPermission(auth.session, "inbox", "create");
+  if (denied) return denied;
 
   const { id } = await context.params;
   const conversation = await getConversation(auth.session.organizationId, id);

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession, requireRole } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { createAuditLog, updateQuickReply, deleteQuickReply } from "@/lib/repo";
 import { quickReplySchema } from "@/lib/schemas";
 
@@ -10,7 +10,7 @@ export async function PATCH(
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
 
-  const denied = requireRole(["admin", "gestor"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "admin_quick_replies", "update");
   if (denied) return denied;
 
   const { id } = await context.params;
@@ -54,7 +54,7 @@ export async function DELETE(
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
 
-  const denied = requireRole(["admin", "gestor"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "admin_quick_replies", "delete");
   if (denied) return denied;
 
   const { id } = await context.params;

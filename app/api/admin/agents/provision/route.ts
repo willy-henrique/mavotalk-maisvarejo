@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireRole, requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { provisionAgent } from "@/lib/agent-cloud/agent-repository";
 import { createAuditLog } from "@/lib/repo";
 import { requestIdFrom, sanitizedError } from "@/lib/observability";
@@ -10,7 +10,7 @@ const schema = z.object({ name: z.string().trim().min(2).max(200) }).strict();
 export async function POST(request: Request) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
-  const denied = requireRole(["admin"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "business_sync", "create");
   if (denied) return denied;
   const requestId = requestIdFrom(request);
 

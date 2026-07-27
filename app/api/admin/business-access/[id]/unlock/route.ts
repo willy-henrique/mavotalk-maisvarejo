@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireRole, requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import {
   getBusinessAccessUser,
   recordBusinessAccessAudit,
@@ -13,7 +13,7 @@ export async function POST(
 ) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
-  const denied = requireRole(["admin"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "admin_business_access", "admin");
   if (denied) return denied;
   const { id } = await context.params;
   const requestId = requestIdFrom(request);

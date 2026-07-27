@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireRole, requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { checkDatabaseConnection, queryDatabase } from "@/lib/db";
 import { checkRedisConnection } from "@/lib/redis";
 import { getWhatsappState } from "@/lib/whatsapp-client";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
-  const denied = requireRole(["admin", "gestor"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "business_sync", "read");
   if (denied) return denied;
 
   const [database, redis, agents] = await Promise.all([

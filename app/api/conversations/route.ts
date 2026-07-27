@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listConversations, type ConversationStatus } from "@/lib/repo";
-import { requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { logger } from "@/lib/logger";
 
 const allowedStatus = new Set<ConversationStatus>(["aguardando", "em_atendimento", "pendente_cliente", "encerrado"]);
@@ -8,6 +8,8 @@ const allowedStatus = new Set<ConversationStatus>(["aguardando", "em_atendimento
 export async function GET(request: NextRequest) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
+  const denied = await requireMenuPermission(auth.session, "inbox", "read");
+  if (denied) return denied;
 
   const statusParam = request.nextUrl.searchParams.get("status");
   const status = statusParam && allowedStatus.has(statusParam as ConversationStatus) ? (statusParam as ConversationStatus) : undefined;

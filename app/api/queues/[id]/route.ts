@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireRole, requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { createAuditLog, updateQueue } from "@/lib/repo";
 import { queueSchema } from "@/lib/schemas";
 
@@ -7,7 +7,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
 
-  const denied = requireRole(["admin", "gestor"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "admin_types", "update");
   if (denied) return denied;
 
   const body = await request.json();

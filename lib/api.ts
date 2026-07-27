@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getUserById } from "@/lib/repo";
+import { hasMenuPermission, type MenuPermissionAction } from "@/lib/menu-settings";
 
 export async function requireSession() {
   const session = await getSession();
@@ -38,5 +39,18 @@ export function requireRole(role: Array<"admin" | "gestor" | "atendente">, curre
   }
 
   return null;
+}
+
+/**
+ * Autorização por recurso aplicada no servidor. A sessão é a única fonte do
+ * tenant e do papel; o cliente não envia nem organização nem permissões.
+ */
+export async function requireMenuPermission(
+  session: NonNullable<Awaited<ReturnType<typeof requireSession>>["session"]>,
+  itemId: string,
+  action: MenuPermissionAction,
+) {
+  const allowed = await hasMenuPermission(session.organizationId, session.role, itemId, action);
+  return allowed ? null : NextResponse.json({ error: "Sem permissão" }, { status: 403 });
 }
 

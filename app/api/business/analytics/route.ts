@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireRole, requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { requireFeature } from "@/lib/config/mavo-config";
 import { businessAnalyticsService } from "@/lib/business-analytics/business-analytics-service";
 import {
@@ -11,7 +11,7 @@ import { sanitizedError } from "@/lib/observability";
 export async function GET(request: Request) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
-  const denied = requireRole(["admin", "gestor"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "business", "read");
   if (denied) return denied;
   try {
     requireFeature("businessAnalyticsEnabled");

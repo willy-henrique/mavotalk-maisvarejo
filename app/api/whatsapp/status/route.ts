@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireRole, requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { getWhatsappState } from "@/lib/whatsapp-client";
 
 export async function GET() {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
-  const denied = requireRole(["admin", "gestor"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "painel", "read");
   if (denied) return denied;
 
   return NextResponse.json({

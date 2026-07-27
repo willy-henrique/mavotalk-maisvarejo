@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireRole, requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { queryTenantDatabase } from "@/lib/db";
 
 export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
-  const denied = requireRole(["admin"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "business_audit", "read");
   if (denied) return denied;
   const { id } = await context.params;
   const result = await queryTenantDatabase<{

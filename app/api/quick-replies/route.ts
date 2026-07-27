@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import { requireSession, requireRole } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { listQuickReplies, createAuditLog, createQuickReply } from "@/lib/repo";
 import { quickReplySchema } from "@/lib/schemas";
 
 export async function GET() {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
+
+  const denied = await requireMenuPermission(auth.session, "admin_quick_replies", "read");
+  if (denied) return denied;
 
   const items = await listQuickReplies(auth.session.organizationId);
   return NextResponse.json({ quickReplies: items });
@@ -15,7 +18,7 @@ export async function POST(request: Request) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
 
-  const denied = requireRole(["admin", "gestor"], auth.session.role);
+  const denied = await requireMenuPermission(auth.session, "admin_quick_replies", "create");
   if (denied) return denied;
 
   const body = await request.json();

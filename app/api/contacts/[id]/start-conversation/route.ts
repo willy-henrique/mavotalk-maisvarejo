@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSession } from "@/lib/api";
+import { requireMenuPermission, requireSession } from "@/lib/api";
 import { getContactById, getOrCreateOpenConversation } from "@/lib/repo";
 
 export async function POST(
@@ -8,6 +8,8 @@ export async function POST(
 ) {
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
+  const denied = await requireMenuPermission(auth.session, "contacts", "create");
+  if (denied) return denied;
 
   const { id } = await context.params;
   const contact = await getContactById(auth.session.organizationId, id);
