@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 109/109 aprovados
+npm test               → 111/111 aprovados
 npm run test:e2e       → 20 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 npm run build           → aprovado (Next.js, 43 páginas/rotas geradas)
@@ -86,3 +86,4 @@ npm run render:validate → aprovado
 - Filas e automações também invalidam carregamentos defasados e exibem confirmação acessível após criar, editar ou excluir uma fila.
 - Indicadores do negócio ignoram respostas de um período ou de uma consulta anterior quando o operador muda a seleção rapidamente.
 - O Inbox coalesce eventos de Socket.IO, polling e atualização manual que chegam durante uma leitura; uma recarga final garante que nenhuma atualização de conversa seja perdida ou sobrescreva o estado por uma resposta vencida.
+- A configuração da empresa no painel master exige nome do assistente e do supermercado, normaliza ambos antes de salvar e aceita somente URLs `http`/`https` para mapa e encarte. A mesma validação é aplicada no servidor dentro do tenant resolvido pela sessão.

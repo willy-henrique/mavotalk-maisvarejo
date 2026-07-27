@@ -309,12 +309,18 @@ export function MavoAdminPanel({
 
   async function saveSupermarketSettings(event: FormEvent) {
     event.preventDefault();
+    const botName = settingsDraft.botName.trim();
+    const storeName = settingsDraft.storeName.trim();
+    if (!botName || !storeName) {
+      setFeedback({ type: "error", text: "Informe o nome do assistente e o nome do supermercado." });
+      return;
+    }
     setSettingsBusy("save");
     try {
       const response = await fetch("/api/admin/supermarket-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json", "X-Mavo-Organization-Id": overview.organization.id },
-        body: JSON.stringify({ ...settingsDraft, businessHours: hoursDraft }),
+        body: JSON.stringify({ ...settingsDraft, botName, storeName, businessHours: hoursDraft }),
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok) throw new Error(payload?.error || "Não foi possível salvar as configurações.");
@@ -488,8 +494,8 @@ export function MavoAdminPanel({
             <div className="master-config-card">
               <div className="master-config-card-heading"><Icon name="store" /><div><strong>Identidade da loja</strong><span>Esses dados aparecem nas respostas automáticas.</span></div></div>
               <div className="master-config-grid">
-                <label className="master-config-field"><span>Nome do assistente</span><input value={settingsDraft.botName} onChange={(event) => setSettingsDraft((value) => ({ ...value, botName: event.target.value }))} maxLength={80} /></label>
-                <label className="master-config-field"><span>Nome do supermercado</span><input value={settingsDraft.storeName} onChange={(event) => setSettingsDraft((value) => ({ ...value, storeName: event.target.value }))} maxLength={160} /></label>
+                <label className="master-config-field"><span>Nome do assistente</span><input value={settingsDraft.botName} onChange={(event) => setSettingsDraft((value) => ({ ...value, botName: event.target.value }))} maxLength={80} required /></label>
+                <label className="master-config-field"><span>Nome do supermercado</span><input value={settingsDraft.storeName} onChange={(event) => setSettingsDraft((value) => ({ ...value, storeName: event.target.value }))} maxLength={160} required /></label>
                 <label className="master-config-field wide"><span>Endereço</span><input value={settingsDraft.address} onChange={(event) => setSettingsDraft((value) => ({ ...value, address: event.target.value }))} maxLength={300} placeholder="Rua, número, bairro e cidade" /></label>
                 <label className="master-config-field"><span>Link do mapa</span><input type="url" value={settingsDraft.mapsUrl} onChange={(event) => setSettingsDraft((value) => ({ ...value, mapsUrl: event.target.value }))} placeholder="https://maps.google.com/..." /></label>
                 <label className="master-config-field"><span>Telefone</span><input value={settingsDraft.phone} onChange={(event) => setSettingsDraft((value) => ({ ...value, phone: event.target.value }))} placeholder="(00) 0000-0000" /></label>

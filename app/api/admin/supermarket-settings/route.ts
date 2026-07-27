@@ -7,34 +7,8 @@ import {
   updateConfiguredBusinessHours,
   updateSupermarketSettings,
   type ConfiguredHour,
-  type SupermarketSettings,
 } from "@/lib/supermarket-settings";
-
-const text = (value: unknown, max: number) => {
-  if (value == null) return null;
-  const result = String(value).trim();
-  return result ? result.slice(0, max) : null;
-};
-
-function parseSettings(body: Record<string, unknown>): Partial<SupermarketSettings> {
-  const next: Partial<SupermarketSettings> = {};
-  if (typeof body.enabled === "boolean") next.enabled = body.enabled;
-  if (typeof body.aiFallbackEnabled === "boolean") next.aiFallbackEnabled = body.aiFallbackEnabled;
-  for (const [input, key, max] of [
-    ["botName", "botName", 80],
-    ["storeName", "storeName", 160],
-    ["address", "address", 300],
-    ["mapsUrl", "mapsUrl", 1000],
-    ["weekdayHours", "weekdayHours", 160],
-    ["sundayHours", "sundayHours", 160],
-    ["offersUrl", "offersUrl", 1000],
-    ["offersText", "offersText", 4000],
-    ["phone", "phone", 40],
-  ] as const) {
-    if (input in body) (next as Record<string, unknown>)[key] = text(body[input], max);
-  }
-  return next;
-}
+import { parseSupermarketSettingsPatch } from "@/lib/supermarket-settings-validation";
 
 function parseHours(value: unknown): ConfiguredHour[] | null {
   if (!Array.isArray(value)) return null;
@@ -72,7 +46,9 @@ export async function PATCH(request: Request) {
   if (auth.error || !auth.session) return auth.error;
   const body = await request.json().catch(() => null) as Record<string, unknown> | null;
   if (!body) return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-  const settings = await updateSupermarketSettings(auth.session.organizationId, parseSettings(body));
+  const parsedSettings = parseSupermarketSettingsPatch(body);
+  if (parsedSettings.error) return NextResponse.json({ error: parsedSettings.error }, { status: 422 });
+  const settings = await updateSupermarketSettings(auth.session.organizationId, parsedSettings.data);
   const hours = parseHours(body.businessHours);
   const businessHours = hours ? await updateConfiguredBusinessHours(auth.session.organizationId, hours) : await getConfiguredBusinessHours(auth.session.organizationId);
   await createAuditLog(auth.session.organizationId, auth.session.userId, "update_supermarket_settings", "organization", auth.session.organizationId, {
