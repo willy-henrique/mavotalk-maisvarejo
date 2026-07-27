@@ -20,6 +20,7 @@ O produto possui direção visual azul/verde, modo escuro padrão e uma fundaç�
 | Resolvido | Dashboard não cobria a operação declarada | Calcula SLA próximo/vencido, resolução média, agentes online e frescor da última sincronização a partir de dados persistidos; não apresenta indicadores simulados como reais. |
 | Resolvido | Acessibilidade de modais incompleta | Os diálogos administrativos usam `Dialog` com foco inicial, focus trap, Escape e restauração do foco. |
 | Resolvido parcialmente | Contraste e escala no painel claro master | A área master possuía textos entre 6 e 9 px e superfícies com separação muito sutil. A escala de dados operacionais foi elevada para 10–13 px e cartões/bordas ganharam contraste explícito; a SPA operacional mantém tema escuro como padrão. |
+| Resolvido | Agentes exigia rolagem horizontal em mobile | A tabela operacional é preservada no desktop; telas menores recebem cartões com saúde, sincronização, registros, recomendação e ações. |
 | P3 | Estados vazios e largura | Há empty states altos em dashboards e tabelas; em monitores grandes a informação não usa largura/densidade operacional de forma consistente. |
 | P3 | Terminologia e capitalização | “Tipos de Chamado”, “Respostas Rápidas”, “Agentes cloud” e “Sincronização” não seguem mesma nomenclatura. |
 

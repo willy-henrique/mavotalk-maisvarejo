@@ -152,6 +152,12 @@ const AgentsManagement: React.FC = () => {
     return 'Nenhuma ação necessária';
   };
 
+  const agentActions = (agent: Agent, compact = false) => <div className={`flex flex-wrap gap-2 ${compact ? '' : 'justify-end'}`}>
+    <button type="button" disabled={Boolean(agent.revokedAt) || action !== null} onClick={() => void rotate(agent)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">{action === `rotate:${agent.id}` ? 'Rotacionando...' : 'Rotacionar'}</button>
+    <button type="button" disabled={action !== null} onClick={() => void openEvents(agent)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Logs</button>
+    <button type="button" disabled={Boolean(agent.revokedAt) || action !== null} onClick={() => setRevokeCandidate(agent)} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Revogar</button>
+  </div>;
+
   return (
     <main className="mavo-page">
       <div className="mavo-page-content">
@@ -193,7 +199,7 @@ const AgentsManagement: React.FC = () => {
       ) : items.length === 0 ? (
         <EmptyState title={search || statusFilter ? 'Nenhum agente encontrado.' : 'Nenhum agente provisionado ainda.'} description={search || statusFilter ? 'Altere a busca ou limpe os filtros para visualizar as instalações.' : 'Crie uma instalação para sincronizar dados do ambiente da empresa com segurança.'} action={search || statusFilter ? <button type="button" onClick={() => { setSearch(''); setStatusFilter(''); }} className="mavo-button-secondary">Limpar filtros</button> : undefined} />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80">
+        <><div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900/80 md:block">
           <table className="w-full min-w-[920px] text-left text-sm">
             <thead className="border-b border-slate-200 dark:border-slate-700 text-xs uppercase text-slate-500">
               <tr><th className="p-4">Agente</th><th className="p-4">Status</th><th className="p-4">Versão</th><th className="p-4">Último heartbeat</th><th className="p-4">Última sync</th><th className="p-4">Registros</th><th className="p-4">Ação recomendada</th><th className="p-4">Ações</th></tr>
@@ -208,16 +214,12 @@ const AgentsManagement: React.FC = () => {
                   <td className="p-4">{item.lastSyncAt ? new Date(item.lastSyncAt).toLocaleString('pt-BR') : 'Nunca'}</td>
                   <td className="p-4">{item.receivedRecords}</td>
                   <td className="p-4 text-xs text-slate-600 dark:text-slate-300">{recommendedAction(item)}</td>
-                  <td className="p-4"><div className="flex gap-2">
-                    <button type="button" disabled={Boolean(item.revokedAt) || action !== null} onClick={() => void rotate(item)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">{action === `rotate:${item.id}` ? 'Rotacionando...' : 'Rotacionar'}</button>
-                    <button type="button" disabled={action !== null} onClick={() => void openEvents(item)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Logs</button>
-                    <button type="button" disabled={Boolean(item.revokedAt) || action !== null} onClick={() => setRevokeCandidate(item)} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Revogar</button>
-                  </div></td>
+                  <td className="p-4">{agentActions(item)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </div><div className="grid gap-3 md:hidden">{items.map((item) => <article key={item.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-900 dark:text-white">{item.name}</h3><p className="mt-1 truncate font-mono text-xs text-slate-500">{item.installationKey}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${statusClass(item)}`}>{item.revokedAt ? 'revogado' : item.status}</span></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Última sync</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{item.lastSyncAt ? new Date(item.lastSyncAt).toLocaleString('pt-BR') : 'Nunca'}</dd></div><div><dt className="font-semibold text-slate-500">Registros</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{item.receivedRecords}</dd></div><div className="col-span-2"><dt className="font-semibold text-slate-500">Ação recomendada</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{recommendedAction(item)}</dd></div></dl>{item.lastBatchError && <p className="rounded-lg bg-rose-50 p-2 text-xs text-rose-700 dark:bg-rose-950/30 dark:text-rose-200">Último erro: {item.lastBatchError}</p>}{agentActions(item, true)}</article>)}</div></>
       )}
       {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="agentes" onPageChange={setPage} />}
       {eventsFor && (

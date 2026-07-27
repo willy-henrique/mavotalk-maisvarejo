@@ -76,3 +76,4 @@ npm run render:validate → aprovado
 - O editor de empresa no master agora sinaliza alterações não salvas, protege saída/refresh/troca de organização e oferece confirmação acessível para descarte.
 - Contatos deixou de carregar toda a base do tenant: busca, filtro de bloqueio e paginação ocorrem na API sob contexto RLS, e a consulta obtém apenas a última conversa/mensagem de cada contato exibido. A migration adiciona o índice para essa ordenação; em mobile, a tabela dá lugar a cartões operacionais sem rolagem horizontal.
 - A paginação de Contatos, Equipe, Respostas rápidas, Agentes e Acessos gerenciais foi centralizada em uma primitive com intervalo exibido, estado de página, botões consistentes e nomes acessíveis.
+- Agentes e sincronização preserva a tabela densa em desktop e oferece cartões em mobile, sem ocultar status, última sincronização, quantidade de registros, recomendação ou ações administrativas.
