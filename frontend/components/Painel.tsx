@@ -61,8 +61,8 @@ const Painel: React.FC = () => {
     } finally {
       if (request === statusRequestRef.current) {
         setLoading(false);
-        if (manual) setRefreshing(false);
       }
+      if (manual) setRefreshing(false);
     }
   }, []);
 

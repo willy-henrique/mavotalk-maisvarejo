@@ -9,6 +9,7 @@ test("central de conexão trata falha de status sem manter a tela em carregament
   assert.match(source, /setLoading\(false\)/);
   assert.match(source, /statusRequestRef/);
   assert.match(source, /request !== statusRequestRef\.current/);
+  assert.match(source, /if \(manual\) setRefreshing\(false\);/);
   assert.match(source, /LoadingState/);
   assert.match(source, /ErrorState/);
   assert.match(source, /Atualizando…/);
