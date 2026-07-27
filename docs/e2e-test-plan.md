@@ -49,3 +49,4 @@ Em 2026-07-27, o cenário anônimo de rota administrativa foi executado contra `
 ## Cobertura implementada adicional
 
 - Quando as credenciais QA estão disponíveis, `operational-navigation.spec.ts` autentica sem registrar segredos e verifica Inbox/Contatos por teclado, URL direta, refresh, título da página e item ativo na navegação. O cenário é somente leitura.
+- Sem credenciais, `guest-route-protection.spec.ts` verifica o redirecionamento de rota protegida, campos obrigatórios e alternância segura de visibilidade da senha. Esses cenários não enviam credenciais nem alteram dados de QA.
