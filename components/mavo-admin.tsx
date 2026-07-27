@@ -4,7 +4,7 @@
 // host é dinâmico, usamos img para não exigir allowlist de domínios no build.
 /* eslint-disable @next/next/no-img-element */
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Icon, MavoBrand } from "@/components/mavo-brand";
 import type { MavoMasterSession } from "@/lib/mavo-master-auth";
 import type { MavoSystemOverview } from "@/lib/mavo-system-overview";
@@ -158,6 +158,10 @@ export function MavoAdminPanel({
   const [busy, setBusy] = useState<"refresh" | "sync" | "logout" | null>(null);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [settingsBusy, setSettingsBusy] = useState<"save" | "upload" | null>(null);
+  const [confirmSync, setConfirmSync] = useState(false);
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+  const confirmDialogRef = useRef<HTMLElement>(null);
+  const syncTriggerRef = useRef<HTMLButtonElement>(null);
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([{ id: initialOverview.organization.id, name: initialOverview.organization.name }]);
   const [settingsDraft, setSettingsDraft] = useState(() => settingsDraftFromOverview(initialOverview));
   const [hoursDraft, setHoursDraft] = useState(() => defaultBusinessHours.map((fallback) => initialOverview.businessHours.find((item) => item.weekday === fallback.weekday) || fallback));
@@ -177,6 +181,36 @@ export function MavoAdminPanel({
       })
       .catch((error) => setFeedback({ type: "error", text: error instanceof Error ? error.message : "Não foi possível carregar as organizações." }));
   }, []);
+
+  useEffect(() => {
+    if (!confirmSync) return;
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const trigger = syncTriggerRef.current;
+    confirmButtonRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setConfirmSync(false);
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = [...(confirmDialogRef.current?.querySelectorAll<HTMLElement>("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])") || [])];
+      if (!focusable.length) return;
+      const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+      if (event.shiftKey && currentIndex <= 0) {
+        event.preventDefault();
+        focusable[focusable.length - 1].focus();
+      } else if (!event.shiftKey && currentIndex === focusable.length - 1) {
+        event.preventDefault();
+        focusable[0].focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      (trigger || previousFocus)?.focus();
+    };
+  }, [confirmSync]);
 
   async function refresh(showFeedback = false, organizationId = overview.organization.id) {
     setBusy("refresh");
@@ -203,7 +237,7 @@ export function MavoAdminPanel({
   }
 
   async function syncSupermarket() {
-    if (!window.confirm("Sincronizar as sete filas do supermercado e pausar filas fora do modelo?")) return;
+    setConfirmSync(false);
     setBusy("sync");
     try {
       const response = await fetch(`/api/mavo/actions/sync-supermarket?organizationId=${encodeURIComponent(overview.organization.id)}`, { method: "POST" });
@@ -379,7 +413,7 @@ export function MavoAdminPanel({
           </article>
 
           <article className="master-card queue-overview-card">
-            <div className="master-card-title"><div><span>Distribuição</span><h2>Filas do atendimento</h2></div><div className="master-card-actions"><a href="/dashboard/queues">Editar filas</a><button type="button" onClick={syncSupermarket} disabled={Boolean(busy)}>{busy === "sync" ? "Sincronizando..." : "Sincronizar menu"}</button></div></div>
+            <div className="master-card-title"><div><span>Distribuição</span><h2>Filas do atendimento</h2></div><div className="master-card-actions"><a href="/dashboard/queues">Editar filas</a><button ref={syncTriggerRef} type="button" onClick={() => setConfirmSync(true)} disabled={Boolean(busy)}>{busy === "sync" ? "Sincronizando..." : "Sincronizar menu"}</button></div></div>
             <div className="master-queue-overview">
               {overview.queues.length ? overview.queues.map((queue) => (
                 <div key={queue.id} className={!queue.isActive ? "inactive" : ""}>
@@ -469,6 +503,7 @@ export function MavoAdminPanel({
 
         <footer className="master-footer"><span>Mavo Talk · Painel master protegido</span><span>Dados atualizados em {formatDate(overview.generatedAt)}</span></footer>
       </main>
+      {confirmSync ? <div className="master-confirm-backdrop" role="presentation" onMouseDown={() => setConfirmSync(false)}><section ref={confirmDialogRef} className="master-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="sync-confirm-title" aria-describedby="sync-confirm-description" onMouseDown={(event) => event.stopPropagation()}><h2 id="sync-confirm-title">Sincronizar menu do supermercado?</h2><p id="sync-confirm-description">As sete filas padrão serão sincronizadas e filas fora do modelo serão pausadas. Atendimentos e histórico não serão removidos.</p><div><button type="button" onClick={() => setConfirmSync(false)}>Cancelar</button><button ref={confirmButtonRef} type="button" onClick={() => void syncSupermarket()}>Sincronizar filas</button></div></section></div> : null}
     </div>
   );
 }
