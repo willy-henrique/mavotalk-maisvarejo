@@ -15,6 +15,8 @@ type Queue = {
 
 const TicketTypeManagement: React.FC = () => {
   const [queues, setQueues] = useState<Queue[]>([]);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -103,6 +105,13 @@ const TicketTypeManagement: React.FC = () => {
     }
   };
 
+  const normalizedSearch = search.trim().toLocaleLowerCase('pt-BR');
+  const filteredQueues = queues
+    .filter((queue) => !normalizedSearch || queue.name.toLocaleLowerCase('pt-BR').includes(normalizedSearch))
+    .filter((queue) => statusFilter === 'all' || (statusFilter === 'active' ? queue.isActive : !queue.isActive))
+    .slice()
+    .sort((a, b) => a.menuOption - b.menuOption || a.name.localeCompare(b.name, 'pt-BR'));
+
   return (
     <main className="mavo-page"><div className="mavo-page-content">
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -121,15 +130,28 @@ const TicketTypeManagement: React.FC = () => {
       </div>
 
       {loadError && <ErrorState className="mb-5" description={loadError} action={<button type="button" onClick={() => void fetchQueues()} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
+      {!loading && queues.length > 0 && (
+        <div className="mb-5 flex flex-wrap gap-3">
+          <label className="block min-w-[16rem] flex-1"><span className="sr-only">Buscar filas</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome da fila" className="mavo-field" /></label>
+          <label className="min-w-44"><span className="sr-only">Filtrar por status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="mavo-field"><option value="all">Todos os status</option><option value="active">Ativas no menu</option><option value="inactive">Inativas</option></select></label>
+        </div>
+      )}
       {loading ? (
         <LoadingState title="Carregando filas e automações…" />
       ) : queues.length === 0 ? (
         <EmptyState title="Nenhuma fila cadastrada." description="Crie a primeira fila para disponibilizar uma opção no menu do bot e direcionar os atendimentos." action={<button type="button" onClick={openCreate} className="mavo-button-primary">Criar a primeira fila</button>} />
+      ) : filteredQueues.length === 0 ? (
+        <EmptyState title="Nenhuma fila encontrada." description="Altere a busca ou limpe os filtros para visualizar as filas cadastradas." action={<button type="button" onClick={() => { setSearch(''); setStatusFilter('all'); }} className="mavo-button-secondary">Limpar filtros</button>} />
+      ) : filteredQueues.length > 8 ? (
+        <div className="mavo-card overflow-x-auto p-0">
+          <table className="w-full min-w-[720px] text-left">
+            <thead><tr className="border-b border-slate-200 dark:border-slate-700"><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fila</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Menu</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">SLA</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</th><th scope="col" className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ações</th></tr></thead>
+            <tbody>{filteredQueues.map((queue) => <tr key={queue.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/80 dark:hover:bg-slate-800/50"><td className="px-4 py-3"><span className="mr-3 inline-block h-3 w-3 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><span className="font-medium text-slate-800 dark:text-slate-200">{queue.name}</span></td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.menuOption}</td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.defaultSlaMins} min</td><td className="px-4 py-3"><span className={queue.isActive ? 'rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300'}>{queue.isActive ? 'Ativa' : 'Inativa'}</span></td><td className="px-4 py-3 text-right"><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button></td></tr>)}</tbody>
+          </table>
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          {queues
-            .sort((a, b) => a.menuOption - b.menuOption)
-            .map((q) => (
+          {filteredQueues.map((q) => (
               <div
                 key={q.id}
                 className="mavo-card group p-6 transition hover:shadow-xl"
