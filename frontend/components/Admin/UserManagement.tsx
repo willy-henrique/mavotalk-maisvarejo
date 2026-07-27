@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, UserRole, UserStatus } from '../../types';
 import { Icons } from '../../constants';
-import { apiFetch, apiPost } from '../../services/api';
+import { apiFetch, apiPatch, apiPost } from '../../services/api';
 
 type BackendUser = {
   id: string;
@@ -51,6 +51,9 @@ const UserManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [roleFilter, setRoleFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [actionUserId, setActionUserId] = useState<string | null>(null);
 
   const [formName, setFormName] = useState('');
   const [formEmail, setFormEmail] = useState('');
@@ -78,9 +81,24 @@ const UserManagement: React.FC = () => {
 
   const filteredUsers = users.filter(
     (u) =>
-      u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchTerm.toLowerCase())
+      (u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      u.email.toLowerCase().includes(searchTerm.toLowerCase())) &&
+      (!roleFilter || u.role === roleFilter) &&
+      (!statusFilter || u.status === statusFilter)
   );
+
+  const toggleUserStatus = async (user: User) => {
+    setActionUserId(user.id);
+    setSubmitError('');
+    try {
+      await apiPatch(`/api/admin/users/${user.id}`, { isActive: user.status !== UserStatus.ATIVO });
+      await fetchUsers();
+    } catch (reason) {
+      setSubmitError(reason instanceof Error ? reason.message : 'Não foi possível atualizar o colaborador.');
+    } finally {
+      setActionUserId(null);
+    }
+  };
 
   const getStatusStyle = (status: UserStatus) => {
     switch (status) {
@@ -133,29 +151,31 @@ const UserManagement: React.FC = () => {
   };
 
   return (
-    <div className="p-8 flex-1 overflow-y-auto bg-white">
-      <div className="flex justify-between items-end mb-8">
+    <main className="mavo-page"><div className="mavo-page-content">
+      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Colaboradores</h1>
-          <p className="text-slate-500">Gerencie sua equipe, permissões e acessos ao Mavo Talk.</p>
+          <p className="text-xs font-black uppercase tracking-[.16em] text-blue-600 dark:text-blue-400">Administração</p>
+          <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Equipe</h2>
+          <p className="mt-2 text-slate-500 dark:text-slate-400">Gerencie colaboradores, perfis e status de acesso ao Mavo Talk.</p>
         </div>
         <button
           onClick={openModal}
-          className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 flex items-center gap-2"
+          className="mavo-button-primary"
         >
           <Icons.Users className="w-5 h-5" />
           Adicionar Colaborador
         </button>
       </div>
 
-      <div className="mb-6 flex gap-4">
+      {submitError && <div role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300">{submitError}</div>}
+      <div className="mavo-card mb-6 flex flex-col gap-3 p-4 md:flex-row">
         <div className="flex-1 relative">
           <input
             type="text"
             placeholder="Buscar por nome ou e-mail..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+            className="mavo-field pl-10"
           />
           <div className="absolute left-3 top-3.5 text-slate-400">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -163,12 +183,14 @@ const UserManagement: React.FC = () => {
             </svg>
           </div>
         </div>
+        <select value={roleFilter} onChange={(event) => setRoleFilter(event.target.value)} className="mavo-field md:max-w-48"><option value="">Todas as funções</option><option value={UserRole.ADMIN}>Administrador</option><option value={UserRole.SUPERVISOR}>Gestor</option><option value={UserRole.AGENT}>Atendente</option></select>
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mavo-field md:max-w-44"><option value="">Todos os status</option><option value={UserStatus.ATIVO}>Ativos</option><option value={UserStatus.INATIVO}>Inativos</option></select>
       </div>
 
       {loading ? (
         <p className="text-slate-500 py-8">Carregando colaboradores...</p>
       ) : (
-        <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+        <div className="mavo-card overflow-x-auto">
           <table className="w-full text-left">
             <thead className="bg-slate-50 border-b border-slate-200">
               <tr>
@@ -184,9 +206,7 @@ const UserManagement: React.FC = () => {
                 <tr key={u.id} className="hover:bg-slate-50/50 transition-all">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-200 border border-slate-300">
-                        <img src={`https://picsum.photos/seed/${u.id}/40/40`} alt="Avatar" />
-                      </div>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-blue-800 bg-blue-950 text-xs font-black text-blue-200" aria-label={`Avatar de ${u.name}`}>{u.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</div>
                       <div>
                         <p className="font-bold text-slate-800 text-sm">{u.name}</p>
                         <p className="text-xs text-slate-500">{u.email}</p>
@@ -207,8 +227,8 @@ const UserManagement: React.FC = () => {
                     {u.lastLoginAt ? (u.lastLoginAt instanceof Date ? u.lastLoginAt.toLocaleDateString() : String(u.lastLoginAt)) : 'Nunca'}
                   </td>
                   <td className="px-6 py-4 text-right">
-                    <button type="button" className="p-2 hover:bg-slate-200 rounded-lg text-slate-400 transition-all">
-                      <Icons.Settings className="w-4 h-4" />
+                    <button type="button" disabled={actionUserId === u.id} onClick={() => void toggleUserStatus(u)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+                      {actionUserId === u.id ? 'Atualizando…' : u.status === UserStatus.ATIVO ? 'Desativar' : 'Reativar'}
                     </button>
                   </td>
                 </tr>
@@ -294,7 +314,7 @@ const UserManagement: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </div></main>
   );
 };
 

@@ -33,7 +33,7 @@ export async function GET() {
 
   const users = await listUsers(auth.session.organizationId);
   return NextResponse.json({
-    users: users.filter((user) => user.isActive !== false).map((user) => toPublicUser(user)),
+    users: users.map((user) => toPublicUser(user)),
   });
 }
 
