@@ -7,6 +7,7 @@ Data: 2026-07-27.
 - Adicionado Playwright com quatro projetos: desktop 1366×768, desktop 1920×1080, tablet e mobile 390×844.
 - Criada observabilidade de browser: erros de console/JavaScript, respostas HTTP de interesse, falhas e requisições pendentes são anexados ao resultado do teste.
 - Criada a primeira suíte autenticada: login, prevenção visual de reenvio, refresh, deep link, logout e rota protegida. Ela executa somente quando `QA_BASE_URL`, `QA_EMAIL` e `QA_PASSWORD` existem no ambiente.
+- Adicionado cenário anônimo de rota administrativa direta, executável somente com `QA_BASE_URL`; ele não cria nem altera dados de QA.
 - Artefatos de teste (`playwright-report`, `test-results`, `blob-report`) foram excluídos do versionamento. Screenshots/trace são preservados somente em falha; vídeo fica desligado.
 - Adicionados tokens semânticos de cor, superfície, tipografia operacional, foco, espaçamento, sombra, raio, z-index e transição. O ambiente operacional inicia em tema escuro sem flash branco.
 - Criado `Dialog` acessível reutilizável com foco inicial, focus trap, Escape, clique externo e restauração de foco; o editor de respostas rápidas foi migrado.
@@ -26,7 +27,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 74/74 aprovados
+npm test               → 76/76 aprovados
 npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 ```
@@ -34,6 +35,7 @@ npm --prefix frontend run build → aprovado
 ## Limites conhecidos
 
 - A suíte E2E não é considerada aprovada enquanto estiver ignorada; faltam password, origem de API e tenants QA controlados.
+- A execução anônima contra o Render encontrou o aviso de console CSP da versão atualmente publicada. A causa foi corrigida no repositório (diretiva `frame-ancestors` removida da meta tag); é necessário publicar e repetir a execução para obter a evidência pós-deploy.
 - Ainda faltam cenários E2E para Inbox, multi-tenancy A→B, WhatsApp, agentes, auditoria e administração. O plano permanece em `docs/e2e-test-plan.md`.
 - “Menu do painel” ainda controla apenas visibilidade porque a matriz granular de leitura/criação/edição/exclusão/administrativa exige uma evolução de RBAC no backend, não uma alteração cosmética de UI.
 - A página de filas ainda não dispõe de modelo persistido para prioridade, horário, overflow, atendentes e reordenação drag-and-drop. Esses campos não foram simulados no frontend.
