@@ -332,6 +332,48 @@ export async function listAgents(
   };
 }
 
+export type AgentAuditEvent = {
+  id: string;
+  eventType: string;
+  status: "success" | "rejected" | "failed";
+  errorCode: string | null;
+  durationMs: number | null;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+};
+
+export async function listAgentAuditEvents(
+  organizationId: string,
+  agentId: string,
+  limit = 50,
+): Promise<AgentAuditEvent[]> {
+  const result = await queryDatabase<{
+    id: string;
+    event_type: string;
+    status: AgentAuditEvent["status"];
+    error_code: string | null;
+    duration_ms: number | null;
+    metadata: Record<string, unknown> | null;
+    created_at: Date;
+  }>(
+    `SELECT id, event_type, status, error_code, duration_ms, metadata, created_at
+       FROM agent_audit_events
+      WHERE organization_id = $1 AND agent_id = $2
+      ORDER BY created_at DESC
+      LIMIT $3`,
+    [organizationId, agentId, Math.max(1, Math.min(limit, 100))],
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    eventType: row.event_type,
+    status: row.status,
+    errorCode: row.error_code,
+    durationMs: row.duration_ms,
+    metadata: row.metadata || {},
+    createdAt: row.created_at.toISOString(),
+  }));
+}
+
 export async function recordAgentAudit(input: {
   context?: AgentContext;
   organizationId: string;
