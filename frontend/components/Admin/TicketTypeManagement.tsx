@@ -15,6 +15,7 @@ type Queue = {
 const TicketTypeManagement: React.FC = () => {
   const [queues, setQueues] = useState<Queue[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formName, setFormName] = useState('');
@@ -27,14 +28,17 @@ const TicketTypeManagement: React.FC = () => {
 
   const fetchQueues = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const res = await apiFetch('/api/queues', { method: 'GET' });
       const data = (await res.json()) as { queues?: Queue[] };
       if (res.ok && Array.isArray(data.queues)) {
         setQueues(data.queues);
+      } else {
+        setLoadError('Não foi possível carregar as filas. Tente novamente.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setLoadError('Não foi possível carregar as filas. Verifique a conexão e tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -115,6 +119,7 @@ const TicketTypeManagement: React.FC = () => {
         </button>
       </div>
 
+      {loadError && <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300"><span>{loadError}</span><button type="button" onClick={() => void fetchQueues()} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button></div>}
       {loading ? (
         <div className="text-slate-500">Carregando...</div>
       ) : queues.length === 0 ? (

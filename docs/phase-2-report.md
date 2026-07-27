@@ -44,3 +44,4 @@ npm --prefix frontend run build → aprovado
 - Equipe agora registra e exibe o último login com escopo de tenant. Convites e filas associadas ainda exigem modelagem/endpoints antes de serem exibidos como informação real.
 - O painel master passou a permitir seleção de organização somente sob sessão de plataforma. A existência da organização é confirmada antes de consultas, sincronização de filas e gravações de configuração; sessões operacionais permanecem vinculadas à organização do próprio cookie.
 - O Inbox atualiza a URL com a conversa escolhida, restaura esse contexto após refresh/deep link e aceita Enter ou Espaço para abrir uma conversa pela lista.
+- As telas de Equipe e Filas e automações deixam de falhar silenciosamente ao carregar: o erro é apresentado com `role=alert` e ação de tentativa novamente, separado dos erros de gravação do formulário.

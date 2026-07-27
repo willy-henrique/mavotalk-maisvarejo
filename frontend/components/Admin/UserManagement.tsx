@@ -49,6 +49,7 @@ function toBackendRole(role: UserRole): 'admin' | 'gestor' | 'atendente' {
 const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,14 +67,17 @@ const UserManagement: React.FC = () => {
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
+    setLoadError('');
     try {
       const res = await apiFetch('/api/admin/users', { method: 'GET' });
       const data = (await res.json()) as { users?: BackendUser[] };
       if (res.ok && Array.isArray(data.users)) {
         setUsers(data.users.map(toFrontendUser));
+      } else {
+        setLoadError('Não foi possível carregar a equipe. Tente novamente.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
+      setLoadError('Não foi possível carregar a equipe. Verifique a conexão e tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -203,6 +207,7 @@ const UserManagement: React.FC = () => {
         </button>
       </div>
 
+      {loadError && <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300"><span>{loadError}</span><button type="button" onClick={() => void fetchUsers()} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button></div>}
       {submitError && <div role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300">{submitError}</div>}
       {notice && <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">{notice}</div>}
       <div className="mavo-card mb-6 flex flex-col gap-3 p-4 md:flex-row">
