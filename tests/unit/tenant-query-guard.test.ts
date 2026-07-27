@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 const read = (path: string) => readFile(path, "utf8");
 
 test("consultas administrativas críticas executam com contexto RLS do tenant", async () => {
-  const [db, audit, auditDetail, agents, menuSettings, supermarketSettings, analytics] = await Promise.all([
+  const [db, audit, auditDetail, agents, menuSettings, supermarketSettings, analytics, businessAccess] = await Promise.all([
     read("lib/db.ts"),
     read("app/api/business/audit/route.ts"),
     read("app/api/business/audit/[id]/route.ts"),
@@ -13,6 +13,7 @@ test("consultas administrativas críticas executam com contexto RLS do tenant", 
     read("lib/menu-settings.ts"),
     read("lib/supermarket-settings.ts"),
     read("lib/business-analytics/business-analytics-service.ts"),
+    read("lib/business-access/business-access-repository.ts"),
   ]);
   assert.match(db, /function queryTenantDatabase/);
   assert.match(db, /withTenantTransaction\(organizationId/);
@@ -26,4 +27,6 @@ test("consultas administrativas críticas executam com contexto RLS do tenant", 
   assert.doesNotMatch(supermarketSettings, /queryDatabase/);
   assert.match(analytics, /queryTenantDatabase/);
   assert.doesNotMatch(analytics, /queryDatabase/);
+  assert.match(businessAccess, /queryTenantDatabase/);
+  assert.doesNotMatch(businessAccess, /queryDatabase/);
 });

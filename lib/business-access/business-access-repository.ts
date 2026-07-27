@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
-import { queryDatabase, withTenantTransaction } from "@/lib/db";
+import { queryTenantDatabase, withTenantTransaction } from "@/lib/db";
 import type {
   BusinessAccessSession,
   BusinessAccessUser,
@@ -76,7 +76,8 @@ export async function findBusinessAccessUserByPhone(
   organizationId: string,
   phoneNormalized: string,
 ): Promise<BusinessAccessUser | null> {
-  const result = await queryDatabase<UserRow>(
+  const result = await queryTenantDatabase<UserRow>(
+    organizationId,
     `SELECT *
        FROM business_access_users
       WHERE organization_id = $1
@@ -91,7 +92,8 @@ export async function getBusinessAccessUser(
   organizationId: string,
   accessUserId: string,
 ): Promise<BusinessAccessUser | null> {
-  const result = await queryDatabase<UserRow>(
+  const result = await queryTenantDatabase<UserRow>(
+    organizationId,
     `SELECT *
        FROM business_access_users
       WHERE organization_id = $1 AND id = $2
@@ -107,7 +109,8 @@ export async function listBusinessAccessUsers(
 ): Promise<{ items: BusinessAccessUser[]; total: number }> {
   const offset = (options.page - 1) * options.pageSize;
   const [items, count] = await Promise.all([
-    queryDatabase<UserRow>(
+    queryTenantDatabase<UserRow>(
+      organizationId,
       `SELECT *
          FROM business_access_users
         WHERE organization_id = $1
@@ -115,7 +118,8 @@ export async function listBusinessAccessUsers(
         LIMIT $2 OFFSET $3`,
       [organizationId, options.pageSize, offset],
     ),
-    queryDatabase<{ count: string }>(
+    queryTenantDatabase<{ count: string }>(
+      organizationId,
       `SELECT COUNT(*)::text AS count
          FROM business_access_users
         WHERE organization_id = $1`,
@@ -138,7 +142,8 @@ export async function createBusinessAccessUser(input: {
   mfaType?: BusinessMfaType;
   createdByUserId?: string;
 }): Promise<BusinessAccessUser> {
-  const result = await queryDatabase<UserRow>(
+  const result = await queryTenantDatabase<UserRow>(
+    input.organizationId,
     `INSERT INTO business_access_users (
        id, organization_id, name, phone_normalized, role, permissions,
        pin_hash, mfa_type, pin_changed_at, created_by_user_id
@@ -198,7 +203,8 @@ export async function updateBusinessAccessUser(
   if (!columns.length) return getBusinessAccessUser(organizationId, accessUserId);
   columns.push("updated_at = now()");
 
-  const result = await queryDatabase<UserRow>(
+  const result = await queryTenantDatabase<UserRow>(
+    organizationId,
     `UPDATE business_access_users
         SET ${columns.join(", ")}
       WHERE organization_id = $1 AND id = $2
@@ -254,7 +260,8 @@ export async function resetPinAttempts(
   organizationId: string,
   accessUserId: string,
 ): Promise<void> {
-  await queryDatabase(
+  await queryTenantDatabase(
+    organizationId,
     `UPDATE business_access_users
         SET failed_attempts = 0, locked_until = NULL,
             last_access_at = now(), updated_at = now()
@@ -267,7 +274,8 @@ export async function unlockBusinessAccessUser(
   organizationId: string,
   accessUserId: string,
 ): Promise<boolean> {
-  const result = await queryDatabase(
+  const result = await queryTenantDatabase(
+    organizationId,
     `UPDATE business_access_users
         SET failed_attempts = 0, locked_until = NULL, updated_at = now()
       WHERE organization_id = $1 AND id = $2`,
@@ -319,7 +327,7 @@ export async function findActiveBusinessSession(
   session: BusinessAccessSession;
   user: BusinessAccessUser;
 } | null> {
-  const result = await queryDatabase<
+  const result = await queryTenantDatabase<
     SessionRow & {
       user_id: string;
       user_organization_id: string;
@@ -337,6 +345,7 @@ export async function findActiveBusinessSession(
       user_updated_at: Date;
     }
   >(
+    organizationId,
     `SELECT s.*,
             u.id AS user_id,
             u.organization_id AS user_organization_id,
@@ -396,7 +405,8 @@ export async function renewBusinessSession(
   sessionId: string,
   ttlMinutes: number,
 ): Promise<BusinessAccessSession | null> {
-  const result = await queryDatabase<SessionRow>(
+  const result = await queryTenantDatabase<SessionRow>(
+    organizationId,
     `UPDATE business_access_sessions
         SET last_activity_at = now(),
             expires_at = now() + make_interval(mins => $3)
@@ -415,7 +425,8 @@ export async function revokeBusinessSessions(
   accessUserId: string,
   reason: string,
 ): Promise<number> {
-  const result = await queryDatabase(
+  const result = await queryTenantDatabase(
+    organizationId,
     `UPDATE business_access_sessions
         SET revoked_at = now(), revoke_reason = $3
       WHERE organization_id = $1
@@ -431,7 +442,8 @@ export async function startBusinessSupportMode(
   sessionId: string,
   durationMinutes = 1_440,
 ): Promise<void> {
-  await queryDatabase(
+  await queryTenantDatabase(
+    organizationId,
     `UPDATE business_access_sessions
         SET support_mode_until = now() + make_interval(mins => $3),
             last_activity_at = now()
@@ -447,7 +459,8 @@ export async function endBusinessSupportMode(
   organizationId: string,
   phoneNormalized: string,
 ): Promise<void> {
-  await queryDatabase(
+  await queryTenantDatabase(
+    organizationId,
     `UPDATE business_access_sessions
         SET support_mode_until = NULL, last_activity_at = now()
       WHERE organization_id = $1
@@ -483,7 +496,7 @@ export async function recordBusinessAccessAudit(input: {
     )
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`;
   if (input.client) await input.client.query(sql, values);
-  else await queryDatabase(sql, values);
+  else await queryTenantDatabase(input.organizationId, sql, values);
 }
 
 export async function reserveBusinessWhatsappEvent(input: {
@@ -493,7 +506,8 @@ export async function reserveBusinessWhatsappEvent(input: {
   eventId?: string;
 }): Promise<boolean> {
   if (!input.eventId) return true;
-  const result = await queryDatabase(
+  const result = await queryTenantDatabase(
+    input.organizationId,
     `INSERT INTO business_whatsapp_events (
        id, organization_id, event_id, access_user_id, phone_normalized
      )
