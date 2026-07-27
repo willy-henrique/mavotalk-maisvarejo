@@ -12,6 +12,8 @@ test("monitoramento de agentes filtra instalações no servidor e no tenant atua
   assert.match(repository, /ai\.organization_id = \$1/);
   assert.match(repository, /installation_key ILIKE/);
   assert.match(repository, /options\.status === "attention"/);
+  assert.match(repository, /ORDER BY latest\.received_at DESC/);
+  assert.match(repository, /CASE WHEN latest\.status IN \('failed', 'rejected'\)/);
   assert.match(route, /searchParams\.get\("status"\)/);
   assert.match(view, /Buscar por nome ou instalação/);
   assert.match(view, /Nenhum agente encontrado/);

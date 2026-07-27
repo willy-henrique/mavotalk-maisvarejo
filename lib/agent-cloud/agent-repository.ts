@@ -305,12 +305,12 @@ export async function listAgents(
     countConditions.push(`(name ILIKE ${parameter} OR installation_key ILIKE ${parameter})`);
   }
   if (options.status === "online") {
-    conditions.push("ai.revoked_at IS NULL AND ai.status IN ('active', 'online') AND ai.last_error_code IS NULL");
-    countConditions.push("revoked_at IS NULL AND status IN ('active', 'online') AND last_error_code IS NULL");
+    conditions.push("ai.revoked_at IS NULL AND ai.status IN ('active', 'online') AND ai.last_error_code IS NULL AND COALESCE((SELECT latest.status FROM agent_sync_batches latest WHERE latest.agent_id = ai.id ORDER BY latest.received_at DESC LIMIT 1), 'success') NOT IN ('failed', 'rejected')");
+    countConditions.push("revoked_at IS NULL AND status IN ('active', 'online') AND last_error_code IS NULL AND COALESCE((SELECT latest.status FROM agent_sync_batches latest WHERE latest.agent_id = agent_installations.id ORDER BY latest.received_at DESC LIMIT 1), 'success') NOT IN ('failed', 'rejected')");
   }
   if (options.status === "attention") {
-    conditions.push("ai.revoked_at IS NULL AND (ai.status NOT IN ('active', 'online') OR ai.last_error_code IS NOT NULL)");
-    countConditions.push("revoked_at IS NULL AND (status NOT IN ('active', 'online') OR last_error_code IS NOT NULL)");
+    conditions.push("ai.revoked_at IS NULL AND (ai.status NOT IN ('active', 'online') OR ai.last_error_code IS NOT NULL OR COALESCE((SELECT latest.status FROM agent_sync_batches latest WHERE latest.agent_id = ai.id ORDER BY latest.received_at DESC LIMIT 1), 'success') IN ('failed', 'rejected'))");
+    countConditions.push("revoked_at IS NULL AND (status NOT IN ('active', 'online') OR last_error_code IS NOT NULL OR COALESCE((SELECT latest.status FROM agent_sync_batches latest WHERE latest.agent_id = agent_installations.id ORDER BY latest.received_at DESC LIMIT 1), 'success') IN ('failed', 'rejected'))");
   }
   if (options.status === "revoked") {
     conditions.push("ai.revoked_at IS NOT NULL");
@@ -324,10 +324,9 @@ export async function listAgents(
       `SELECT ai.*,
               COALESCE(SUM(asb.item_count), 0)::text AS received_records,
               (
-                SELECT error_summary
+                SELECT CASE WHEN latest.status IN ('failed', 'rejected') THEN latest.error_summary ELSE NULL END
                   FROM agent_sync_batches latest
                  WHERE latest.agent_id = ai.id
-                   AND latest.status IN ('failed', 'rejected')
                  ORDER BY latest.received_at DESC
                  LIMIT 1
               ) AS last_batch_error
