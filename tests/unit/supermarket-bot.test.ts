@@ -56,6 +56,7 @@ test("resolve ofertas por autoatendimento quando o link está configurado", () =
   assert.equal(decision?.queueMenuOption, null);
   assert.equal(decision?.triageCompleted, false);
   assert.match(decision?.replyText || "", /Ofertas do dia/);
+  assert.match(decision?.replyText || "", /Mercado Teste/);
   assert.equal(decision?.mediaUrl, "https://cdn.example/ofertas.png");
 });
 
@@ -86,6 +87,15 @@ test("coleta produto e conclui a triagem com o contexto informado", () => {
   assert.equal(second?.queueMenuOption, 3);
   assert.equal(second?.triageCompleted, true);
   assert.match(second?.replyText || "", /Café Melitta, pacote de 500 g/);
+  assert.match(second?.replyText || "", /Mercado Teste/);
+});
+
+test("mantém o nome configurado da loja nas respostas de localização e triagem", () => {
+  const location = decide({ message: "qual o horário de funcionamento?" });
+  const product = decide({ message: "tem o produto arroz?" });
+
+  assert.match(location?.replyText || "", /Horários e localização · Mercado Teste/);
+  assert.match(product?.replyText || "", /Consulta de produto · Mercado Teste/);
 });
 
 test("não repete respostas automáticas depois que a conversa aguarda uma pessoa", () => {

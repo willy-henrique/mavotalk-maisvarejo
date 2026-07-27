@@ -104,6 +104,11 @@ function navigationFooter() {
   return "\n\nDigite *0* para voltar ao menu ou *6* para falar com a nossa equipe.";
 }
 
+/** Mantém a identidade configurada da loja visível em toda resposta do bot. */
+function responseTitle(config: SupermarketBotConfig, title: string) {
+  return `${title} · ${config.storeName}`;
+}
+
 export function buildSupermarketMenu(
   config: SupermarketBotConfig,
   customerName?: string | null,
@@ -133,13 +138,13 @@ function offersReply(config: SupermarketBotConfig): string {
   const destination = config.offersText || (config.offersUrl
     ? `Veja as ofertas atualizadas aqui:\n${config.offersUrl}`
     : "As ofertas de hoje ainda não foram cadastradas. Nossa equipe pode enviar as promoções atuais para você.");
-  return `🏷️ *Ofertas e promoções*\n\n${destination}${navigationFooter()}`;
+  return `🏷️ *${responseTitle(config, "Ofertas e promoções")}*\n\n${destination}${navigationFooter()}`;
 }
 
 function locationReply(config: SupermarketBotConfig): string {
   const hours = [config.weekdayHours, config.sundayHours].filter(Boolean).join("\n");
   const lines = [
-    "📍 *Horários e localização*",
+    `📍 *${responseTitle(config, "Horários e localização")}*`,
     "",
     hours || "O horário de funcionamento ainda não foi configurado no bot.",
     config.address ? `\n*Endereço:* ${config.address}` : "\nO endereço da unidade ainda não foi configurado no bot.",
@@ -149,10 +154,10 @@ function locationReply(config: SupermarketBotConfig): string {
   return `${lines.join("\n").trim()}${navigationFooter()}`;
 }
 
-function collectDetailsReply(menuOption: number): string {
+function collectDetailsReply(menuOption: number, config: SupermarketBotConfig): string {
   if (menuOption === 3) {
     return (
-      "🛒 *Consulta de produto*\n\n" +
+      `🛒 *${responseTitle(config, "Consulta de produto")}*\n\n` +
       "Envie o *nome do produto*, a *marca* e o *tamanho ou peso* que procura.\n" +
       "Exemplo: _Café Melitta, pacote de 500 g_.\n\n" +
       "Um atendente confirmará preço e disponibilidade — o bot não inventa informações de estoque."
@@ -160,23 +165,23 @@ function collectDetailsReply(menuOption: number): string {
   }
   if (menuOption === 4) {
     return (
-      "🥩 *Setores frescos*\n\n" +
+      `🥩 *${responseTitle(config, "Setores frescos")}*\n\n` +
       "Diga qual setor e item você procura.\n" +
       "Exemplo: _Açougue — 2 kg de alcatra_ ou _Padaria — encomenda de bolo_."
     );
   }
   return (
-    "💳 *Trocas, devoluções e pagamentos*\n\n" +
+    `💳 *${responseTitle(config, "Trocas, devoluções e pagamentos")}*\n\n` +
     "Conte resumidamente o que aconteceu. Se tiver, informe também o número do cupom, pedido ou comprovante.\n\n" +
     "Não envie senha, código do cartão ou outros dados bancários sensíveis."
   );
 }
 
-function detailsReceivedReply(menuOption: number, message: string): string {
+function detailsReceivedReply(menuOption: number, message: string, config: SupermarketBotConfig): string {
   const preset = getSupermarketPresetByOption(menuOption);
   const summary = message.trim().replace(/\s+/g, " ").slice(0, 220);
   return (
-    `✅ Obrigado! Registrei sua solicitação em *${preset?.name || "Atendimento"}*.\n\n` +
+    `✅ Obrigado! Registrei sua solicitação em *${preset?.name || "Atendimento"}* do *${config.storeName}*.\n\n` +
     `📝 _${summary}_\n\n` +
     "Nossa equipe recebeu o contexto e continuará o atendimento por aqui."
   );
@@ -256,7 +261,7 @@ function optionDecision(
     return {
       handled: true,
       kind: "collect-details",
-      replyText: collectDetailsReply(option),
+      replyText: collectDetailsReply(option, config),
       queueMenuOption: option,
       clearQueue: false,
       triageCompleted: false,
@@ -314,7 +319,7 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     return {
       handled: true,
       kind: "human-handoff",
-      replyText: detailsReceivedReply(params.currentQueueMenuOption, rawMessage),
+      replyText: detailsReceivedReply(params.currentQueueMenuOption, rawMessage, config),
       queueMenuOption: params.currentQueueMenuOption,
       clearQueue: false,
       triageCompleted: true,
@@ -345,7 +350,7 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     return {
       handled: true,
       kind: "collect-details",
-      replyText: collectDetailsReply(4),
+      replyText: collectDetailsReply(4, config),
       queueMenuOption: 4,
       clearQueue: false,
       triageCompleted: false,
@@ -368,7 +373,7 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     return {
       handled: true,
       kind: "collect-details",
-      replyText: collectDetailsReply(5),
+      replyText: collectDetailsReply(5, config),
       queueMenuOption: 5,
       clearQueue: false,
       triageCompleted: false,
@@ -392,7 +397,7 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     return {
       handled: true,
       kind: "collect-details",
-      replyText: collectDetailsReply(3),
+      replyText: collectDetailsReply(3, config),
       queueMenuOption: 3,
       clearQueue: false,
       triageCompleted: false,
