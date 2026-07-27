@@ -4,8 +4,7 @@ import { createAuditLog } from "@/lib/repo";
 import {
   getConfiguredBusinessHours,
   getSupermarketSettings,
-  updateConfiguredBusinessHours,
-  updateSupermarketSettings,
+  updateSupermarketConfiguration,
 } from "@/lib/supermarket-settings";
 import { parseBusinessHoursPatch, parseSupermarketSettingsPatch } from "@/lib/supermarket-settings-validation";
 
@@ -28,8 +27,11 @@ export async function PATCH(request: Request) {
   if (parsedSettings.error) return NextResponse.json({ error: parsedSettings.error }, { status: 422 });
   const parsedHours = parseBusinessHoursPatch(body.businessHours);
   if (parsedHours.error) return NextResponse.json({ error: parsedHours.error }, { status: 422 });
-  const settings = await updateSupermarketSettings(auth.session.organizationId, parsedSettings.data);
-  const businessHours = parsedHours.data ? await updateConfiguredBusinessHours(auth.session.organizationId, parsedHours.data) : await getConfiguredBusinessHours(auth.session.organizationId);
+  const { settings, businessHours } = await updateSupermarketConfiguration(
+    auth.session.organizationId,
+    parsedSettings.data,
+    parsedHours.data,
+  );
   await createAuditLog(auth.session.organizationId, auth.session.userId, "update_supermarket_settings", "organization", auth.session.organizationId, {
     fields: Object.keys(body),
     origin: auth.session.userId ? "operational-admin" : "mavo-master",

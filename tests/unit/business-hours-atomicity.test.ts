@@ -8,5 +8,7 @@ test("horários da organização são persistidos em um único upsert tenant-sco
   assert.match(source, /jsonb_to_recordset\(\$2::jsonb\)/);
   assert.match(source, /INSERT INTO business_hours[\s\S]*ON CONFLICT \(organization_id, weekday\)/);
   assert.match(source, /queryTenantDatabase\(/);
+  assert.match(source, /export async function updateSupermarketConfiguration/);
+  assert.match(source, /withTenantTransaction\(organizationId/);
   assert.doesNotMatch(source, /for \(const hour of hours\)[\s\S]{0,500}INSERT INTO business_hours/);
 });

@@ -8,4 +8,5 @@ test("leitura da configuração do supermercado respeita a organização escolhi
   assert.match(route, /export async function GET\(request: Request\)/);
   assert.match(route, /requireSupermarketAdmin\(request\)/);
   assert.match(route, /getSupermarketSettings\(auth\.session\.organizationId\)/);
+  assert.match(route, /updateSupermarketConfiguration\(/);
 });

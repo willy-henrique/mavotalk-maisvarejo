@@ -90,3 +90,4 @@ npm run render:validate → aprovado
 - Horários de funcionamento agora são validados de forma estrita antes de gravar: dias não podem duplicar, intervalos ativos precisam abrir antes de fechar e o fuso operacional permanece `America/Sao_Paulo`, que é o mesmo usado pelo bot para decidir expediente.
 - O painel master mostra uma prévia acessível e em tempo real da saudação do WhatsApp com o nome do assistente e do supermercado em edição, tornando explícito o efeito da configuração antes do salvamento.
 - A atualização dos horários da empresa deixou de gravar dia a dia: um único upsert com `jsonb_to_recordset` mantém o conjunto consistente caso uma operação falhe, sempre dentro do contexto RLS da organização.
+- O salvamento do painel master passou a agrupar a identidade do bot e os horários na mesma transação tenant-scoped; não há mais possibilidade de retornar sucesso com apenas metade da configuração gravada.
