@@ -19,6 +19,20 @@ function positiveInteger(name: string, fallback: number): number {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+/**
+ * IDs de tenant são chaves técnicas (UUID ou o formato legado `org_*`).
+ * Validá-los antes de abrir a transação evita que uma inversão acidental dos
+ * parâmetros (SQL no lugar do tenant) transforme uma falha de programação em
+ * uma consulta executada no contexto errado.
+ */
+export function requireTenantOrganizationId(organizationId: string): string {
+  const value = String(organizationId || "").trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/.test(value)) {
+    throw new Error("Contexto de organização inválido");
+  }
+  return value;
+}
+
 function shouldUseSsl(): boolean {
   if (process.env.PG_SSL === "false") return false;
   if (process.env.PG_SSL === "true") return true;
@@ -60,15 +74,13 @@ export async function withTenantTransaction<T>(
   organizationId: string,
   operation: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
-  if (!organizationId.trim()) {
-    throw new Error("Contexto de organização ausente");
-  }
+  const tenantId = requireTenantOrganizationId(organizationId);
 
   const client = await getDatabasePool().connect();
   try {
     await client.query("BEGIN");
     await client.query("SELECT set_config('app.organization_id', $1, true)", [
-      organizationId,
+      tenantId,
     ]);
     const result = await operation(client);
     await client.query("COMMIT");
