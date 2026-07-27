@@ -279,7 +279,6 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     try {
       await apiPost(`/api/conversations/${selectedId}/messages`, { content: text });
     } catch (err) {
-      console.error(err);
       setSendError(err instanceof Error ? err.message : 'Nao foi possivel enviar o link.');
       setConversations((prev) =>
         prev.map((c) =>
@@ -313,11 +312,9 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
       } else {
         const data = await res.json().catch(() => ({}));
         const msg = (data as { error?: string }).error || 'Erro ao enviar imagem';
-        console.error(msg);
         setSendError(msg);
       }
-    } catch (err) {
-      console.error(err);
+    } catch {
       setSendError('Falha ao enviar imagem. Verifique a conexao do WhatsApp.');
     } finally {
       setUploadingImage(false);
@@ -520,7 +517,6 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     try {
       await apiPost(`/api/conversations/${selectedId}/messages`, { content: text });
     } catch (err) {
-      console.error(err);
       setSendError(err instanceof Error ? err.message : 'Nao foi possivel enviar a mensagem.');
       setConversations((prev) =>
         prev.map((c) =>

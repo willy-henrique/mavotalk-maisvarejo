@@ -29,6 +29,7 @@ const AgentsManagement: React.FC = () => {
   const [credential, setCredential] = useState<Credential | null>(null);
   const [action, setAction] = useState<string | null>(null);
   const [credentialNotice, setCredentialNotice] = useState('');
+  const [revokeCandidate, setRevokeCandidate] = useState<Agent | null>(null);
   const [eventsFor, setEventsFor] = useState<Agent | null>(null);
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(false);
@@ -74,12 +75,12 @@ const AgentsManagement: React.FC = () => {
   };
 
   const revoke = async (agent: Agent) => {
-    if (!window.confirm(`Revogar o agente ${agent.name}?`)) return;
     setAction(`revoke:${agent.id}`);
     setError('');
     try {
       await apiPost(`/api/admin/agents/${agent.id}/revoke`, {});
       await load();
+      setRevokeCandidate(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Revogação não concluída');
     } finally {
@@ -188,7 +189,7 @@ const AgentsManagement: React.FC = () => {
                   <td className="p-4"><div className="flex gap-2">
                     <button type="button" disabled={Boolean(item.revokedAt) || action !== null} onClick={() => void rotate(item)} className="rounded bg-slate-100 px-2 py-1 dark:bg-slate-800 disabled:opacity-40">{action === `rotate:${item.id}` ? 'Rotacionando...' : 'Rotacionar'}</button>
                     <button type="button" disabled={action !== null} onClick={() => void openEvents(item)} className="rounded bg-slate-100 px-2 py-1 dark:bg-slate-800 disabled:opacity-40">Logs</button>
-                    <button type="button" disabled={Boolean(item.revokedAt) || action !== null} onClick={() => void revoke(item)} className="rounded bg-rose-100 px-2 py-1 text-rose-700 disabled:opacity-40 dark:bg-rose-950/40 dark:text-rose-300">{action === `revoke:${item.id}` ? 'Revogando...' : 'Revogar'}</button>
+                    <button type="button" disabled={Boolean(item.revokedAt) || action !== null} onClick={() => setRevokeCandidate(item)} className="rounded bg-rose-100 px-2 py-1 text-rose-700 disabled:opacity-40 dark:bg-rose-950/40 dark:text-rose-300">Revogar</button>
                   </div></td>
                 </tr>
               ))}
@@ -229,6 +230,18 @@ const AgentsManagement: React.FC = () => {
                 {events.map((event) => <li key={event.id} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"><div className="flex items-center justify-between gap-3"><strong className="text-sm text-slate-900 dark:text-white">{event.eventType}</strong><span className={`rounded-full px-2 py-1 text-xs font-bold ${event.status === 'success' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'}`}>{event.status}</span></div><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{new Date(event.createdAt).toLocaleString('pt-BR')}{event.durationMs !== null ? ` · ${event.durationMs} ms` : ''}{event.errorCode ? ` · ${event.errorCode}` : ''}</p></li>)}
               </ol>
             )}
+          </div>
+        </Dialog>
+      )}
+      {revokeCandidate && (
+        <Dialog
+          title="Revogar agente"
+          description={`A instalação “${revokeCandidate.name}” perderá acesso à sincronização imediatamente. Esta ação pode ser auditada, mas exige novo provisionamento para voltar a operar.`}
+          onClose={() => { if (action === null) setRevokeCandidate(null); }}
+        >
+          <div className="flex justify-end gap-3 p-6">
+            <button type="button" disabled={action !== null} onClick={() => setRevokeCandidate(null)} className="mavo-button-secondary">Cancelar</button>
+            <button type="button" disabled={action !== null} onClick={() => void revoke(revokeCandidate)} className="mavo-button-danger">{action === `revoke:${revokeCandidate.id}` ? 'Revogando…' : 'Confirmar revogação'}</button>
           </div>
         </Dialog>
       )}

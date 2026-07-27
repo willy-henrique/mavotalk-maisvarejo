@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 80/80 aprovados
+npm test               → 81/81 aprovados
 npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 ```

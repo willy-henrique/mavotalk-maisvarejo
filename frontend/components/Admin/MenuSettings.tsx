@@ -33,8 +33,7 @@ const MenuSettings: React.FC = () => {
       } else {
         setError('Não foi possível carregar as configurações do menu.');
       }
-    } catch (e) {
-      console.error(e);
+    } catch {
       setError('Não foi possível carregar as configurações do menu.');
     } finally {
       setLoading(false);
