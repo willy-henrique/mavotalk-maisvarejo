@@ -48,7 +48,7 @@ Agentes locais ──HMAC/replay protection────────────�
 ## Tempo real, idempotência e integrações
 
 - No handshake do Socket.IO, `server.cjs` valida o cookie/JWT e chama `/api/me`; só então junta o socket à sala da própria organização. `lib/realtime.ts` emite para essa sala.
-- `InboxConversations.tsx` refaz a leitura ao receber eventos de conversa/mensagem e quando o socket reconecta.
+- `InboxConversations.tsx` refaz a leitura ao receber eventos de conversa/mensagem e quando o socket reconecta. A criação de conversa aberta usa transação RLS e bloqueio por organização/contato para impedir tickets paralelos sob concorrência.
 - Twilio valida `x-twilio-signature`, limita payload e deduplica por `MessageSid`/`external_id` antes de persistir.
 - O webhook n8n valida bearer token por organização, valida payload com Zod e deduplica `event_id`/mensagens. O roteamento gerencial de WhatsApp acontece antes de abrir uma conversa comum.
 - Agentes cloud validam assinatura, timestamp, nonce, versão de schema, tamanho e tipo do payload.
