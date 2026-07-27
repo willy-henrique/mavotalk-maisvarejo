@@ -50,6 +50,7 @@ export {
   deleteQueue,
   createAuditLog,
   listQuickReplies,
+  listQuickRepliesPage,
   createQuickReply,
   updateQuickReply,
   deleteQuickReply,

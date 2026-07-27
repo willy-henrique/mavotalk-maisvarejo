@@ -520,6 +520,60 @@ export async function listQuickReplies(organizationId: string): Promise<FireQuic
   }));
 }
 
+export async function listQuickRepliesPage(
+  organizationId: string,
+  options: { page: number; pageSize: number; query?: string },
+): Promise<{ items: FireQuickReply[]; total: number }> {
+  const orgId = requireOrganizationId(organizationId);
+  const page = Math.max(1, options.page);
+  const pageSize = Math.min(100, Math.max(1, options.pageSize));
+  const offset = (page - 1) * pageSize;
+  const clauses = ["organization_id = $1"];
+  const values: unknown[] = [orgId];
+  const query = options.query?.trim();
+  if (query) {
+    values.push(`%${query}%`);
+    const parameter = `$${values.length}`;
+    clauses.push(`(name ILIKE ${parameter} OR content ILIKE ${parameter} OR category ILIKE ${parameter})`);
+  }
+  const where = clauses.join(" AND ");
+  type QuickReplyPageRow = {
+    id: string;
+    organization_id: string;
+    name: string | null;
+    content: string | null;
+    category: string | null;
+    created_at: string | null;
+  };
+  const [items, count] = await Promise.all([
+    queryTenantDatabase<QuickReplyPageRow>(
+      orgId,
+      `SELECT id, organization_id, name, content, category, created_at
+         FROM quick_replies
+        WHERE ${where}
+        ORDER BY name, id
+        LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      [...values, pageSize, offset],
+    ),
+    queryTenantDatabase<{ count: string }>(
+      orgId,
+      `SELECT COUNT(*)::text AS count FROM quick_replies WHERE ${where}`,
+      values,
+    ),
+  ]);
+  return {
+    items: items.rows.map((row) => ({
+      id: String(row.id),
+      organizationId: String(row.organization_id),
+      name: String(row.name ?? ""),
+      content: String(row.content ?? ""),
+      category: row.category != null ? String(row.category) : null,
+      createdAt: iso(row.created_at),
+    })),
+    total: Number(count.rows[0]?.count || 0),
+  };
+}
+
 export async function createQuickReply(
   organizationId: string,
   payload: { name: string; content: string; category?: string | null },

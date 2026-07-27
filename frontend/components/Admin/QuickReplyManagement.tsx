@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useDeferredValue, useRef } from 'react';
 import { apiFetch, apiPost, apiPatch } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
@@ -60,24 +60,33 @@ const QuickReplyManagement: React.FC = () => {
   const [page, setPage] = useState(1);
   const [pendingDelete, setPendingDelete] = useState<QuickReply | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [total, setTotal] = useState(0);
+  const deferredSearch = useDeferredValue(search);
+  const requestRef = useRef(0);
 
   const fetchItems = useCallback(async () => {
+    const request = ++requestRef.current;
     setLoading(true);
     try {
-      const res = await apiFetch('/api/quick-replies', { method: 'GET' });
-      const data = (await res.json()) as { quickReplies?: QuickReply[] };
-      if (res.ok && Array.isArray(data.quickReplies)) {
-        setItems(data.quickReplies);
+      const params = new URLSearchParams({ page: String(page), pageSize: '25' });
+      if (deferredSearch.trim()) params.set('q', deferredSearch.trim());
+      const res = await apiFetch(`/api/quick-replies?${params.toString()}`, { method: 'GET' });
+      const data = (await res.json()) as { items?: QuickReply[]; total?: number };
+      if (request !== requestRef.current) return;
+      if (res.ok && Array.isArray(data.items)) {
+        setItems(data.items);
+        setTotal(typeof data.total === 'number' ? data.total : 0);
         setError('');
       } else {
         setError('Não foi possível carregar as respostas rápidas.');
       }
     } catch {
+      if (request !== requestRef.current) return;
       setError('Não foi possível carregar as respostas rápidas.');
     } finally {
-      setLoading(false);
+      if (request === requestRef.current) setLoading(false);
     }
-  }, []);
+  }, [deferredSearch, page]);
 
   useEffect(() => {
     fetchItems();
@@ -87,16 +96,9 @@ const QuickReplyManagement: React.FC = () => {
     setPage(1);
   }, [search]);
 
-  const normalizedSearch = search.trim().toLowerCase();
-  const filteredItems = items.filter((item) =>
-    !normalizedSearch || [item.name, item.content, item.category]
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(normalizedSearch)),
-  );
   const pageSize = 25;
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const activePage = Math.min(page, totalPages);
-  const pagedItems = filteredItems.slice((activePage - 1) * pageSize, activePage * pageSize);
 
   const openCreate = () => {
     setEditingId(null);
@@ -192,8 +194,8 @@ const QuickReplyManagement: React.FC = () => {
 
       {loading ? (
         <LoadingState title="Carregando respostas rápidas…" />
-      ) : filteredItems.length === 0 ? (
-        <EmptyState title={items.length ? 'Nenhuma resposta encontrada.' : 'Nenhuma resposta rápida cadastrada.'} description={items.length ? 'Altere a busca ou limpe o filtro para ver os atalhos cadastrados.' : 'Crie atalhos consistentes para reduzir o tempo de resposta da equipe.'} action={items.length ? <button type="button" onClick={() => setSearch('')} className="mavo-button-secondary">Limpar busca</button> : <button type="button" onClick={openCreate} className="mavo-button-primary">Criar a primeira resposta rápida</button>} />
+      ) : items.length === 0 ? (
+        <EmptyState title={search.trim() ? 'Nenhuma resposta encontrada.' : 'Nenhuma resposta rápida cadastrada.'} description={search.trim() ? 'Altere a busca ou limpe o filtro para ver os atalhos cadastrados.' : 'Crie atalhos consistentes para reduzir o tempo de resposta da equipe.'} action={search.trim() ? <button type="button" onClick={() => setSearch('')} className="mavo-button-secondary">Limpar busca</button> : <button type="button" onClick={openCreate} className="mavo-button-primary">Criar a primeira resposta rápida</button>} />
       ) : (
         <div className="mavo-card overflow-x-auto p-0">
           <table className="w-full text-left">
@@ -206,7 +208,7 @@ const QuickReplyManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {pagedItems.map((item) => (
+              {items.map((item) => (
                 <tr key={item.id} className="border-b border-slate-100 dark:border-slate-700/80 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
                   <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">{item.name}</td>
                   <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm max-w-md">
@@ -229,8 +231,8 @@ const QuickReplyManagement: React.FC = () => {
           </table>
         </div>
       )}
-      {!loading && filteredItems.length > pageSize && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300"><span>Mostrando {(activePage - 1) * pageSize + 1}–{Math.min(activePage * pageSize, filteredItems.length)} de {filteredItems.length} respostas</span><div className="flex gap-2"><button type="button" disabled={activePage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Anterior</button><button type="button" disabled={activePage === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Próxima</button></div></div>
+      {!loading && total > pageSize && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300"><span>Mostrando {total ? (activePage - 1) * pageSize + 1 : 0}–{Math.min(activePage * pageSize, total)} de {total} respostas</span><div className="flex gap-2"><button type="button" disabled={activePage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Anterior</button><button type="button" disabled={activePage === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Próxima</button></div></div>
       )}
 
       {showModal && (

@@ -58,7 +58,7 @@ npm run render:validate → aprovado
 - A build da SPA reduziu o chunk inicial de 348,5 kB / 108,3 kB gzip para 270,5 kB / 85,3 kB gzip. O código do Inbox passou ao seu próprio chunk de 76,0 kB / 22,6 kB gzip, carregado apenas pela rota autenticada.
 - Mutações autenticadas por cookie sem cabeçalho `Origin` agora são recusadas no servidor; chamadas de webhooks e agentes, que não usam cookie de navegador, continuam explicitamente preservadas.
 - A tela de Equipe filtra e pagina no servidor dentro do contexto RLS do tenant, mostra o intervalo exibido e retorna à primeira página ao alterar os critérios.
-- Respostas rápidas agora permitem busca por atalho, conteúdo ou categoria, paginação e estado vazio específico para uma busca sem correspondência.
+- Respostas rápidas agora permitem busca e paginação no servidor sob contexto RLS do tenant, com estado vazio específico para uma busca sem correspondência.
 - O painel de Menu do painel agora separa visibilidade de navegação e permissões de backend. A matriz é resolvida por organização no servidor e passou a proteger Inbox, contatos, filas, respostas rápidas, WhatsApp, indicadores, auditoria, agentes, equipe e acessos gerenciais.
 - Filas e automações agora inclui busca e filtro de status; até oito filas ficam em cards e volumes maiores passam a uma tabela operacional, sem ordenar mutando o estado local.
 - Agentes e sincronização agora mostra uma ação recomendada derivada do estado real da instalação, sem expor endereço de rede.
