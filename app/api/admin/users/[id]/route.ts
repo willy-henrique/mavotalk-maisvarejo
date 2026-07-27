@@ -12,6 +12,7 @@ function toPublicUser(user: {
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
+  lastLoginAt?: string;
 }) {
   return {
     id: user.id,
@@ -21,6 +22,7 @@ function toPublicUser(user: {
     isActive: user.isActive,
     createdAt: user.createdAt || null,
     updatedAt: user.updatedAt || null,
+    lastLoginAt: user.lastLoginAt || null,
   };
 }
 

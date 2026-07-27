@@ -16,6 +16,7 @@ export type FireUser = {
   isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
+  lastLoginAt?: string;
 };
 
 export type FireQueue = {

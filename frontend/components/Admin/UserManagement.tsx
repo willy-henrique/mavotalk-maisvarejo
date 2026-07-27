@@ -12,6 +12,7 @@ type BackendUser = {
   isActive: boolean;
   createdAt: string | null;
   updatedAt: string | null;
+  lastLoginAt: string | null;
 };
 
 function mapBackendRole(r: string): UserRole {
@@ -32,7 +33,7 @@ function toFrontendUser(u: BackendUser): User {
     status: u.isActive ? UserStatus.ATIVO : UserStatus.INATIVO,
     isOnline: false,
     permissions: u.role === 'admin' ? ['*'] : u.role === 'gestor' ? ['*'] : ['inbox', 'dashboard', 'vault'],
-    lastLoginAt: undefined,
+    lastLoginAt: u.lastLoginAt ? new Date(u.lastLoginAt) : undefined,
   };
 }
 
@@ -233,6 +234,7 @@ const UserManagement: React.FC = () => {
                 <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Colaborador</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Função</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Status</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase">Último login</th>
                 <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase text-right">Ações</th>
               </tr>
             </thead>
@@ -258,6 +260,9 @@ const UserManagement: React.FC = () => {
                       {u.status}
                     </span>
                   </td>
+                  <td className="px-6 py-4 text-xs text-slate-500 dark:text-slate-400">
+                    {u.lastLoginAt ? u.lastLoginAt.toLocaleString('pt-BR') : 'Nunca acessou'}
+                  </td>
                   <td className="px-6 py-4 text-right">
                     <div className="flex justify-end gap-2"><button type="button" onClick={() => openEdit(u)} disabled={actionUserId === u.id} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" disabled={actionUserId === u.id} onClick={() => void toggleUserStatus(u)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">
                       {actionUserId === u.id ? 'Atualizando…' : u.status === UserStatus.ATIVO ? 'Desativar' : 'Reativar'}
@@ -267,7 +272,7 @@ const UserManagement: React.FC = () => {
               ))}
               {!filteredUsers.length && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                  <td colSpan={5} className="px-6 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
                     Nenhum colaborador encontrado com os filtros atuais.
                   </td>
                 </tr>

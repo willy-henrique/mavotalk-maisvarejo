@@ -89,6 +89,7 @@ export async function getUserByEmail(email: string): Promise<FireUser | null> {
     isActive: data.is_active !== false,
     createdAt: (data.created_at as string | null) ?? undefined,
     updatedAt: (data.updated_at as string | null) ?? undefined,
+    lastLoginAt: (data.last_login_at as string | null) ?? undefined,
   };
 }
 
@@ -110,6 +111,7 @@ export async function listUsers(organizationId: string): Promise<FireUser[]> {
     isActive: row.is_active !== false,
     createdAt: (row.created_at as string | null) ?? undefined,
     updatedAt: (row.updated_at as string | null) ?? undefined,
+    lastLoginAt: (row.last_login_at as string | null) ?? undefined,
   }));
 }
 
@@ -154,6 +156,7 @@ export async function createUser(
       isActive: data.is_active !== false,
       createdAt: (data.created_at as string | null) ?? undefined,
       updatedAt: (data.updated_at as string | null) ?? undefined,
+      lastLoginAt: (data.last_login_at as string | null) ?? undefined,
     },
   };
 }
@@ -211,6 +214,7 @@ export async function updateUser(
       isActive: data.is_active !== false,
       createdAt: (data.created_at as string | null) ?? undefined,
       updatedAt: (data.updated_at as string | null) ?? undefined,
+      lastLoginAt: (data.last_login_at as string | null) ?? undefined,
     },
   };
 }
@@ -220,6 +224,22 @@ export async function deactivateUser(
   id: string,
 ) {
   return updateUser(organizationId, id, { isActive: false });
+}
+
+export async function recordUserLogin(organizationId: string, id: string): Promise<void> {
+  const orgId = requireOrganizationId(organizationId);
+  try {
+    const { error } = await supa()
+      .from("users")
+      .update({ last_login_at: new Date().toISOString() })
+      .eq("id", id)
+      .eq("organization_id", orgId);
+    if (error) {
+      logger.warn({ err: error, organizationId: orgId, userId: id }, "supa recordUserLogin");
+    }
+  } catch (error) {
+    logger.warn({ err: error, organizationId: orgId, userId: id }, "Unable to record user login");
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { getUserByEmail } from "@/lib/repo";
+import { getUserByEmail, recordUserLogin } from "@/lib/repo";
 import { loginSchema } from "@/lib/schemas";
 import { setSessionCookie, signSession } from "@/lib/auth";
 import { consumeRateLimit, rateLimitSubject } from "@/lib/security/rate-limit";
@@ -77,6 +77,8 @@ export async function POST(request: Request) {
   });
 
   await setSessionCookie(token);
+
+  await recordUserLogin(String(user.organizationId), String(user.id));
 
   structuredOperationLog(
     {

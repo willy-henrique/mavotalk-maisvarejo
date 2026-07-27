@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 77/77 aprovados
+npm test               → 78/78 aprovados
 npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 ```
@@ -41,4 +41,4 @@ npm --prefix frontend run build → aprovado
 - Ainda faltam cenários E2E para Inbox, multi-tenancy A→B, WhatsApp, agentes, auditoria e administração. O plano permanece em `docs/e2e-test-plan.md`.
 - “Menu do painel” ainda controla apenas visibilidade porque a matriz granular de leitura/criação/edição/exclusão/administrativa exige uma evolução de RBAC no backend, não uma alteração cosmética de UI.
 - A página de filas ainda não dispõe de modelo persistido para prioridade, horário, overflow, atendentes e reordenação drag-and-drop. Esses campos não foram simulados no frontend.
-- Equipe ainda depende do modelo atual para convites, último login e filas associadas; esses dados exigem endpoints/modelagem antes de serem exibidos como informação real.
+- Equipe agora registra e exibe o último login com escopo de tenant. Convites e filas associadas ainda exigem modelagem/endpoints antes de serem exibidos como informação real.

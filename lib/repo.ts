@@ -38,6 +38,7 @@ export type {
 export {
   getUserById,
   getUserByEmail,
+  recordUserLogin,
   listUsers,
   createUser,
   updateUser,
