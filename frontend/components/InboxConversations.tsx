@@ -98,14 +98,23 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
 
   const didInitRef = useRef(false);
   const fetchInFlightRef = useRef(false);
+  const fetchQueuedRef = useRef(false);
+  const queuedLoadingRef = useRef(false);
+  const fetchVersionRef = useRef(0);
 
   const fetchConversations = useCallback(async (showLoading = true) => {
-    if (fetchInFlightRef.current) return;
+    const request = ++fetchVersionRef.current;
+    if (fetchInFlightRef.current) {
+      fetchQueuedRef.current = true;
+      queuedLoadingRef.current ||= showLoading;
+      return;
+    }
     fetchInFlightRef.current = true;
     if (showLoading) setLoading(true);
     try {
       const res = await apiFetch('/api/conversations', { method: 'GET' });
       const data = (await res.json()) as { conversations?: ApiConversation[] };
+      if (request !== fetchVersionRef.current) return;
       if (res.ok && Array.isArray(data.conversations)) {
         setConversations(data.conversations);
         setLoadError('');
@@ -122,10 +131,16 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
         setLoadError('Não foi possível atualizar as conversas. Tente novamente.');
       }
     } catch {
+      if (request !== fetchVersionRef.current) return;
       setLoadError('Não foi possível atualizar as conversas. Verifique sua conexão.');
     } finally {
       fetchInFlightRef.current = false;
-      if (showLoading) setLoading(false);
+      const shouldRefreshAgain = fetchQueuedRef.current;
+      const nextShowLoading = showLoading || queuedLoadingRef.current;
+      fetchQueuedRef.current = false;
+      queuedLoadingRef.current = false;
+      if (request === fetchVersionRef.current && showLoading) setLoading(false);
+      if (shouldRefreshAgain) void fetchConversations(nextShowLoading);
     }
   }, []);
   const handleCloseConversation = async () => {

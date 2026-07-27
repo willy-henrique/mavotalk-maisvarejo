@@ -8,4 +8,7 @@ test("Inbox preserva a conversa selecionada na URL e suporta teclado", async () 
   assert.match(source, /next\.set\('conversation', id\)/);
   assert.match(source, /clearSelectedConversation/);
   assert.match(source, /event\.key === 'Enter' \|\| event\.key === ' '/);
+  assert.match(source, /fetchQueuedRef/);
+  assert.match(source, /fetchVersionRef/);
+  assert.match(source, /shouldRefreshAgain/);
 });
