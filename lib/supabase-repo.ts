@@ -365,6 +365,35 @@ export async function updateQueue(
   };
 }
 
+export type DeleteQueueResult = "deleted" | "in_use" | "not_found";
+
+/** Exclui somente fila sem conversas/tickets para preservar o histórico operacional. */
+export async function deleteQueue(organizationId: string, id: string): Promise<DeleteQueueResult> {
+  const orgId = requireOrganizationId(organizationId);
+  const [conversationCheck, ticketCheck] = await Promise.all([
+    supa().from("conversations").select("id").eq("organization_id", orgId).eq("queue_id", id),
+    supa().from("tickets").select("id").eq("organization_id", orgId).eq("queue_id", id),
+  ]);
+  if (conversationCheck.error) throw conversationCheck.error;
+  if (ticketCheck.error) throw ticketCheck.error;
+  if ((conversationCheck.data?.length ?? 0) > 0 || (ticketCheck.data?.length ?? 0) > 0) return "in_use";
+
+  const { data, error } = await supa()
+    .from("queues")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", orgId)
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    // Uma atribuição concorrente entre a checagem e a exclusão é barrada pela FK.
+    if ((error as { code?: string }).code === "23503") return "in_use";
+    logger.error({ err: error, organizationId: orgId, queueId: id }, "supa deleteQueue");
+    throw error;
+  }
+  return data ? "deleted" : "not_found";
+}
+
 // ---------------------------------------------------------------------------
 // Audit Logs
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { apiFetch, apiPost, apiPatch } from '../../services/api';
+import { apiDelete, apiFetch, apiPost, apiPatch } from '../../services/api';
 import { Icons } from '../../constants';
 import { Dialog } from '../ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
@@ -28,6 +28,8 @@ const TicketTypeManagement: React.FC = () => {
   const [formIsActive, setFormIsActive] = useState(true);
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [deleteCandidate, setDeleteCandidate] = useState<Queue | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchQueues = useCallback(async () => {
     setLoading(true);
@@ -105,6 +107,21 @@ const TicketTypeManagement: React.FC = () => {
     }
   };
 
+  const removeQueue = async () => {
+    if (!deleteCandidate) return;
+    setDeleting(true);
+    setSubmitError('');
+    try {
+      await apiDelete(`/api/queues/${deleteCandidate.id}`);
+      setDeleteCandidate(null);
+      await fetchQueues();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Não foi possível excluir a fila.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   const normalizedSearch = search.trim().toLocaleLowerCase('pt-BR');
   const filteredQueues = queues
     .filter((queue) => !normalizedSearch || queue.name.toLocaleLowerCase('pt-BR').includes(normalizedSearch))
@@ -146,7 +163,7 @@ const TicketTypeManagement: React.FC = () => {
         <div className="mavo-card overflow-x-auto p-0">
           <table className="w-full min-w-[720px] text-left">
             <thead><tr className="border-b border-slate-200 dark:border-slate-700"><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fila</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Menu</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">SLA</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</th><th scope="col" className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ações</th></tr></thead>
-            <tbody>{filteredQueues.map((queue) => <tr key={queue.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/80 dark:hover:bg-slate-800/50"><td className="px-4 py-3"><span className="mr-3 inline-block h-3 w-3 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><span className="font-medium text-slate-800 dark:text-slate-200">{queue.name}</span></td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.menuOption}</td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.defaultSlaMins} min</td><td className="px-4 py-3"><span className={queue.isActive ? 'rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300'}>{queue.isActive ? 'Ativa' : 'Inativa'}</span></td><td className="px-4 py-3 text-right"><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button></td></tr>)}</tbody>
+            <tbody>{filteredQueues.map((queue) => <tr key={queue.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/80 dark:hover:bg-slate-800/50"><td className="px-4 py-3"><span className="mr-3 inline-block h-3 w-3 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><span className="font-medium text-slate-800 dark:text-slate-200">{queue.name}</span></td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.menuOption}</td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.defaultSlaMins} min</td><td className="px-4 py-3"><span className={queue.isActive ? 'rounded-full bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300'}>{queue.isActive ? 'Ativa' : 'Inativa'}</span></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2"><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></td></tr>)}</tbody>
           </table>
         </div>
       ) : (
@@ -172,6 +189,15 @@ const TicketTypeManagement: React.FC = () => {
                       aria-label={`Editar fila ${q.name}`}
                     >
                       <Icons.Settings className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setDeleteCandidate(q); setSubmitError(''); }}
+                      className="p-2 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30"
+                      title="Excluir"
+                      aria-label={`Excluir fila ${q.name}`}
+                    >
+                      ×
                     </button>
                   </div>
                 </div>
@@ -287,6 +313,11 @@ const TicketTypeManagement: React.FC = () => {
               </div>
             </form>
             </div>
+        </Dialog>
+      )}
+      {deleteCandidate && (
+        <Dialog title="Excluir fila" description={`A fila “${deleteCandidate.name}” só será removida se não houver atendimentos vinculados. O histórico nunca será apagado.`} onClose={() => { if (!deleting) setDeleteCandidate(null); }}>
+          <div className="p-6"><p className="text-sm text-slate-600 dark:text-slate-300">Caso a fila esteja em uso, desative-a ou transfira os atendimentos antes de tentar excluí-la.</p>{submitError && <p role="alert" className="mt-3 text-sm text-rose-600 dark:text-rose-300">{submitError}</p>}<div className="mt-5 flex justify-end gap-3"><button type="button" disabled={deleting} onClick={() => setDeleteCandidate(null)} className="mavo-button-secondary">Cancelar</button><button type="button" disabled={deleting} onClick={() => void removeQueue()} className="mavo-button-danger">{deleting ? 'Excluindo...' : 'Excluir fila'}</button></div></div>
         </Dialog>
       )}
     </div></main>

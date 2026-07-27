@@ -46,6 +46,7 @@ export {
   listQueues,
   createQueue,
   updateQueue,
+  deleteQueue,
   createAuditLog,
   listQuickReplies,
   createQuickReply,
