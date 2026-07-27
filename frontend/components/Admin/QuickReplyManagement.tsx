@@ -196,7 +196,7 @@ const QuickReplyManagement: React.FC = () => {
       ) : items.length === 0 ? (
         <EmptyState title={search.trim() ? 'Nenhuma resposta encontrada.' : 'Nenhuma resposta rápida cadastrada.'} description={search.trim() ? 'Altere a busca ou limpe o filtro para ver os atalhos cadastrados.' : 'Crie atalhos consistentes para reduzir o tempo de resposta da equipe.'} action={search.trim() ? <button type="button" onClick={() => setSearch('')} className="mavo-button-secondary">Limpar busca</button> : <button type="button" onClick={openCreate} className="mavo-button-primary">Criar a primeira resposta rápida</button>} />
       ) : (
-        <div className="mavo-card overflow-x-auto p-0">
+        <><div className="mavo-card hidden overflow-x-auto p-0 md:block">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700">
@@ -228,7 +228,7 @@ const QuickReplyManagement: React.FC = () => {
               ))}
             </tbody>
           </table>
-        </div>
+        </div><div className="grid gap-3 md:hidden">{items.map((item) => <article key={item.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><h3 className="min-w-0 truncate font-bold text-slate-800 dark:text-slate-100">{item.name}</h3><div className="flex shrink-0 items-center gap-1"><button type="button" onClick={() => openEdit(item)} className="rounded-lg p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-blue-400" aria-label={`Editar ${item.name}`}>Editar</button><button type="button" onClick={() => setPendingDelete(item)} className="rounded-lg p-2 text-rose-600 transition hover:bg-rose-50 dark:text-rose-300 dark:hover:bg-rose-950/30" aria-label={`Excluir ${item.name}`}>Excluir</button></div></div><p className="whitespace-pre-wrap break-words text-sm text-slate-600 dark:text-slate-300">{item.content}</p>{item.category && <p className="text-xs font-semibold text-slate-500">Categoria: {item.category}</p>}</article>)}</div></>
       )}
       {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="respostas" onPageChange={setPage} />}
 

@@ -244,7 +244,7 @@ const UserManagement: React.FC = () => {
       {loading ? (
         <LoadingState title="Carregando colaboradores…" />
       ) : (
-        <div className="mavo-card overflow-x-auto">
+        <><div className="mavo-card hidden overflow-x-auto md:block">
           <table className="w-full text-left">
             <thead className="border-b border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60">
               <tr>
@@ -296,7 +296,7 @@ const UserManagement: React.FC = () => {
               )}
             </tbody>
           </table>
-        </div>
+        </div><div className="grid gap-3 md:hidden">{users.map((u) => <article key={u.id} className="mavo-card space-y-3 p-4"><div className="flex items-start gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-blue-800 bg-blue-950 text-xs font-black text-blue-200" aria-label={`Avatar de ${u.name}`}>{u.name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase()}</div><div className="min-w-0 flex-1"><h3 className="truncate text-sm font-bold text-slate-800 dark:text-slate-100">{u.name}</h3><p className="truncate text-xs text-slate-500 dark:text-slate-400">{u.email}</p></div><span className={`shrink-0 rounded border px-2 py-1 text-[10px] font-bold ${getStatusStyle(u.status)}`}>{u.status}</span></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Função</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{u.role}</dd></div><div><dt className="font-semibold text-slate-500">Último login</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{u.lastLoginAt ? u.lastLoginAt.toLocaleString('pt-BR') : 'Nunca acessou'}</dd></div></dl><div className="flex flex-wrap gap-2"><button type="button" onClick={() => openEdit(u)} disabled={actionUserId === u.id} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" disabled={actionUserId === u.id} onClick={() => void toggleUserStatus(u)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">{actionUserId === u.id ? 'Atualizando…' : u.status === UserStatus.ATIVO ? 'Desativar' : 'Reativar'}</button></div></article>)}</div></>
       )}
       {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="colaboradores" onPageChange={setPage} />}
 

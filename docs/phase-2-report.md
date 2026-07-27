@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 106/106 aprovados
+npm test               → 107/107 aprovados
 npm run test:e2e       → 16 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 npm run build           → aprovado (Next.js, 43 páginas/rotas geradas)
@@ -77,3 +77,4 @@ npm run render:validate → aprovado
 - Contatos deixou de carregar toda a base do tenant: busca, filtro de bloqueio e paginação ocorrem na API sob contexto RLS, e a consulta obtém apenas a última conversa/mensagem de cada contato exibido. A migration adiciona o índice para essa ordenação; em mobile, a tabela dá lugar a cartões operacionais sem rolagem horizontal.
 - A paginação de Contatos, Equipe, Respostas rápidas, Agentes e Acessos gerenciais foi centralizada em uma primitive com intervalo exibido, estado de página, botões consistentes e nomes acessíveis.
 - Agentes e sincronização preserva a tabela densa em desktop e oferece cartões em mobile, sem ocultar status, última sincronização, quantidade de registros, recomendação ou ações administrativas.
+- Equipe, Respostas rápidas e Acessos gerenciais também alternam entre tabela densa no desktop e cartões completos no mobile; controles de edição, bloqueio, PIN, revogação e permissões permanecem disponíveis.
