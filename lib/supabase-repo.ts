@@ -1164,6 +1164,91 @@ export async function listContacts(organizationId: string): Promise<ListContactI
   });
 }
 
+/**
+ * Página de contatos para a interface operacional. Diferente da listagem
+ * legada acima, não transfere todas as conversas e mensagens do tenant para
+ * montar a última interação no navegador/servidor de aplicação.
+ */
+export async function listContactsPage(
+  organizationId: string,
+  options: { page: number; pageSize: number; query?: string },
+): Promise<{ items: ListContactItem[]; total: number }> {
+  const orgId = requireOrganizationId(organizationId);
+  const page = Math.max(1, options.page);
+  const pageSize = Math.min(100, Math.max(1, options.pageSize));
+  const offset = (page - 1) * pageSize;
+  const values: unknown[] = [orgId];
+  const query = options.query?.trim();
+  const clauses = ["c.organization_id = $1"];
+  if (query) {
+    values.push(`%${query}%`);
+    const parameter = `$${values.length}`;
+    clauses.push(`(c.name ILIKE ${parameter} OR c.phone_number ILIKE ${parameter})`);
+  }
+  const where = clauses.join(" AND ");
+  type ContactPageRow = {
+    id: string;
+    name: string | null;
+    phone_number: string | null;
+    blocked: boolean | null;
+    internal_note: string | null;
+    conversation_id: string | null;
+    conversation_status: string | null;
+    conversation_updated_at: string | null;
+    last_message: string | null;
+  };
+  const [items, count] = await Promise.all([
+    queryTenantDatabase<ContactPageRow>(
+      orgId,
+      `SELECT c.id, c.name, c.phone_number, c.blocked, c.internal_note,
+              latest_conversation.id AS conversation_id,
+              latest_conversation.status AS conversation_status,
+              latest_conversation.updated_at AS conversation_updated_at,
+              latest_message.content AS last_message
+         FROM contacts c
+         LEFT JOIN LATERAL (
+           SELECT id, status, updated_at
+             FROM conversations
+            WHERE organization_id = c.organization_id
+              AND contact_id = c.id
+            ORDER BY updated_at DESC, id DESC
+            LIMIT 1
+         ) latest_conversation ON true
+         LEFT JOIN LATERAL (
+           SELECT content
+             FROM messages
+            WHERE organization_id = c.organization_id
+              AND conversation_id = latest_conversation.id
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+         ) latest_message ON true
+        WHERE ${where}
+        ORDER BY latest_conversation.updated_at DESC NULLS LAST, c.updated_at DESC, c.id
+        LIMIT $${values.length + 1} OFFSET $${values.length + 2}`,
+      [...values, pageSize, offset],
+    ),
+    queryTenantDatabase<{ count: string }>(
+      orgId,
+      `SELECT COUNT(*)::text AS count FROM contacts c WHERE ${where}`,
+      values,
+    ),
+  ]);
+  return {
+    items: items.rows.map((row) => ({
+      id: String(row.id),
+      name: String(row.name ?? "Contato"),
+      phoneNumber: String(row.phone_number ?? ""),
+      lastMessage: row.last_message != null ? String(row.last_message) : null,
+      lastInteraction: row.conversation_updated_at ?? null,
+      status: row.conversation_id && row.conversation_status !== "encerrado" ? "ativo" : "encerrado",
+      blocked: Boolean(row.blocked),
+      internalNote: row.internal_note != null ? String(row.internal_note) : null,
+      lastConversationId: row.conversation_id != null ? String(row.conversation_id) : null,
+    })),
+    total: Number(count.rows[0]?.count || 0),
+  };
+}
+
 export async function updateContact(
   organizationId: string,
   contactId: string,

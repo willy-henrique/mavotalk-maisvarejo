@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, apiPatch, apiPost } from '../services/api';
 import { Dialog } from './ui/Dialog';
@@ -18,8 +18,10 @@ type ApiContact = {
 const Contacts: React.FC = () => {
   const navigate = useNavigate();
   const [contacts, setContacts] = useState<ApiContact[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [noteModal, setNoteModal] = useState<ApiContact | null>(null);
   const [noteValue, setNoteValue] = useState('');
   const [savingNote, setSavingNote] = useState(false);
@@ -27,25 +29,35 @@ const Contacts: React.FC = () => {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [blockingId, setBlockingId] = useState<string | null>(null);
+  const deferredSearch = useDeferredValue(search);
+  const requestRef = useRef(0);
+  const pageSize = 25;
 
   const fetchContacts = useCallback(async () => {
+    const request = ++requestRef.current;
     setLoading(true);
+    setError('');
     try {
-      const res = await apiFetch('/api/contacts', { method: 'GET' });
-      const data = (await res.json()) as { contacts?: ApiContact[]; error?: string };
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+      if (deferredSearch.trim()) params.set('q', deferredSearch.trim());
+      const res = await apiFetch(`/api/contacts?${params.toString()}`, { method: 'GET' });
+      const data = (await res.json()) as { items?: ApiContact[]; total?: number; error?: string };
+      if (request !== requestRef.current) return;
       if (!res.ok) throw new Error(data.error || 'Não foi possível carregar os contatos.');
-      setContacts(Array.isArray(data.contacts) ? data.contacts : []);
-      setError('');
+      setContacts(Array.isArray(data.items) ? data.items : []);
+      setTotal(typeof data.total === 'number' ? data.total : 0);
     } catch (reason) {
+      if (request !== requestRef.current) return;
       setError(reason instanceof Error ? reason.message : 'Não foi possível carregar os contatos.');
     } finally {
-      setLoading(false);
+      if (request === requestRef.current) setLoading(false);
     }
-  }, []);
+  }, [deferredSearch, page]);
 
   useEffect(() => { void fetchContacts(); }, [fetchContacts]);
-
-  const filtered = contacts.filter((contact) => contact.name.toLowerCase().includes(search.toLowerCase()) || contact.phoneNumber.includes(search));
+  useEffect(() => { setPage(1); }, [search]);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const activePage = Math.min(page, totalPages);
 
   const openConversation = (contact: ApiContact) => {
     navigate(contact.lastConversationId ? `/inbox?conversation=${contact.lastConversationId}` : '/inbox');
@@ -96,7 +108,7 @@ const Contacts: React.FC = () => {
   return (
     <main className="mavo-page"><div className="mavo-page-content">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <p className="text-sm text-slate-500 dark:text-slate-400">{contacts.length} contato{contacts.length === 1 ? '' : 's'} com histórico no Mavo.</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">{total} contato{total === 1 ? '' : 's'} com histórico no Mavo.</p>
         <button type="button" onClick={() => void fetchContacts()} disabled={loading} className="mavo-button-secondary">{loading ? 'Atualizando...' : 'Atualizar lista'}</button>
       </div>
       {error && <ErrorState className="mb-5" description={error} action={<button type="button" onClick={() => void fetchContacts()} disabled={loading} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
@@ -105,14 +117,14 @@ const Contacts: React.FC = () => {
 
       {loading ? (
         <div className="grid gap-3"><div className="h-16 rounded-2xl skeleton" /><div className="h-16 rounded-2xl skeleton" /><div className="h-16 rounded-2xl skeleton" /></div>
-      ) : filtered.length === 0 ? (
+      ) : contacts.length === 0 ? (
         <EmptyState title="Nenhum contato encontrado com este filtro." description={search ? 'Altere a busca ou limpe o filtro para ver todos os contatos disponíveis.' : 'Os contatos aparecerão aqui depois do primeiro atendimento.'} />
       ) : (
         <div className="mavo-card overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="border-b border-slate-200 text-[10px] font-black uppercase tracking-[.14em] text-slate-400 dark:border-slate-700"><tr><th className="px-5 py-4">Contato</th><th className="px-5 py-4">Telefone</th><th className="px-5 py-4">Última interação</th><th className="px-5 py-4">Estado</th><th className="px-5 py-4 text-right">Ações</th></tr></thead>
             <tbody>
-              {filtered.map((contact) => (
+              {contacts.map((contact) => (
                 <tr key={contact.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-800/50">
                   <td className="px-5 py-4 font-bold text-slate-800 dark:text-slate-100"><span className="block">{contact.name || 'Sem nome'}</span>{contact.internalNote && <span className="mt-1 block max-w-[240px] truncate text-xs font-normal text-slate-500">Nota: {contact.internalNote}</span>}</td>
                   <td className="px-5 py-4 font-mono text-xs text-slate-600 dark:text-slate-300">{contact.phoneNumber || '—'}</td>
@@ -125,6 +137,7 @@ const Contacts: React.FC = () => {
           </table>
         </div>
       )}
+      {!loading && total > 0 && <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300"><span aria-live="polite">Mostrando {(activePage - 1) * pageSize + 1}–{Math.min(activePage * pageSize, total)} de {total} contatos</span>{total > pageSize && <div className="flex gap-2"><button type="button" disabled={activePage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Anterior</button><button type="button" disabled={activePage >= totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Próxima</button></div>}</div>}
 
       {noteModal && <Dialog title="Nota interna" description={noteModal.name} onClose={() => { if (!savingNote) setNoteModal(null); }}><form onSubmit={(event) => { event.preventDefault(); void saveNote(); }} className="p-6"><label htmlFor="contact-internal-note" className="sr-only">Nota interna</label><textarea id="contact-internal-note" value={noteValue} onChange={(event) => setNoteValue(event.target.value)} rows={5} placeholder="Informação visível somente para a equipe" className="mavo-field" /><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setNoteModal(null)} disabled={savingNote} className="mavo-button-secondary">Cancelar</button><button disabled={savingNote} className="mavo-button-primary">{savingNote ? 'Salvando...' : 'Salvar nota'}</button></div></form></Dialog>}
     </div></main>

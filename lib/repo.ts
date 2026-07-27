@@ -70,6 +70,7 @@ export {
   updateContact,
   updateContactAvatar,
   listContacts,
+  listContactsPage,
   getOrCreateOpenConversation,
   getOrCreateContactAndOpenConversation,
   getOpenConversationByContactId,

@@ -55,7 +55,7 @@ Agentes locais ──HMAC/replay protection────────────�
 
 ## Desempenho de frontend
 
-- As rotas operacionais e administrativas, inclusive o Inbox, usam `React.lazy`; o login não carrega Socket.IO ou o módulo de conversas antes da autenticação.
+- As rotas operacionais e administrativas, inclusive o Inbox, usam `React.lazy`; o login não carrega Socket.IO ou o módulo de conversas antes da autenticação. Contatos pesquisa e pagina no servidor, trazendo apenas a última interação da página solicitada.
 - A build local mais recente produziu um chunk inicial de aproximadamente 85,3 kB gzip. O Inbox fica em chunk próprio de aproximadamente 22,6 kB gzip e os gráficos em chunk próprio, carregado apenas por dashboards.
 
 ## Execução em produção
