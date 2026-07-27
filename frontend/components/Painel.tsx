@@ -4,6 +4,7 @@ import { apiFetch, getApiUrl } from '../services/api';
 import { AuthService } from '../services/authService';
 import { UserRole } from '../types';
 import { ErrorState, LoadingState } from './ui/PageState';
+import { StatusBadge } from './ui/StatusBadge';
 
 type WhatsappState = {
   status: 'idle' | 'initializing' | 'qr' | 'ready' | 'disconnected' | 'error';
@@ -162,7 +163,7 @@ const Painel: React.FC = () => {
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               Provedor: <span className="font-semibold text-slate-700 dark:text-slate-200">{provider || 'não informado'}</span>
             </p>
-            </div><span className={`rounded-full px-3 py-1.5 text-xs font-black ${waState?.status === 'ready' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-200' : 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-200'}`}>{waState?.status === 'ready' ? 'Conectado' : 'Ação necessária'}</span></div>
+            </div><StatusBadge tone={waState?.status === 'ready' ? 'success' : 'warning'}>{waState?.status === 'ready' ? 'Conectado' : 'Ação necessária'}</StatusBadge></div>
           </div>
           <div className="p-6">
             <p className="mb-4 font-semibold text-slate-800 dark:text-slate-100">

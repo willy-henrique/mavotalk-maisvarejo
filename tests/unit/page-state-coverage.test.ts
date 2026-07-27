@@ -3,8 +3,9 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 test("estados de página compartilhados cobrem áreas administrativas e operacionais", async () => {
-  const [states, dashboard, analytics, audit, agents, quickReplies, businessAccess, contacts, users, queues, menuSettings] = await Promise.all([
+  const [states, statusBadge, dashboard, analytics, audit, agents, quickReplies, businessAccess, contacts, users, queues, menuSettings] = await Promise.all([
     readFile("frontend/components/ui/PageState.tsx", "utf8"),
+    readFile("frontend/components/ui/StatusBadge.tsx", "utf8"),
     readFile("frontend/components/Dashboard.tsx", "utf8"),
     readFile("frontend/components/BusinessAnalytics.tsx", "utf8"),
     readFile("frontend/components/BusinessAudit.tsx", "utf8"),
@@ -20,6 +21,8 @@ test("estados de página compartilhados cobrem áreas administrativas e operacio
   assert.match(states, /export function LoadingState/);
   assert.match(states, /export function EmptyState/);
   assert.match(states, /export function ErrorState/);
+  assert.match(statusBadge, /export function StatusBadge/);
+  assert.match(statusBadge, /StatusTone/);
   assert.match(dashboard, /LoadingState/);
   assert.match(dashboard, /ErrorState/);
   assert.match(dashboard, /loadRequestRef/);
