@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { apiFetch, apiPost, apiPatch } from '../../services/api';
 import { Icons } from '../../constants';
 import { Dialog } from '../ui/Dialog';
+import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
 
 type Queue = {
   id: string;
@@ -119,16 +120,11 @@ const TicketTypeManagement: React.FC = () => {
         </button>
       </div>
 
-      {loadError && <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300"><span>{loadError}</span><button type="button" onClick={() => void fetchQueues()} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button></div>}
+      {loadError && <ErrorState className="mb-5" description={loadError} action={<button type="button" onClick={() => void fetchQueues()} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
       {loading ? (
-        <div className="text-slate-500">Carregando...</div>
+        <LoadingState title="Carregando filas e automações…" />
       ) : queues.length === 0 ? (
-        <div className="mavo-card p-10 text-center text-slate-500 dark:text-slate-400">
-          <p className="mb-4">Nenhuma fila cadastrada.</p>
-          <button onClick={openCreate} className="text-blue-600 font-bold hover:underline">
-            Criar a primeira fila
-          </button>
-        </div>
+        <EmptyState title="Nenhuma fila cadastrada." description="Crie a primeira fila para disponibilizar uma opção no menu do bot e direcionar os atendimentos." action={<button type="button" onClick={openCreate} className="mavo-button-primary">Criar a primeira fila</button>} />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {queues

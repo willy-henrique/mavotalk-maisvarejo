@@ -53,3 +53,4 @@ npm run render:validate → aprovado
 - Ações reveladas em hover de filas também se revelam por foco de teclado, e a SPA respeita `prefers-reduced-motion` para reduzir animações não essenciais.
 - O drawer de navegação em telas menores agora fecha com `Escape`, além do clique no overlay e da navegação por item.
 - Foram criados `LoadingState`, `EmptyState` e `ErrorState` compartilhados e aplicados em Indicadores do negócio, Contatos, Agentes, Acessos gerenciais e Respostas rápidas; as falhas dessas áreas agora oferecem repetição explícita.
+- A mesma camada de estados passou a atender Equipe, Filas e automações e Menu do painel, eliminando carregamentos e falhas com estilos próprios nessas configurações administrativas.

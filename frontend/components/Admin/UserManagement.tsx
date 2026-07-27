@@ -3,6 +3,7 @@ import { User, UserRole, UserStatus } from '../../types';
 import { Icons } from '../../constants';
 import { apiFetch, apiPatch, apiPost } from '../../services/api';
 import { Dialog } from '../ui/Dialog';
+import { ErrorState, LoadingState } from '../ui/PageState';
 
 type BackendUser = {
   id: string;
@@ -207,7 +208,7 @@ const UserManagement: React.FC = () => {
         </button>
       </div>
 
-      {loadError && <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300"><span>{loadError}</span><button type="button" onClick={() => void fetchUsers()} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button></div>}
+      {loadError && <ErrorState className="mb-5" description={loadError} action={<button type="button" onClick={() => void fetchUsers()} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
       {submitError && <div role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300">{submitError}</div>}
       {notice && <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">{notice}</div>}
       <div className="mavo-card mb-6 flex flex-col gap-3 p-4 md:flex-row">
@@ -230,7 +231,7 @@ const UserManagement: React.FC = () => {
       </div>
 
       {loading ? (
-        <p className="text-slate-500 py-8">Carregando colaboradores...</p>
+        <LoadingState title="Carregando colaboradores…" />
       ) : (
         <div className="mavo-card overflow-x-auto">
           <table className="w-full text-left">

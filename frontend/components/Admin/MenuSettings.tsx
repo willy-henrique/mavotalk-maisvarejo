@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { apiFetch, apiPatch } from '../../services/api';
+import { ErrorState, LoadingState } from '../ui/PageState';
 
 type MenuItemDefinition = { id: string; label: string; lockedForAdmin?: boolean };
 type MenuRole = 'admin' | 'gestor' | 'atendente';
@@ -112,11 +113,7 @@ const MenuSettings: React.FC = () => {
         </div>
       )}
 
-      {error && (
-        <div role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-300">
-          {error}
-        </div>
-      )}
+      {error && <ErrorState className="mb-4" description={error} action={<button type="button" onClick={() => void fetchSettings()} disabled={loading || saving} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
       {savedAt && !error && (
         <div role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300">
           Configurações salvas agora.
@@ -124,7 +121,7 @@ const MenuSettings: React.FC = () => {
       )}
 
       {loading ? (
-        <div className="mavo-card p-6 text-sm text-slate-500 dark:text-slate-400">Carregando configurações de visibilidade…</div>
+        <LoadingState title="Carregando configurações de visibilidade…" />
       ) : (
         <div className="mavo-card overflow-x-auto">
           <table className="w-full text-left">
