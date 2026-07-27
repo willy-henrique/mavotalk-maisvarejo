@@ -58,6 +58,7 @@ const UserManagement: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [page, setPage] = useState(1);
   const [actionUserId, setActionUserId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
 
@@ -95,6 +96,14 @@ const UserManagement: React.FC = () => {
       (!roleFilter || u.role === roleFilter) &&
       (!statusFilter || u.status === statusFilter)
   );
+  const pageSize = 25;
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
+  const activePage = Math.min(page, totalPages);
+  const pagedUsers = filteredUsers.slice((activePage - 1) * pageSize, activePage * pageSize);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, roleFilter, statusFilter]);
 
   const toggleUserStatus = async (user: User) => {
     setActionUserId(user.id);
@@ -245,7 +254,7 @@ const UserManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredUsers.map((u) => (
+              {pagedUsers.map((u) => (
                 <tr key={u.id} className="transition hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -285,6 +294,12 @@ const UserManagement: React.FC = () => {
               )}
             </tbody>
           </table>
+        </div>
+      )}
+      {!loading && filteredUsers.length > pageSize && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-slate-600 dark:text-slate-300">
+          <span>Mostrando {(activePage - 1) * pageSize + 1}–{Math.min(activePage * pageSize, filteredUsers.length)} de {filteredUsers.length} colaboradores</span>
+          <div className="flex gap-2"><button type="button" disabled={activePage === 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Anterior</button><button type="button" disabled={activePage === totalPages} onClick={() => setPage((value) => Math.min(totalPages, value + 1))} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Próxima</button></div>
         </div>
       )}
 

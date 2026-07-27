@@ -28,7 +28,7 @@ Data: 2026-07-27.
 
 ```text
 npm run typecheck:all  → aprovado
-npm test               → 87/87 aprovados
+npm test               → 88/88 aprovados
 npm run test:e2e       → 8 testes corretamente ignorados sem credenciais QA
 npm --prefix frontend run build → aprovado
 npm run build           → aprovado (Next.js, 43 páginas/rotas geradas)
@@ -57,3 +57,4 @@ npm run render:validate → aprovado
 - O Inbox agora é uma rota carregada sob demanda: a tela de login não baixa sua lógica de Socket.IO e conversas antes de existir sessão autenticada.
 - A build da SPA reduziu o chunk inicial de 348,5 kB / 108,3 kB gzip para 270,5 kB / 85,3 kB gzip. O código do Inbox passou ao seu próprio chunk de 76,0 kB / 22,6 kB gzip, carregado apenas pela rota autenticada.
 - Mutações autenticadas por cookie sem cabeçalho `Origin` agora são recusadas no servidor; chamadas de webhooks e agentes, que não usam cookie de navegador, continuam explicitamente preservadas.
+- A tela de Equipe agora pagina os resultados de busca/filtro, mostra o intervalo exibido e retorna à primeira página ao alterar os critérios.
