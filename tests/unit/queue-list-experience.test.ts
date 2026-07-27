@@ -9,5 +9,7 @@ test("filas oferecem busca, filtro de status e tabela para volume operacional", 
   assert.match(source, /statusFilter/);
   assert.match(source, /filteredQueues\.length > 8/);
   assert.match(source, /Nenhuma fila encontrada/);
+  assert.match(source, /hidden overflow-x-auto[\s\S]*md:block/);
+  assert.match(source, /grid gap-3 md:hidden/);
   assert.doesNotMatch(source, /queues\s*\.sort/);
 });
