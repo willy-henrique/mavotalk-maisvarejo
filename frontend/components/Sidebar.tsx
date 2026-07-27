@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Icons } from '../constants';
 import { User, UserRole } from '../types';
 import { AuthService } from '../services/authService';
+import { apiFetch } from '../services/api';
 
 interface SidebarProps {
   user: User;
@@ -22,6 +23,7 @@ const TAB_BY_PATH: Record<string, string> = {
   '/admin/respostas-rapidas': 'admin_quick_replies',
   '/admin/acessos-gerenciais': 'admin_business_access',
   '/admin/agentes': 'admin_agents',
+  '/admin/menu-visibilidade': 'admin_menu_settings',
   '/painel': 'painel',
 };
 
@@ -38,6 +40,7 @@ const menuItems = [
   { id: 'admin_users', label: 'Equipe', icon: Icons.Users, path: '/admin/usuarios', role: UserRole.ADMIN },
   { id: 'admin_types', label: 'Filas e automações', icon: Icons.Settings, path: '/admin/tipos', role: UserRole.ADMIN },
   { id: 'admin_quick_replies', label: 'Respostas Rápidas', icon: Icons.Settings, path: '/admin/respostas-rapidas', role: UserRole.ADMIN },
+  { id: 'admin_menu_settings', label: 'Menu do painel', icon: Icons.Settings, path: '/admin/menu-visibilidade', role: UserRole.ADMIN },
 ];
 
 const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate }) => {
@@ -46,6 +49,21 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
   const pathname = location.pathname;
   const activeTab = TAB_BY_PATH[pathname] ?? 'inbox';
   const [collapsed, setCollapsed] = useState(false);
+  const [visibilityOverrides, setVisibilityOverrides] = useState<Record<string, boolean> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch('/api/menu-settings', { method: 'GET' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.visibility) setVisibilityOverrides(data.visibility as Record<string, boolean>);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const initials = user.name
     .split(/\s+/)
     .filter(Boolean)
@@ -54,6 +72,9 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
     .join('') || 'MT';
 
   const canSee = (item: (typeof menuItems)[0]) => {
+    if (visibilityOverrides && item.id in visibilityOverrides) {
+      return visibilityOverrides[item.id];
+    }
     if (item.role === 'ANY') return true;
     if (item.role === 'PAINEL') return AuthService.canAccessPainel();
     if (item.role === 'METRICS') return user.role === UserRole.SUPERVISOR || user.role === UserRole.ADMIN;

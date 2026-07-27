@@ -10,6 +10,7 @@ import {
   isContactBlocked,
   listConversations,
   listQueues,
+  resolveDefaultOrganizationId,
   updateConversationById,
   updateTicketByConversation,
 } from "@/lib/repo";
@@ -371,11 +372,14 @@ export async function POST(request: Request) {
   }
 
   const payload = parsed.data;
-  const organizationId =
+  const rawOrganizationId =
     normalizeOrganizationId(payload.organization_id) ||
     normalizeOrganizationId(process.env.DEFAULT_ORG_ID) ||
     "org_willtalk_default";
-  const expectedToken = webhookTokenForOrganization(organizationId);
+  // O Bearer token é validado contra o valor bruto do env (o inbound do WhatsApp
+  // envia esse mesmo valor não resolvido), então a checagem abaixo não é afetada
+  // pela autocorreção de organizationId feita logo em seguida.
+  const expectedToken = webhookTokenForOrganization(rawOrganizationId);
   const tokenOk = safeTokenEqual(incomingToken, expectedToken);
   if (!tokenOk && !isLocalTicketUpsertBypassAllowed(request.url)) {
     logger.warn(
@@ -393,6 +397,9 @@ export async function POST(request: Request) {
       "n8n ticket-upsert accepted without bearer token in local mode",
     );
   }
+
+  const organizationId = await resolveDefaultOrganizationId(rawOrganizationId);
+
   const inboundRaw = (payload.mensagem || payload.body || "").trim();
   const { triageText: inboundBody, storageText: inboundStorageText } =
     normalizeInboundEchoPayload(inboundRaw);

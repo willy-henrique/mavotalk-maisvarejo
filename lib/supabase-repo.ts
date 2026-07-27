@@ -1318,6 +1318,53 @@ export async function resolveOrganizationByChannel(to: string | null) {
   return String(data.organization_id || DEFAULT_ORGANIZATION_ID);
 }
 
+let resolvedOrgIdCache: { value: string; expiresAt: number } | null = null;
+const RESOLVE_ORG_ID_CACHE_MS = 60_000;
+
+/**
+ * `DEFAULT_ORG_ID` é lido de forma independente pelo bootstrap de deploy (roda a
+ * cada build) e por scripts de seed rodados manualmente (ex.: seed-supabase.mjs).
+ * Se esses dois pontos divergirem, mensagens do WhatsApp são gravadas sob uma
+ * organização diferente da que o usuário logado enxerga — o ticket nunca aparece
+ * no inbox, mesmo com o WhatsApp conectado. Quando isso acontece e só existe UMA
+ * organização real no banco, autocorrigimos para ela e avisamos alto no log.
+ */
+export async function resolveDefaultOrganizationId(candidateOrgId: string): Promise<string> {
+  const now = Date.now();
+  if (resolvedOrgIdCache && resolvedOrgIdCache.expiresAt > now) {
+    return resolvedOrgIdCache.value;
+  }
+
+  const { data, error } = await supa().from("organizations").select("id");
+  if (error || !data) {
+    logger.error(
+      { err: error, candidateOrgId },
+      "resolveDefaultOrganizationId: falha ao listar organizations; mantendo valor configurado",
+    );
+    return candidateOrgId;
+  }
+
+  const knownOrgIds = data.map((row) => String(row.id));
+  let resolved = candidateOrgId;
+  if (!knownOrgIds.includes(candidateOrgId)) {
+    if (knownOrgIds.length === 1) {
+      resolved = knownOrgIds[0];
+      logger.error(
+        { configuredOrgId: candidateOrgId, actualOrgId: resolved },
+        "DEFAULT_ORG_ID não corresponde a nenhuma organizacao existente no banco; usando a unica organizacao encontrada. Corrija a variavel de ambiente DEFAULT_ORG_ID para eliminar este aviso.",
+      );
+    } else {
+      logger.error(
+        { configuredOrgId: candidateOrgId, knownOrgIds },
+        "DEFAULT_ORG_ID nao corresponde a nenhuma organizacao existente e ha multiplas organizacoes no banco; nao foi possivel autocorrigir. Mensagens do WhatsApp podem ficar invisiveis no painel ate a variavel ser corrigida manualmente.",
+      );
+    }
+  }
+
+  resolvedOrgIdCache = { value: resolved, expiresAt: now + RESOLVE_ORG_ID_CACHE_MS };
+  return resolved;
+}
+
 // ---------------------------------------------------------------------------
 // Satisfaction rating (1–5) by reply on WhatsApp
 // ---------------------------------------------------------------------------

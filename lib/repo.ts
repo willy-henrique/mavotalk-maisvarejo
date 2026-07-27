@@ -73,5 +73,6 @@ export {
   dashboardMetrics,
   getBusinessHour,
   resolveOrganizationByChannel,
+  resolveDefaultOrganizationId,
   recordSatisfactionRatingByPhone,
 } from "@/lib/supabase-repo";
