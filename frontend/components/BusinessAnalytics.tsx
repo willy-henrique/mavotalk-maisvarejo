@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -41,16 +41,22 @@ const BusinessAnalytics: React.FC = () => {
   const [query, setQuery] = useState('');
   const [queryReply, setQueryReply] = useState('');
   const [querying, setQuerying] = useState(false);
+  const loadRequestRef = useRef(0);
+  const queryRequestRef = useRef(0);
 
   const load = useCallback(async () => {
+    const request = ++loadRequestRef.current;
     setLoading(true);
     setError('');
     try {
-      setData(await apiGet<AnalyticsResponse>(`/api/business/analytics?period=${encodeURIComponent(period)}`));
+      const response = await apiGet<AnalyticsResponse>(`/api/business/analytics?period=${encodeURIComponent(period)}`);
+      if (request !== loadRequestRef.current) return;
+      setData(response);
     } catch (reason) {
+      if (request !== loadRequestRef.current) return;
       setError(reason instanceof Error ? reason.message : 'Falha ao carregar dados');
     } finally {
-      setLoading(false);
+      if (request === loadRequestRef.current) setLoading(false);
     }
   }, [period]);
 
@@ -61,15 +67,18 @@ const BusinessAnalytics: React.FC = () => {
   const ask = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!query.trim()) return;
+    const request = ++queryRequestRef.current;
     setQuerying(true);
     setQueryReply('');
     try {
       const result = await apiPost<{ reply: string }>('/api/business/query', { query: query.trim() });
+      if (request !== queryRequestRef.current) return;
       setQueryReply(result.reply);
     } catch (reason) {
+      if (request !== queryRequestRef.current) return;
       setQueryReply(reason instanceof Error ? reason.message : 'Consulta não concluída');
     } finally {
-      setQuerying(false);
+      if (request === queryRequestRef.current) setQuerying(false);
     }
   };
 
