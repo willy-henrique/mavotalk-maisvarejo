@@ -14,6 +14,7 @@ Data: 2026-07-27.
 - `Menu do painel` passou a usar switches acessíveis, mostra alterações não salvas, confirma salvamento e mantém explícita a diferença entre visibilidade e RBAC.
 - A sidebar apresenta uma única entrada “Agentes e sincronização”; a rota legada de agentes continua disponível para compatibilidade.
 - A área unificada de agentes agora expõe logs recentes por instalação, sempre filtrados pela organização da sessão; IP de origem permanece mascarado/ausente da interface.
+- As consultas de auditoria, agentes, configurações do bot/supermercado, visibilidade do menu, indicadores do negócio e acessos gerenciais passaram a executar no contexto RLS estrito da organização. O filtro explícito por `organization_id` permanece como defesa adicional.
 - A auditoria gerencial ganhou filtros server-side, paginação, detalhe em drawer e remoção do identificador técnico de tenant da tabela principal.
 - O dashboard operacional passou a calcular SLA próximo/vencido, resolução média, agentes online e frescor da última sincronização diretamente dos dados persistidos.
 - O menu de usuário no topo passou a funcionar por clique, com `aria-expanded`, fechamento por Escape e clique externo.
@@ -36,6 +37,7 @@ npm --prefix frontend run build → aprovado
 
 - A suíte E2E não é considerada aprovada enquanto estiver ignorada; faltam password, origem de API e tenants QA controlados.
 - A execução anônima contra o Render encontrou o aviso de console CSP da versão atualmente publicada. A causa foi corrigida no repositório (diretiva `frame-ancestors` removida da meta tag); é necessário publicar e repetir a execução para obter a evidência pós-deploy.
+- A validação de RLS foi estática/arquitetural nesta fase. O teste negativo integral A→B ainda requer dois tenants de QA controlados e credenciais locais para não tocar em dados de terceiros.
 - Ainda faltam cenários E2E para Inbox, multi-tenancy A→B, WhatsApp, agentes, auditoria e administração. O plano permanece em `docs/e2e-test-plan.md`.
 - “Menu do painel” ainda controla apenas visibilidade porque a matriz granular de leitura/criação/edição/exclusão/administrativa exige uma evolução de RBAC no backend, não uma alteração cosmética de UI.
 - A página de filas ainda não dispõe de modelo persistido para prioridade, horário, overflow, atendentes e reordenação drag-and-drop. Esses campos não foram simulados no frontend.
