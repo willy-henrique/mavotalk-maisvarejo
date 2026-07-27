@@ -48,3 +48,4 @@ npm --prefix frontend run build → aprovado
 - A revogação de agentes usa confirmação acessível em diálogo, em vez de confirmação nativa do navegador; a ação permanece bloqueada durante o envio e recebe estilo destrutivo consistente.
 - O cabeçalho operacional passou a publicar breadcrumb e título de aba por rota pela mesma fonte de metadados, evitando cabeçalhos genéricos ou títulos do navegador desatualizados.
 - Criação, edição e exclusão de respostas rápidas passaram a gerar auditoria por organização com nome/categoria ou campos alterados, sem persistir o conteúdo da mensagem na trilha.
+- Ações reveladas em hover de filas também se revelam por foco de teclado, e a SPA respeita `prefers-reduced-motion` para reduzir animações não essenciais.

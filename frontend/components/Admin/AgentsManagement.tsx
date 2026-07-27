@@ -157,8 +157,8 @@ const AgentsManagement: React.FC = () => {
             <p>Secret: {credential.secret}</p>
             <p>Key version: {credential.keyVersion}</p>
           </div>
-          <button type="button" onClick={() => void copyCredential()} className="mt-3 rounded-lg bg-amber-900 px-3 py-2 text-sm font-bold text-white">Copiar</button>
-          <button onClick={() => setCredential(null)} className="mt-3 ml-2 rounded-lg border border-amber-400 px-3 py-2 text-sm font-bold">Já salvei</button>
+          <button type="button" onClick={() => void copyCredential()} className="mavo-button-primary mt-3 min-h-0 bg-amber-900 px-3 py-2 text-xs hover:bg-amber-950">Copiar</button>
+          <button type="button" onClick={() => setCredential(null)} className="mavo-button-secondary mt-3 ml-2 min-h-0 border-amber-400 px-3 py-2 text-xs">Já salvei</button>
           {credentialNotice && <p className="mt-3 text-sm font-medium" role="status">{credentialNotice}</p>}
         </div>
       )}
@@ -187,9 +187,9 @@ const AgentsManagement: React.FC = () => {
                   <td className="p-4">{item.lastSyncAt ? new Date(item.lastSyncAt).toLocaleString('pt-BR') : 'Nunca'}</td>
                   <td className="p-4">{item.receivedRecords}</td>
                   <td className="p-4"><div className="flex gap-2">
-                    <button type="button" disabled={Boolean(item.revokedAt) || action !== null} onClick={() => void rotate(item)} className="rounded bg-slate-100 px-2 py-1 dark:bg-slate-800 disabled:opacity-40">{action === `rotate:${item.id}` ? 'Rotacionando...' : 'Rotacionar'}</button>
-                    <button type="button" disabled={action !== null} onClick={() => void openEvents(item)} className="rounded bg-slate-100 px-2 py-1 dark:bg-slate-800 disabled:opacity-40">Logs</button>
-                    <button type="button" disabled={Boolean(item.revokedAt) || action !== null} onClick={() => setRevokeCandidate(item)} className="rounded bg-rose-100 px-2 py-1 text-rose-700 disabled:opacity-40 dark:bg-rose-950/40 dark:text-rose-300">Revogar</button>
+                    <button type="button" disabled={Boolean(item.revokedAt) || action !== null} onClick={() => void rotate(item)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">{action === `rotate:${item.id}` ? 'Rotacionando...' : 'Rotacionar'}</button>
+                    <button type="button" disabled={action !== null} onClick={() => void openEvents(item)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Logs</button>
+                    <button type="button" disabled={Boolean(item.revokedAt) || action !== null} onClick={() => setRevokeCandidate(item)} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Revogar</button>
                   </div></td>
                 </tr>
               ))}
