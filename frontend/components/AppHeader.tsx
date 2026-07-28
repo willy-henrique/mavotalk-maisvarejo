@@ -15,7 +15,6 @@ const pageMeta: Array<{ match: string; title: string; description: string; secti
   { match: '/admin/agentes', title: 'Agentes e sincronização', description: 'Conecte e acompanhe a sincronização do ambiente do cliente.', section: 'Administração' },
   { match: '/admin/menu-visibilidade', title: 'Menu do painel', description: 'Defina a visibilidade da navegação sem alterar permissões de acesso.', section: 'Administração' },
   { match: '/dashboard', title: 'Visão de atendimento', description: 'Acompanhe a operação, filas e tempo de resposta.', section: 'Operação' },
-  { match: '/business', title: 'Indicadores do negócio', description: 'Vendas, produtos e estoque sincronizados.', section: 'Operação' },
   { match: '/contacts', title: 'Relacionamento com clientes', description: 'Contexto, notas e histórico de cada contato.', section: 'Operação' },
   { match: '/painel', title: 'Central de conexão', description: 'Status do WhatsApp e atalhos administrativos.', section: 'Operação' },
   { match: '/inbox', title: 'Caixa de entrada', description: 'Conversas em tempo real da sua equipe.', section: 'Operação' },

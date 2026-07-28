@@ -19,7 +19,6 @@ type MenuPolicyResponse = {
 const TAB_BY_PATH: Record<string, string> = {
   '/inbox': 'inbox',
   '/dashboard': 'dashboard',
-  '/business': 'business',
   '/business/sincronizacao': 'business_sync',
   '/business/auditoria': 'business_audit',
   '/contacts': 'contacts',
@@ -35,7 +34,6 @@ const TAB_BY_PATH: Record<string, string> = {
 const menuItems = [
   { id: 'inbox', label: 'Inbox', icon: Icons.Inbox, path: '/inbox', role: 'ANY' as const },
   { id: 'dashboard', label: 'Visão da operação', icon: Icons.Chart, path: '/dashboard', role: 'METRICS' as const },
-  { id: 'business', label: 'Indicadores do negócio', icon: Icons.Chart, path: '/business', role: 'METRICS' as const },
   { id: 'contacts', label: 'Contatos', icon: Icons.Users, path: '/contacts', role: 'ANY' as const },
   { id: 'painel', label: 'Conexão WhatsApp', icon: Icons.QrCode, path: '/painel', role: 'PAINEL' as const },
   { id: 'business_sync', label: 'Agentes e sincronização', icon: Icons.Settings, path: '/business/sincronizacao', role: UserRole.ADMIN },
@@ -138,7 +136,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
 
       <nav className="flex-1 px-3 space-y-1 mt-4 overflow-x-hidden" aria-label="Navegação principal">
         {!collapsed && <p className="px-3 pb-2 text-[10px] font-black uppercase tracking-[.18em] text-slate-400">Operação</p>}
-        {menuItems.filter((item) => ['inbox', 'dashboard', 'business', 'contacts', 'painel'].includes(item.id)).filter(canSee).map((item) => {
+        {menuItems.filter((item) => ['inbox', 'dashboard', 'contacts', 'painel'].includes(item.id)).filter(canSee).map((item) => {
           const isActive = activeTab === item.id;
           return (
             <button
@@ -161,7 +159,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
           );
         })}
         {!collapsed && <p className="px-3 pb-2 pt-6 text-[10px] font-black uppercase tracking-[.18em] text-slate-400">Administração</p>}
-        {menuItems.filter((item) => !['inbox', 'dashboard', 'business', 'contacts', 'painel'].includes(item.id)).filter(canSee).map((item) => {
+        {menuItems.filter((item) => !['inbox', 'dashboard', 'contacts', 'painel'].includes(item.id)).filter(canSee).map((item) => {
           const isActive = activeTab === item.id;
           return (
             <button key={item.id} onClick={() => { navigate(item.path); onNavigate?.(); }} className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl transition-all ${isActive ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20' : 'hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800/50 dark:hover:text-slate-200'} ${collapsed ? 'justify-center' : ''}`} title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined}>

@@ -16,7 +16,6 @@ export type MenuItemDefinition = {
 export const MENU_ITEMS: MenuItemDefinition[] = [
   { id: "inbox", label: "Inbox" },
   { id: "dashboard", label: "Visão da operação" },
-  { id: "business", label: "Indicadores do negócio" },
   { id: "contacts", label: "Contatos" },
   { id: "painel", label: "Conexão WhatsApp" },
   { id: "business_sync", label: "Agentes e sincronização" },
@@ -32,7 +31,6 @@ const MENU_ITEM_IDS = new Set(MENU_ITEMS.map((item) => item.id));
 const DEFAULT_VISIBILITY: Record<string, Record<MenuRole, boolean>> = {
   inbox: { admin: true, gestor: true, atendente: true },
   dashboard: { admin: true, gestor: true, atendente: false },
-  business: { admin: true, gestor: true, atendente: false },
   contacts: { admin: true, gestor: true, atendente: true },
   painel: { admin: true, gestor: true, atendente: false },
   business_sync: { admin: true, gestor: false, atendente: false },
@@ -60,7 +58,6 @@ const NONE = { admin: false, gestor: false, atendente: false };
 const DEFAULT_PERMISSIONS: Record<string, Record<MenuPermissionAction, Record<MenuRole, boolean>>> = {
   inbox: { read: EVERYONE, create: EVERYONE, update: EVERYONE, delete: NONE, admin: NONE },
   dashboard: { read: CAN_MANAGE, create: NONE, update: NONE, delete: NONE, admin: NONE },
-  business: { read: CAN_MANAGE, create: NONE, update: NONE, delete: NONE, admin: NONE },
   contacts: { read: EVERYONE, create: EVERYONE, update: EVERYONE, delete: NONE, admin: NONE },
   painel: { read: CAN_MANAGE, create: NONE, update: CAN_MANAGE, delete: NONE, admin: NONE },
   business_sync: { read: CAN_MANAGE, create: ADMIN_ONLY, update: ADMIN_ONLY, delete: ADMIN_ONLY, admin: ADMIN_ONLY },

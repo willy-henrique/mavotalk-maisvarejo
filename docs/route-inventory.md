@@ -6,7 +6,7 @@ Data da inspeção: 2026-07-27.
 
 | Grupo | Rotas | Implementação | Observação |
 | --- | --- | --- | --- |
-| SPA principal | `/inbox`, `/dashboard`, `/business`, `/business/sincronizacao`, `/business/auditoria`, `/contacts`, `/painel`, `/admin/*` | React Router em `frontend/App.tsx` | Interface operacional canônica. |
+| SPA principal | `/inbox`, `/dashboard`, `/business/sincronizacao`, `/business/auditoria`, `/contacts`, `/painel`, `/admin/*` | React Router em `frontend/App.tsx` | Interface operacional canônica. |
 | Next legado/ponte | `/`, `/dashboard`, `/dashboard/queues`, `/login` | `app/` | A página raiz redireciona para a localização canônica configurada; não deve receber novas telas operacionais sem justificativa. |
 | Master | `/mavo` | `app/mavo/page.tsx` + `components/mavo-admin.tsx` | Sessão master separada, com seleção de organização validada pelo backend. |
 
@@ -16,7 +16,6 @@ Data da inspeção: 2026-07-27.
 | --- | --- | --- | --- |
 | `/inbox` | `InboxConversations` | todos | conversas, mensagens, filas, respostas rápidas, Socket.IO |
 | `/dashboard` | `Dashboard` | admin, gestor | `/api/dashboard/metrics` |
-| `/business` | `BusinessAnalytics` | admin, gestor | analytics e consulta gerencial |
 | `/business/sincronizacao` | `AgentsManagement` | conforme matriz do tenant | agentes cloud |
 | `/business/auditoria` | `BusinessAudit` | conforme matriz do tenant | auditoria de consultas gerenciais |
 | `/contacts` | `Contacts` | todos | contatos e histórico |
@@ -43,7 +42,7 @@ Data da inspeção: 2026-07-27.
 | Contatos | `/api/contacts`, `/api/contacts/[id]`, `/api/contacts/[id]/start-conversation` | sessão e permissão por ação. |
 | Operação | `/api/dashboard/metrics`, `/api/queues`, `/api/quick-replies`, `/api/whatsapp/*` | sessão e matriz de permissões do tenant no servidor. |
 | Administração | `/api/admin/{users,agents,business-access,menu-settings,system-status}` | matriz por tenant; `/api/admin/supermarket-settings` mantém o guard específico para sessão administrativa ou master. |
-| Negócio | `/api/business/{analytics,audit,query}` | sessão, permissão por recurso e feature flags. |
+| Negócio | `/api/business/audit` | sessão, permissão por recurso e feature flags. |
 | Agentes | `/api/agent/v1/{config,heartbeat,sync/*}` | HMAC, nonce/timestamp e validação Zod; não cookie. |
 | Webhooks | `/api/webhooks/{twilio,n8n/ticket-upsert,cerebro/reply}` | assinatura Twilio ou token bearer específico; sem sessão de usuário. |
 | Master | `/api/mavo/{auth,organizations,overview,actions/sync-supermarket}` | autenticação master específica; a organização solicitada é validada antes de leitura ou mutação. |
