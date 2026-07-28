@@ -95,3 +95,13 @@ test("banco serializa a proteção do último administrador por tenant", async (
   assert.match(migration, /last_active_admin/);
   assert.match(migration, /BEFORE UPDATE OF role, is_active OR DELETE/);
 });
+
+test("preset do supermercado só faz bootstrap quando o tenant não tem nenhuma fila, não a cada mensagem", async () => {
+  const route = await read("app/api/webhooks/n8n/ticket-upsert/route.ts");
+  assert.doesNotMatch(route, /isSupermarketQueuePresetApplied/);
+  assert.match(route, /supermarketQueuesReady = allQueues\.length > 0/);
+  assert.match(route, /activeMenuOptions: queues\.map/);
+
+  const setup = await read("lib/supermarket-setup.ts");
+  assert.doesNotMatch(setup, /isSupermarketQueuePresetApplied/);
+});

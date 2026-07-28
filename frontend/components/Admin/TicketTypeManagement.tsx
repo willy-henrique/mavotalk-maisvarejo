@@ -38,6 +38,8 @@ const TicketTypeManagement: React.FC = () => {
   const [deleteCandidate, setDeleteCandidate] = useState<Queue | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [notice, setNotice] = useState('');
+  const [confirmRestore, setConfirmRestore] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const requestRef = useRef(0);
 
   const fetchQueues = useCallback(async () => {
@@ -126,6 +128,22 @@ const TicketTypeManagement: React.FC = () => {
     }
   };
 
+  const restoreDefaultMenu = async () => {
+    setConfirmRestore(false);
+    setRestoring(true);
+    setSubmitError('');
+    setNotice('');
+    try {
+      const result = await apiPost<{ created: number; updated: number }>('/api/queues/supermarket-preset');
+      await fetchQueues();
+      setNotice(`Menu padrão restaurado: ${result.created} fila(s) criada(s) e ${result.updated} reativada(s).`);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Não foi possível restaurar o menu padrão.');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
   const removeQueue = async () => {
     if (!deleteCandidate) return;
     setDeleting(true);
@@ -158,13 +176,23 @@ const TicketTypeManagement: React.FC = () => {
           <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Filas e automações</h2>
           <p className="mt-2 text-slate-500 dark:text-slate-400">Configure a opção do menu do bot, cor operacional e SLA de primeira resposta.</p>
         </div>
-        <button
-          onClick={openCreate}
-          className="mavo-button-primary"
-        >
-          <Icons.Settings className="w-5 h-5" />
-          Nova fila
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setConfirmRestore(true)}
+            disabled={restoring}
+            className="mavo-button-secondary"
+          >
+            {restoring ? 'Restaurando...' : 'Restaurar menu padrão'}
+          </button>
+          <button
+            onClick={openCreate}
+            className="mavo-button-primary"
+          >
+            <Icons.Settings className="w-5 h-5" />
+            Nova fila
+          </button>
+        </div>
       </div>
 
       {notice && <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">{notice}</div>}
@@ -329,6 +357,11 @@ const TicketTypeManagement: React.FC = () => {
               </div>
             </form>
             </div>
+        </Dialog>
+      )}
+      {confirmRestore && (
+        <Dialog title="Restaurar menu padrão" description="As 6 filas padrão do supermercado serão criadas ou reativadas com o nome, cor e SLA originais. Filas que você personalizou continuam como estão." onClose={() => { if (!restoring) setConfirmRestore(false); }}>
+          <div className="p-6"><p className="text-sm text-slate-600 dark:text-slate-300">Use isso se quiser trazer de volta uma opção padrão que foi removida ou desativada.</p><div className="mt-5 flex justify-end gap-3"><button type="button" disabled={restoring} onClick={() => setConfirmRestore(false)} className="mavo-button-secondary">Cancelar</button><button type="button" disabled={restoring} onClick={() => void restoreDefaultMenu()} className="mavo-button-primary">{restoring ? 'Restaurando...' : 'Restaurar menu padrão'}</button></div></div>
         </Dialog>
       )}
       {deleteCandidate && (

@@ -20,10 +20,7 @@ import { analyzeImageForSupport } from "@/lib/image-vision";
 import { logger } from "@/lib/logger";
 import { decideSupermarketBot } from "@/lib/supermarket-bot";
 import { getSupermarketBotConfigForOrganization } from "@/lib/supermarket-settings";
-import {
-  applySupermarketQueuePreset,
-  isSupermarketQueuePresetApplied,
-} from "@/lib/supermarket-setup";
+import { applySupermarketQueuePreset } from "@/lib/supermarket-setup";
 import {
   buildOutOfHoursNotice,
 } from "@/lib/utils";
@@ -651,12 +648,15 @@ export async function POST(request: Request) {
   let allQueues = await listQueues(organizationId);
   let supermarketQueuesReady = false;
   if (supermarketConfig.enabled) {
-    supermarketQueuesReady = isSupermarketQueuePresetApplied(allQueues);
+    // Bootstrap único: só cria as filas padrão quando o tenant nunca teve nenhuma.
+    // Não roda de novo a cada mensagem, senão desativar/excluir uma fila no painel
+    // seria desfeito automaticamente pela próxima mensagem do cliente.
+    supermarketQueuesReady = allQueues.length > 0;
     if (!supermarketQueuesReady && SUPERMARKET_AUTO_APPLY_PRESET) {
       try {
         const presetResult = await applySupermarketQueuePreset(organizationId, null);
         allQueues = presetResult.queues;
-        supermarketQueuesReady = isSupermarketQueuePresetApplied(allQueues);
+        supermarketQueuesReady = allQueues.length > 0;
         logger.info(
           {
             organizationId,
@@ -708,6 +708,7 @@ export async function POST(request: Request) {
         currentQueueMenuOption: currentQueue ? Number(currentQueue.menuOption) : null,
         businessOpen,
         config: supermarketConfig,
+        activeMenuOptions: queues.map((item) => Number(item.menuOption)),
       })
     : null;
 

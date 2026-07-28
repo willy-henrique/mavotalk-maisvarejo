@@ -126,3 +126,25 @@ test("não intercepta mensagens quando o bot está desabilitado", () => {
 
   assert.equal(decision, null);
 });
+
+test("instrui o cliente a digitar o número da opção desejada", () => {
+  const decision = decide({ message: "oi" });
+
+  assert.match(decision?.replyText || "", /Digite o \*número\* da opção desejada/);
+});
+
+test("fila desativada some do menu e deixa de ser uma opção válida", () => {
+  const menu = decide({ message: "menu", activeMenuOptions: [1, 2, 3, 4, 6] });
+  assert.doesNotMatch(menu?.replyText || "", /Trocas, devoluções e pagamentos/);
+  assert.match(menu?.replyText || "", /\*4\* - Açougue, padaria e hortifruti/);
+
+  const selection = decide({ message: "5", activeMenuOptions: [1, 2, 3, 4, 6] });
+  assert.equal(selection?.kind, "menu");
+  assert.doesNotMatch(selection?.replyText || "", /Trocas, devoluções e pagamentos/);
+});
+
+test("falar com atendente continua disponível mesmo se a opção 6 estiver fora da lista ativa", () => {
+  const decision = decide({ message: "6", activeMenuOptions: [1, 2, 3, 4, 5] });
+  assert.equal(decision?.kind, "human-handoff");
+  assert.equal(decision?.queueMenuOption, 6);
+});

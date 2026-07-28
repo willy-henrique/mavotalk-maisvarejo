@@ -1,34 +1,12 @@
 import { createAuditLog, createQueue, listQueues, updateQueue } from "@/lib/repo";
 import { SUPERMARKET_QUEUE_PRESET } from "@/lib/supermarket-config";
 
-type QueueLike = {
-  id: string;
-  menuOption: number;
-  name: string;
-  colorHex: string;
-  defaultSlaMins: number;
-  isActive: boolean;
-};
-
 export type SupermarketPresetResult = {
   queues: Awaited<ReturnType<typeof listQueues>>;
   created: number;
   updated: number;
   paused: number;
 };
-
-export function isSupermarketQueuePresetApplied(queues: QueueLike[]): boolean {
-  const presetMatches = SUPERMARKET_QUEUE_PRESET.every((preset) => {
-    const queue = queues.find((item) => Number(item.menuOption) === preset.menuOption);
-    return Boolean(
-      queue &&
-        queue.isActive !== false,
-    );
-  });
-  // Filas adicionais criadas pelo administrador também são válidas. O preset
-  // garante apenas a base do supermercado e nunca desativa personalizações.
-  return presetMatches;
-}
 
 export async function applySupermarketQueuePreset(
   organizationId: string,

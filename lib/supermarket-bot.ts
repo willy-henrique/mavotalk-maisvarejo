@@ -36,6 +36,8 @@ export type DecideSupermarketBotParams = {
   currentQueueMenuOption?: number | null;
   businessOpen: boolean;
   config?: SupermarketBotConfig;
+  /** Opções do menu (1–6) atualmente ativas nas filas do tenant. Sem isto, assume-se o preset completo. */
+  activeMenuOptions?: readonly number[];
 };
 
 function optionalEnv(name: string): string | null {
@@ -113,12 +115,14 @@ export function buildSupermarketMenu(
   config: SupermarketBotConfig,
   customerName?: string | null,
   businessOpen = true,
+  activeMenuOptions?: readonly number[],
 ): string {
   const name = firstName(customerName);
   const greeting = `${greetingByBrasiliaTime()}${name ? `, ${name}` : ""}! 👋`;
-  const options = SUPERMARKET_QUEUE_PRESET.map(
-    (item) => `${item.emoji} *${item.menuOption}* - ${item.name}`,
-  ).join("\n");
+  const activeOptions = new Set(activeMenuOptions ?? SUPERMARKET_QUEUE_PRESET.map((item) => item.menuOption));
+  const options = SUPERMARKET_QUEUE_PRESET.filter((item) => activeOptions.has(item.menuOption))
+    .map((item) => `${item.emoji} *${item.menuOption}* - ${item.name}`)
+    .join("\n");
   const availability = businessOpen
     ? "🟢 _Nossa equipe está disponível agora._"
     : "🌙 _Sua mensagem será registrada e respondida no próximo atendimento._";
@@ -128,7 +132,7 @@ export function buildSupermarketMenu(
     `Eu sou a *${config.botName}*, assistente virtual do *${config.storeName}*. ` +
     "Posso te ajudar rapidinho.\n\n" +
     options +
-    "\n\nVocê também pode escrever o que precisa com suas próprias palavras." +
+    "\n\nDigite o *número* da opção desejada ou escreva o que você precisa com suas próprias palavras." +
     "\nDigite *0* a qualquer momento para ver este menu novamente." +
     `\n\n${availability}`
   );
@@ -205,11 +209,16 @@ function selectedMenuOption(normalized: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
-function menuDecision(config: SupermarketBotConfig, customerName: string | null | undefined, businessOpen: boolean): SupermarketBotDecision {
+function menuDecision(
+  config: SupermarketBotConfig,
+  customerName: string | null | undefined,
+  businessOpen: boolean,
+  activeMenuOptions?: readonly number[],
+): SupermarketBotDecision {
   return {
     handled: true,
     kind: "menu",
-    replyText: buildSupermarketMenu(config, customerName, businessOpen),
+    replyText: buildSupermarketMenu(config, customerName, businessOpen, activeMenuOptions),
     queueMenuOption: null,
     clearQueue: true,
     triageCompleted: false,
@@ -289,13 +298,15 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
   const rawMessage = String(params.message || "").trim();
   const normalized = normalizeText(rawMessage);
   const option = selectedMenuOption(normalized);
+  const activeMenuOptions = params.activeMenuOptions ?? SUPERMARKET_QUEUE_PRESET.map((item) => item.menuOption);
+  const activeOptions = new Set(activeMenuOptions);
 
   const isMenuCommand =
     option === 0 ||
     hasAny(normalized, ["voltar ao menu", "menu principal", "ver menu", "inicio", "comecar de novo"]) ||
     /^(oi|ola|bom dia|boa tarde|boa noite|menu)$/.test(normalized);
   if (isMenuCommand) {
-    return menuDecision(config, params.customerName, params.businessOpen);
+    return menuDecision(config, params.customerName, params.businessOpen, activeMenuOptions);
   }
 
   const wantsHuman = hasAny(normalized, [
@@ -312,6 +323,10 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
   }
 
   if (option !== null) {
+    // Opção existe no preset mas foi desativada pelo administrador: trata como não reconhecida.
+    if (!activeOptions.has(option)) {
+      return menuDecision(config, params.customerName, params.businessOpen, activeMenuOptions);
+    }
     return optionDecision(option, config);
   }
 
@@ -420,5 +435,5 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
   }
 
   if (config.aiFallbackEnabled) return null;
-  return menuDecision(config, params.customerName, params.businessOpen);
+  return menuDecision(config, params.customerName, params.businessOpen, activeMenuOptions);
 }
