@@ -68,7 +68,16 @@ export const promotionSchema = promotionBaseSchema.refine(
   { message: "A expiração deve ser posterior ao início", path: ["expiresAt"] },
 );
 
-export const promotionPatchSchema = promotionBaseSchema
+// Zod 4 adiciona checks ao objeto quando `refine` é chamado. Não reutilize o
+// mesmo objeto-base aqui: `.partial()` sobre um objeto que já recebeu checks
+// falha durante a avaliação estática do Next.
+export const promotionPatchSchema = z.object({
+  title: z.string().trim().min(2).max(180),
+  description: z.string().trim().max(4000).nullable().optional(),
+  startsAt: isoDateTime,
+  expiresAt: isoDateTime,
+  status: z.enum(["draft", "scheduled", "active"]).optional(),
+})
   .partial()
   .refine((value) => Object.keys(value).length > 0, {
     message: "Nenhum campo informado",
