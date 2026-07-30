@@ -1,0 +1,5 @@
+import { NextResponse } from "next/server";
+import { requireMenuPermission, requireSession } from "@/lib/api";
+import { changeOrderStatus } from "@/lib/commerce";
+import { orderStatusSchema } from "@/lib/schemas";
+export async function PATCH(request:Request,context:{params:Promise<{id:string}>}){const auth=await requireSession();if(auth.error||!auth.session)return auth.error;const denied=await requireMenuPermission(auth.session,"inbox","update");if(denied)return denied;const parsed=orderStatusSchema.safeParse(await request.json().catch(()=>null));if(!parsed.success)return NextResponse.json({error:"Status inválido"},{status:422});const {id}=await context.params;try{const result=await changeOrderStatus(auth.session.organizationId,id,auth.session.userId,parsed.data.status);if(result.kind==="not_found")return NextResponse.json({error:"Pedido não encontrado"},{status:404});return NextResponse.json({order:result.order,unchanged:result.kind==="unchanged"});}catch(error){return NextResponse.json({error:error instanceof Error?error.message:"Não foi possível atualizar o pedido"},{status:409});}}

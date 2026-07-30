@@ -54,3 +54,27 @@ export const adminUpdateUserSchema = z
     message: "Nenhum campo informado",
   });
 
+const isoDateTime = z.string().datetime({ offset: true });
+export const promotionSchema = z.object({
+  title: z.string().trim().min(2).max(180),
+  description: z.string().trim().max(4000).nullable().optional(),
+  startsAt: isoDateTime,
+  expiresAt: isoDateTime,
+  status: z.enum(["draft", "scheduled", "active"]).optional(),
+}).refine((value) => new Date(value.expiresAt) > new Date(value.startsAt), { message: "A expiração deve ser posterior ao início", path: ["expiresAt"] });
+
+export const promotionPatchSchema = promotionSchema.partial().refine((value) => Object.keys(value).length > 0, { message: "Nenhum campo informado" });
+
+export const deliverySettingsSchema = z.object({
+  isActive: z.boolean(),
+  minMinutes: z.number().int().min(1).max(1440),
+  maxMinutes: z.number().int().min(1).max(1440),
+  defaultMinutes: z.number().int().min(1).max(1440).nullable().optional(),
+  additionalMarginMinutes: z.number().int().min(0).max(720).optional(),
+  timezone: z.string().min(1).max(100),
+  dispatchMessage: z.string().trim().max(1000).nullable().optional(),
+  schedule: z.array(z.object({ weekday:z.number().int().min(0).max(6), startTime:z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/), endTime:z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/), isActive:z.boolean() })).max(7),
+}).refine((value)=>value.minMinutes<=value.maxMinutes,{message:"O tempo mínimo não pode ser maior que o máximo",path:["minMinutes"]}).refine((value)=>value.schedule.every((item)=>!item.isActive||item.startTime<item.endTime),{message:"Horário de entrega inválido",path:["schedule"]});
+
+export const orderStatusSchema = z.object({ status: z.enum(["received","confirmed","preparing","ready","dispatched","cancelled","delivered"]) });
+export const createOrderSchema = z.object({ orderNumber:z.string().trim().min(1).max(100), contactId:z.string().trim().min(1).max(160).nullable().optional(), conversationId:z.string().trim().min(1).max(160).nullable().optional(), notes:z.string().trim().max(4000).nullable().optional() });

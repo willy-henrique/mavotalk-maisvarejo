@@ -20,6 +20,7 @@ import { analyzeImageForSupport } from "@/lib/image-vision";
 import { logger } from "@/lib/logger";
 import { decideSupermarketBot } from "@/lib/supermarket-bot";
 import { getSupermarketBotConfigForOrganization } from "@/lib/supermarket-settings";
+import { getOrderForCustomer, listValidPromotions } from "@/lib/commerce";
 import { applySupermarketQueuePreset } from "@/lib/supermarket-setup";
 import {
   buildOutOfHoursNotice,
@@ -748,6 +749,19 @@ export async function POST(request: Request) {
     shouldReply = Boolean(supermarketDecision.replyText);
     replyText = supermarketDecision.replyText;
     replyMediaUrl = supermarketDecision.mediaUrl || null;
+    // A consulta de promoções sempre é tenant-aware e filtra validade no banco.
+    // O status visual pode atrasar, mas esta regra impede o envio de uma oferta expirada.
+    if (supermarketDecision.reason === "supermarket_self_service_1") {
+      const promotions = await listValidPromotions(organizationId);
+      if (promotions.length) {
+        replyText = `🏷️ *Ofertas e promoções · ${supermarketConfig.storeName}*\n\n${promotions.map((promotion) => `*${promotion.title}*${promotion.description ? `\n${promotion.description}` : ""}`).join("\n\n")}\n\nDigite *0* para voltar ao menu ou *6* para falar com a nossa equipe.`;
+        const firstMedia = promotions.flatMap((promotion) => promotion.media as Array<{url?:string}>)[0];
+        replyMediaUrl = firstMedia?.url || null;
+      } else {
+        replyText = `🏷️ *Ofertas e promoções · ${supermarketConfig.storeName}*\n\nNo momento, não há promoções ativas cadastradas. Posso encaminhar você para a nossa equipe.\n\nDigite *0* para voltar ao menu ou *6* para falar com a nossa equipe.`;
+        replyMediaUrl = null;
+      }
+    }
     if (
       replyText &&
       supermarketDecision.appendOutOfHours &&

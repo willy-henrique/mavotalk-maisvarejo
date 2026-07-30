@@ -24,6 +24,8 @@ const TAB_BY_PATH: Record<string, string> = {
   '/contacts': 'contacts',
   '/admin/usuarios': 'admin_users',
   '/admin/tipos': 'admin_types',
+  '/admin/promocoes': 'admin_promotions',
+  '/admin/pedidos': 'admin_orders',
   '/admin/respostas-rapidas': 'admin_quick_replies',
   '/admin/acessos-gerenciais': 'admin_business_access',
   '/admin/agentes': 'admin_agents',
@@ -41,6 +43,8 @@ const menuItems = [
   { id: 'admin_business_access', label: 'Acessos gerenciais', icon: Icons.Users, path: '/admin/acessos-gerenciais', role: UserRole.ADMIN },
   { id: 'admin_users', label: 'Equipe', icon: Icons.Users, path: '/admin/usuarios', role: UserRole.ADMIN },
   { id: 'admin_types', label: 'Filas e automações', icon: Icons.Settings, path: '/admin/tipos', role: UserRole.ADMIN },
+  { id: 'admin_promotions', label: 'Promoções', icon: Icons.Chart, path: '/admin/promocoes', role: UserRole.ADMIN },
+  { id: 'admin_orders', label: 'Pedidos', icon: Icons.Inbox, path: '/admin/pedidos', role: UserRole.ADMIN },
   { id: 'admin_quick_replies', label: 'Respostas rápidas', icon: Icons.Settings, path: '/admin/respostas-rapidas', role: UserRole.ADMIN },
   { id: 'admin_menu_settings', label: 'Menu do painel', icon: Icons.Settings, path: '/admin/menu-visibilidade', role: UserRole.ADMIN },
 ];

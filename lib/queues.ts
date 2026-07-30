@@ -30,9 +30,17 @@ export const mediaCleanupQueue =
     defaultJobOptions,
   });
 
+export const orderNotificationQueue =
+  connection &&
+  new Queue(queueName("order-notifications"), {
+    connection,
+    defaultJobOptions,
+  });
+
 global.__mavoQueues = [
   slaQueue,
   mediaCleanupQueue,
+  orderNotificationQueue,
 ].filter((queue): queue is Queue => Boolean(queue));
 
 export async function enqueueSlaCheck(
@@ -48,6 +56,15 @@ export async function enqueueSlaCheck(
     // Uma troca de fila pode recalcular o SLA. O job antigo é mantido, mas o
     // worker revalida o prazo no banco e só marca o vencimento atual uma vez.
     { delay: delayMs, jobId: `sla-${conversationId}-${dueAt.getTime()}` },
+  );
+}
+
+export async function enqueueOrderNotification(organizationId: string, outboxId: string) {
+  if (!orderNotificationQueue) return;
+  await orderNotificationQueue.add(
+    "send-order-notification",
+    { organizationId, outboxId },
+    { jobId: `order-notification-${outboxId}` },
   );
 }
 

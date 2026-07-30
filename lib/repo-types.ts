@@ -46,6 +46,8 @@ export type FireBusinessHour = {
   weekday: number;
   startTime: string;
   endTime: string;
+  breakStartTime?: string | null;
+  breakEndTime?: string | null;
   timezone: string;
   isActive: boolean;
 };

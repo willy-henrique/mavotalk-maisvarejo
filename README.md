@@ -10,6 +10,10 @@ O projeto inclui o **Mavo**, um assistente de WhatsApp preparado para ofertas, h
 
 Configuração e homologação: [`docs/BOT-SUPERMERCADO.md`](docs/BOT-SUPERMERCADO.md).
 
+## Operação comercial
+
+Promoções com validade, previsão de entrega, pedidos, histórico e notificação de despacho usam estruturas multiempresa com RLS. Consulte o guia de configuração, homologação, deploy e rollback em [`docs/OPERACAO-COMERCIAL-2026-07-29.md`](docs/OPERACAO-COMERCIAL-2026-07-29.md).
+
 ## Painel master e produção
 
 - `/mavo`: painel administrativo master com login isolado, saúde do Supabase, integrações, indicadores, filas, usuários, horários, configuração do Mavo e auditoria.

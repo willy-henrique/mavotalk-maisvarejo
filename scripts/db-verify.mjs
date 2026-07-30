@@ -20,6 +20,14 @@ const requiredTables = [
   "business_inventory_entries_daily",
   "business_query_audit",
   "whatsapp_auth_state",
+  "promotions",
+  "promotion_media",
+  "business_locations",
+  "delivery_settings",
+  "delivery_schedule",
+  "orders",
+  "order_status_history",
+  "notification_outbox",
 ];
 
 await runDeployStep("db:verify", async () => {

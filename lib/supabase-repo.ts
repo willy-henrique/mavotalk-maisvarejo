@@ -1679,6 +1679,8 @@ export async function getBusinessHour(
     weekday: Number(data.weekday),
     startTime: String(data.start_time ?? "08:00"),
     endTime: String(data.end_time ?? "18:00"),
+    breakStartTime: data.break_start_time ? String(data.break_start_time) : null,
+    breakEndTime: data.break_end_time ? String(data.break_end_time) : null,
     timezone: String(data.timezone ?? "America/Sao_Paulo"),
     isActive: data.is_active !== false,
   };

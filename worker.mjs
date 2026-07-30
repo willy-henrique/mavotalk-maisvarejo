@@ -106,12 +106,40 @@ export function startWorkers({ standalone = false } = {}) {
         });
       }
     }),
+    worker("order-notifications", async (job) => {
+      if (job.name !== "send-order-notification" || !job.data?.organizationId || !job.data?.outboxId) return;
+      const { Pool } = await import("pg");
+      const pool = new Pool({ connectionString: process.env.DATABASE_URL_RUNTIME || process.env.DATABASE_URL, ssl: process.env.PG_SSL === "false" ? undefined : process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined });
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await client.query("SELECT set_config('app.organization_id',$1,true)",[String(job.data.organizationId)]);
+        const claimed = await client.query(`UPDATE notification_outbox SET status='processing',processing_at=now(),attempts=attempts+1,updated_at=now() WHERE id=$1 AND organization_id=$2 AND status IN ('pending','failed') AND attempts < max_attempts RETURNING *`, [String(job.data.outboxId), String(job.data.organizationId)]);
+        if (!claimed.rowCount) { await client.query("COMMIT"); return; }
+        const notification = claimed.rows[0];
+        await client.query("COMMIT");
+        if (String(process.env.WILLTALK_DRY_RUN_WHATSAPP || "").toLowerCase() !== "true") {
+          if ((process.env.WHATSAPP_PROVIDER || "twilio") !== "twilio" || !process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN || !process.env.TWILIO_WHATSAPP_NUMBER) throw new Error("NOTIFICATION_CHANNEL_NOT_CONFIGURED");
+          const twilioModule = await import("twilio");
+          const twilio = twilioModule.default;
+          await twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN).messages.create({ from:process.env.TWILIO_WHATSAPP_NUMBER,to:String(notification.destination),body:String(notification.message_body) });
+        }
+        await client.query("BEGIN"); await client.query("SELECT set_config('app.organization_id',$1,true)",[String(job.data.organizationId)]);
+        await client.query("UPDATE notification_outbox SET status='sent',sent_at=now(),updated_at=now(),last_error_code=NULL WHERE id=$1 AND organization_id=$2",[String(job.data.outboxId),String(job.data.organizationId)]); await client.query("COMMIT");
+        log("info",{event:"order_notification_sent",organization_id:job.data.organizationId,outbox_id:job.data.outboxId});
+      } catch (error) {
+        await client.query("ROLLBACK").catch(()=>undefined);
+        await client.query("BEGIN").catch(()=>undefined); await client.query("SELECT set_config('app.organization_id',$1,true)",[String(job.data.organizationId)]).catch(()=>undefined);
+        await client.query("UPDATE notification_outbox SET status=CASE WHEN attempts >= max_attempts THEN 'failed' ELSE 'pending' END,last_error_code=$3,last_error_at=now(),updated_at=now() WHERE id=$1 AND organization_id=$2",[String(job.data.outboxId),String(job.data.organizationId),String(error?.message||"SEND_FAILED").slice(0,80)]).catch(()=>undefined); await client.query("COMMIT").catch(()=>undefined);
+        throw error;
+      } finally { client.release(); await pool.end(); }
+    }),
   ];
 
   log("info", {
     event: "workers_started",
     mode: standalone ? "standalone" : "inline",
-    queues: ["sla", "media-cleanup"].map(queueName),
+    queues: ["sla", "media-cleanup", "order-notifications"].map(queueName),
   });
 
   let closed = false;
