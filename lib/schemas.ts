@@ -55,15 +55,31 @@ export const adminUpdateUserSchema = z
   });
 
 const isoDateTime = z.string().datetime({ offset: true });
-export const promotionSchema = z.object({
+const promotionBaseSchema = z.object({
   title: z.string().trim().min(2).max(180),
   description: z.string().trim().max(4000).nullable().optional(),
   startsAt: isoDateTime,
   expiresAt: isoDateTime,
   status: z.enum(["draft", "scheduled", "active"]).optional(),
-}).refine((value) => new Date(value.expiresAt) > new Date(value.startsAt), { message: "A expiração deve ser posterior ao início", path: ["expiresAt"] });
+});
 
-export const promotionPatchSchema = promotionSchema.partial().refine((value) => Object.keys(value).length > 0, { message: "Nenhum campo informado" });
+export const promotionSchema = promotionBaseSchema.refine(
+  (value) => new Date(value.expiresAt) > new Date(value.startsAt),
+  { message: "A expiração deve ser posterior ao início", path: ["expiresAt"] },
+);
+
+export const promotionPatchSchema = promotionBaseSchema
+  .partial()
+  .refine((value) => Object.keys(value).length > 0, {
+    message: "Nenhum campo informado",
+  })
+  .refine(
+    (value) =>
+      !value.startsAt ||
+      !value.expiresAt ||
+      new Date(value.expiresAt) > new Date(value.startsAt),
+    { message: "A expiração deve ser posterior ao início", path: ["expiresAt"] },
+  );
 
 export const deliverySettingsSchema = z.object({
   isActive: z.boolean(),
