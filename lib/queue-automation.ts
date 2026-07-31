@@ -23,6 +23,10 @@ import {
 type JsonRecord = Record<string, unknown>;
 type Row = Record<string, unknown>;
 
+export async function recordQueueContentHistory(organizationId: string, queueId: string, userId: string, action: string, previousValue: unknown, newValue: unknown) {
+  await queryTenantDatabase(organizationId, "INSERT INTO queue_configuration_history (organization_id,queue_id,configuration_version,action,previous_value,new_value,changed_by) VALUES ($1,$2,0,$3,$4::jsonb,$5::jsonb,$6)", [organizationId, queueId, action, JSON.stringify(previousValue ?? null), JSON.stringify(newValue ?? null), userId]);
+}
+
 const defaultGeneral = (queue: Row) => ({
   name: String(queue.name || ""), description: null, menuOption: Number(queue.menu_option || 1),
   defaultSlaMins: Number(queue.default_sla_mins || 30), colorHex: String(queue.color_hex || "#64748B"), icon: null,
@@ -64,6 +68,9 @@ export async function getQueueAutomation(organizationId: string, queueId: string
     WHERE q.organization_id=$1 AND q.id=$2 LIMIT 1`, [organizationId, queueId, status]);
   if (!result.rowCount) return null;
   const raw = result.rows[0];
+  // A fila pode existir sem uma versão publicada. Nesse caso, não é seguro
+  // fabricar defaults: o runtime do bot deve continuar no fluxo legado.
+  if (status === "published" && !raw.configuration_id) return null;
   return rowConfig({ id: raw.configuration_id, queue_type: raw.config_queue_type, status: raw.config_status, version: raw.config_version, general_config: raw.general_config, automation_config: raw.automation_config, content_snapshot: raw.content_snapshot, published_at: raw.published_at, updated_at: raw.config_updated_at }, raw);
 }
 
@@ -218,5 +225,21 @@ export async function createQueuePromotion(organizationId: string, queueId: stri
 }
 export async function archiveQueuePromotion(organizationId: string, queueId: string, promotionId: string, userId: string) {
   const result = await queryTenantDatabase<Row>(organizationId, "UPDATE promotions SET archived=true,archived_at=now(),active=false,updated_by=$4,updated_at=now() WHERE organization_id=$1 AND queue_id=$2 AND id=$3 AND archived=false RETURNING *", [organizationId, queueId, promotionId, userId]);
+  return result.rows[0] || null;
+}
+
+/** Atualiza somente o rascunho de conteúdo; o bot continua lendo os campos
+ * published_* até uma nova publicação da fila. */
+export async function updateQueuePromotion(organizationId: string, queueId: string, promotionId: string, userId: string, input: Partial<PromotionInput>) {
+  const current = await queryTenantDatabase<Row>(organizationId, "SELECT * FROM promotions WHERE organization_id=$1 AND queue_id=$2 AND id=$3 AND archived=false LIMIT 1", [organizationId, queueId, promotionId]);
+  if (!current.rowCount) return null;
+  const row = current.rows[0];
+  const value = promotionInputSchema.parse({
+    title: input.title ?? String(row.title), description: input.description === undefined ? row.description : input.description,
+    caption: input.caption === undefined ? row.caption : input.caption, startsAt: input.startsAt ?? new Date(String(row.starts_at)).toISOString(),
+    expiresAt: input.expiresAt ?? new Date(String(row.expires_at)).toISOString(), active: input.active ?? (row.active !== false),
+    displayOrder: input.displayOrder ?? Number(row.display_order || 0), handoffEnabled: input.handoffEnabled ?? true, afterSendMessage: input.afterSendMessage,
+  });
+  const result = await queryTenantDatabase<Row>(organizationId, "UPDATE promotions SET title=$4,description=$5,caption=$6,starts_at=$7,expires_at=$8,active=$9,display_order=$10,updated_by=$11,updated_at=now() WHERE organization_id=$1 AND queue_id=$2 AND id=$3 RETURNING *", [organizationId, queueId, promotionId, value.title, value.description || null, value.caption || null, value.startsAt, value.expiresAt, value.active, value.displayOrder, userId]);
   return result.rows[0] || null;
 }

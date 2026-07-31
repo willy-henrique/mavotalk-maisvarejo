@@ -5,16 +5,14 @@ import { validatePromotionImage } from "@/lib/image-upload-validation";
 import { createQueuePromotion, listQueuePromotions } from "@/lib/queue-automation";
 import { promotionInputSchema } from "@/lib/queue-automation-schemas";
 
-async function getAuth(action: "read" | "create") {
-  const auth = await requireSession(); if (auth.error || !auth.session) return auth;
-  const denied = await requireMenuPermission(auth.session, "admin_types", action); return { ...auth, error: denied };
-}
 export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
-  const auth = await getAuth("read"); if (auth.error || !auth.session) return auth.error;
+  const auth = await requireSession(); if (auth.error || !auth.session) return auth.error;
+  const denied = await requireMenuPermission(auth.session, "admin_types", "read"); if (denied) return denied;
   const { id } = await context.params; return NextResponse.json({ promotions: await listQueuePromotions(auth.session.organizationId, id) });
 }
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
-  const auth = await getAuth("create"); if (auth.error || !auth.session) return auth.error;
+  const auth = await requireSession(); if (auth.error || !auth.session) return auth.error;
+  const denied = await requireMenuPermission(auth.session, "admin_types", "create"); if (denied) return denied;
   const form = await request.formData().catch(() => null); if (!form) return NextResponse.json({ error: "Formulário inválido." }, { status: 400 });
   const raw = form.get("data"); const file = form.get("file");
   if (typeof raw !== "string" || !(file instanceof File)) return NextResponse.json({ error: "Envie os dados e o flyer da promoção." }, { status: 400 });

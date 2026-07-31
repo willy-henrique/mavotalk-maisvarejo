@@ -8,7 +8,7 @@ const footer = (config: { showReturnToMenu: boolean; allowHumanHandoff: boolean 
 };
 const replace = (template: string, values: Record<string, string>) => template.replace(/\{(\w+)\}/g, (_, key) => values[key] || "");
 function zoned(date: Date, timezone: string) {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(date);
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
   const get = (type: string) => parts.find((part) => part.type === type)?.value || "";
   const weekdayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
   return { weekday: weekdayMap[get("weekday")] ?? 0, date: `${get("year")}-${get("month")}-${get("day")}`, minutes: Number(get("hour")) * 60 + Number(get("minute")) };
@@ -36,29 +36,73 @@ export async function formatPromotionResponse(organizationId: string, queueId: s
   return messages;
 }
 
-export type BusinessStatus = { state: "open" | "closed" | "interval" | "special"; openingTime?: string; closingTime?: string; nextOpeningTime?: string; isSpecial: boolean };
+export type BusinessStatus = { state: "open" | "closed" | "interval" | "special"; openingTime?: string; closingTime?: string; nextOpeningTime?: string; nextOpeningLabel?: string; isSpecial: boolean };
+type BusinessContent = { location?: Record<string, unknown> | null; hours?: Record<string, unknown>[]; exceptions?: Record<string, unknown>[] };
+type Opening = { time: string; date: string; dayOffset: number };
+
+function addDays(date: string, days: number) {
+  const [year, month, day] = date.split("-").map(Number);
+  const result = new Date(Date.UTC(year, month - 1, day + days));
+  return result.toISOString().slice(0, 10);
+}
+
+function openingLabel(opening: Opening) {
+  if (opening.dayOffset === 0) return `hoje, às ${opening.time}`;
+  if (opening.dayOffset === 1) return `amanhã, às ${opening.time}`;
+  const [year, month, day] = opening.date.split("-");
+  return `em ${day}/${month}/${year}, às ${opening.time}`;
+}
+
+function periodsForDate(content: BusinessContent, date: string, weekday: number) {
+  const special = (content.exceptions || []).find((item) => String(item.calendar_date).slice(0, 10) === date);
+  if (special) {
+    if (special.is_closed) return { isSpecial: true, periods: [] as Array<{ start: string; end: string }> };
+    const start = timeText(special.start_time), end = timeText(special.end_time);
+    return { isSpecial: true, periods: start && end ? [{ start, end }] : [] as Array<{ start: string; end: string }> };
+  }
+  const day = (content.hours || []).find((item) => Number(item.weekday) === weekday);
+  if (!day?.is_active) return { isSpecial: false, periods: [] as Array<{ start: string; end: string }> };
+  const first = { start: timeText(day.start_time), end: timeText(day.end_time) };
+  const second = { start: timeText(day.second_start_time), end: timeText(day.second_end_time) };
+  return {
+    isSpecial: false,
+    periods: [first, second].filter((period) => Boolean(period.start && period.end)),
+  };
+}
+
+function findNextOpening(content: BusinessContent, currentDate: string, currentWeekday: number, fromDayOffset: number): Opening | undefined {
+  for (let dayOffset = fromDayOffset; dayOffset <= 7; dayOffset += 1) {
+    const schedule = periodsForDate(content, addDays(currentDate, dayOffset), (currentWeekday + dayOffset) % 7);
+    const opening = schedule.periods[0]?.start;
+    if (opening) return { time: opening, date: addDays(currentDate, dayOffset), dayOffset };
+  }
+  return undefined;
+}
+
 export async function getCurrentBusinessStatus(organizationId: string, queueId: string, now = new Date()): Promise<{ status: BusinessStatus; location: Record<string, unknown> } | null> {
   const published = await getPublishedQueueConfiguration(organizationId, queueId);
-  const content = (published?.contentSnapshot || {}) as { location?: Record<string, unknown> | null; hours?: Record<string, unknown>[]; exceptions?: Record<string, unknown>[] };
+  const content = (published?.contentSnapshot || {}) as BusinessContent;
   const location = content.location || null;
   if (!location) return null;
   const current = zoned(now, String(location.timezone || "America/Sao_Paulo"));
-  const special = (content.exceptions || []).find((item) => String(item.calendar_date).slice(0, 10) === current.date);
-  if (special) {
-    if (special.is_closed) return { location, status: { state: "closed", isSpecial: true } };
-    const start = timeText(special.start_time), end = timeText(special.end_time); const within = current.minutes >= minutes(start) && current.minutes < minutes(end);
-    return { location, status: { state: within ? "special" : "closed", openingTime: start, closingTime: end, nextOpeningTime: within ? undefined : start, isSpecial: true } };
+  const schedule = periodsForDate(content, current.date, current.weekday);
+  const periods = schedule.periods;
+  const firstUpcoming = periods.find((period) => current.minutes < minutes(period.start));
+  const activeIndex = periods.findIndex((period) => current.minutes >= minutes(period.start) && current.minutes < minutes(period.end));
+
+  if (activeIndex >= 0) {
+    const active = periods[activeIndex];
+    return { location, status: { state: schedule.isSpecial ? "special" : "open", openingTime: active.start, closingTime: active.end, isSpecial: schedule.isSpecial } };
   }
-  const day = (content.hours || []).find((item) => Number(item.weekday) === current.weekday);
-  if (day?.is_active) {
-    const start = timeText(day.start_time), end = timeText(day.end_time), secondStart = timeText(day.second_start_time), secondEnd = timeText(day.second_end_time);
-    if (current.minutes >= minutes(start) && current.minutes < minutes(end)) return { location, status: { state: "open", openingTime: start, closingTime: end, isSpecial: false } };
-    if (secondStart && secondEnd && current.minutes >= minutes(secondStart) && current.minutes < minutes(secondEnd)) return { location, status: { state: "open", openingTime: secondStart, closingTime: secondEnd, isSpecial: false } };
-    if (secondStart && current.minutes >= minutes(end) && current.minutes < minutes(secondStart)) return { location, status: { state: "interval", nextOpeningTime: secondStart, isSpecial: false } };
-    const next = current.minutes < minutes(start) ? start : secondStart && current.minutes < minutes(secondStart) ? secondStart : undefined;
-    return { location, status: { state: "closed", nextOpeningTime: next, isSpecial: false } };
+  if (!schedule.isSpecial && periods.length > 1 && current.minutes >= minutes(periods[0].end) && current.minutes < minutes(periods[1].start)) {
+    return { location, status: { state: "interval", nextOpeningTime: periods[1].start, nextOpeningLabel: openingLabel({ time: periods[1].start, date: current.date, dayOffset: 0 }), isSpecial: false } };
   }
-  return { location, status: { state: "closed", isSpecial: false } };
+  if (firstUpcoming) {
+    const opening = { time: firstUpcoming.start, date: current.date, dayOffset: 0 };
+    return { location, status: { state: "closed", nextOpeningTime: opening.time, nextOpeningLabel: openingLabel(opening), isSpecial: schedule.isSpecial } };
+  }
+  const nextOpening = findNextOpening(content, current.date, current.weekday, 1);
+  return { location, status: { state: "closed", nextOpeningTime: nextOpening?.time, nextOpeningLabel: nextOpening ? openingLabel(nextOpening) : undefined, isSpecial: schedule.isSpecial } };
 }
 
 export async function formatBusinessHoursResponse(organizationId: string, queueId: string, now = new Date()): Promise<BotOutboundMessage[] | null> {
@@ -73,6 +117,6 @@ export async function formatBusinessHoursResponse(organizationId: string, queueI
   if (config.showReferencePoint && (location.reference_point || location.landmark)) lines.push(`📌 ${location.reference_point || location.landmark}`);
   if (config.showMapsUrl && location.maps_url) lines.push(`🗺️ Ver no Google Maps: ${location.maps_url}`);
   if (config.showPhone && location.phone) lines.push(`📞 Telefone: ${location.phone}`);
-  if (config.showNextOpening && status.state === "closed" && status.nextOpeningTime) lines.push(`Próxima abertura: ${status.nextOpeningTime}.`);
+  if (config.showNextOpening && status.state === "closed" && status.nextOpeningTime) lines.push(`Próxima abertura: ${status.nextOpeningLabel || status.nextOpeningTime}.`);
   return [{ text: `${lines.join("\n\n")}${footer(config)}` }];
 }

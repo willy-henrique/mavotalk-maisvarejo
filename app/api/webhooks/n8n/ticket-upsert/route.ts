@@ -22,6 +22,7 @@ import { decideSupermarketBot } from "@/lib/supermarket-bot";
 import { getSupermarketBotConfigForOrganization } from "@/lib/supermarket-settings";
 import { getOrderForCustomer, listValidPromotions } from "@/lib/commerce";
 import { formatBusinessHoursResponse, formatPromotionResponse, type BotOutboundMessage } from "@/lib/queue-automation-runtime";
+import { getPublishedQueueConfiguration } from "@/lib/queue-automation";
 import { applySupermarketQueuePreset } from "@/lib/supermarket-setup";
 import {
   buildOutOfHoursNotice,
@@ -30,7 +31,7 @@ import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
 import { sendTriageMessageToWhatsApp } from "@/lib/whatsapp-client";
 import { routeBusinessWhatsappMessage } from "@/lib/business-access/business-whatsapp-router";
 import { requestIdFrom } from "@/lib/observability";
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 
 const ticketUpsertSchema = z.object({
   event_id: z.string().trim().min(1).max(160),
@@ -702,6 +703,20 @@ export async function POST(request: Request) {
   const currentQueue = queues.find(
     (item) => String(item.id) === String(conversation.queueId || ""),
   );
+  // O decisor legado só reconhece autoatendimento quando há conteúdo nos
+  // campos antigos da organização. Uma configuração publicada da própria fila
+  // é igualmente suficiente e será formatada pelo runtime logo abaixo.
+  const offersQueue = queues.find((item) => Number(item.menuOption) === 1);
+  const hoursQueue = queues.find((item) => Number(item.menuOption) === 2);
+  const [publishedOffers, publishedHours] = await Promise.all([
+    offersQueue ? getPublishedQueueConfiguration(organizationId, String(offersQueue.id)) : null,
+    hoursQueue ? getPublishedQueueConfiguration(organizationId, String(hoursQueue.id)) : null,
+  ]);
+  const botDecisionConfig = {
+    ...supermarketConfig,
+    offersText: supermarketConfig.offersText || (publishedOffers?.queueType === "offers_promotions" && publishedOffers.automationConfig.enabled ? "published-queue-content" : null),
+    address: supermarketConfig.address || (publishedHours?.queueType === "business_hours_location" && publishedHours.automationConfig.enabled ? "published-queue-content" : null),
+  };
   const supermarketDecision = supermarketQueuesReady
     ? decideSupermarketBot({
         message: inboundBody || (mediaUrl ? "Imagem ou arquivo enviado" : ""),
@@ -710,7 +725,7 @@ export async function POST(request: Request) {
         triageCompleted: Boolean(conversation.triageCompleted),
         currentQueueMenuOption: currentQueue ? Number(currentQueue.menuOption) : null,
         businessOpen,
-        config: supermarketConfig,
+        config: botDecisionConfig,
         activeMenuOptions: queues.map((item) => Number(item.menuOption)),
       })
     : null;
@@ -1049,7 +1064,10 @@ async function sendReplyToWhatsApp(
 ): Promise<boolean> {
   const dryRun = String(process.env.WILLTALK_DRY_RUN_WHATSAPP || "").toLowerCase() === "true";
   if (dryRun) {
-    const externalId = `dryrun-${Date.now()}`;
+    // A resposta de ofertas pode conter várias mensagens enviadas em paralelo.
+    // O identificador de simulação precisa ser único para respeitar a mesma
+    // garantia de idempotência do provedor sem inventar IDs de produção.
+    const externalId = `dryrun-${randomUUID()}`;
     await addOutboundMessage(organizationId, conversationId, text, externalId, {
       skipStatusUpdate: true,
       type: mediaUrl ? "image" : "text",

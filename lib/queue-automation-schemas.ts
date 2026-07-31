@@ -89,6 +89,10 @@ export const promotionInputSchema = z.object({
   }
 });
 export type PromotionInput = z.infer<typeof promotionInputSchema>;
+export const promotionPatchInputSchema = z.object({
+  title: z.string().trim().min(2).max(180), description: optionalNullableText(4_000), caption: optionalNullableText(4_000),
+  startsAt: z.string().datetime({ offset: true }), expiresAt: z.string().datetime({ offset: true }), active: z.boolean(), displayOrder: z.number().int().min(0).max(9999), handoffEnabled: z.boolean(), afterSendMessage: optionalNullableText(4_000),
+}).strict().partial().refine((value) => Object.keys(value).length > 0, "Informe ao menos um campo.");
 
 export const businessLocationSchema = z.object({
   unitName: z.string().trim().min(1).max(160),

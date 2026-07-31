@@ -18,6 +18,7 @@
     "worker": "node worker.mjs",
     "db:migrate": "node scripts/db-migrate.mjs",
     "db:migrate:status": "node scripts/db-migrate-status.mjs",
+    "db:deduplicate:external-ids": "node scripts/db-deduplicate-message-external-ids.mjs",
     "db:bootstrap:production": "node scripts/db-bootstrap-production.mjs",
     "db:verify": "node scripts/db-verify.mjs",
     "db:seed:development": "node scripts/db-seed-development.mjs",
