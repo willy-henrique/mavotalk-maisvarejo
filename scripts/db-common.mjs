@@ -189,6 +189,34 @@ export async function readMigration(fileName) {
   return { sql, checksum };
 }
 
+/**
+ * Cada migration abre a própria transação, então aplicar o arquivo e registrar
+ * a versão eram duas transações distintas: um build morto entre as duas deixa
+ * o schema à frente de mavo_schema_migrations e toda tentativa seguinte quebra
+ * em "already exists". Removendo o BEGIN/COMMIT do arquivo o runner grava o
+ * registro dentro da mesma transação do DDL — ou nada acontece.
+ */
+export function migrationBody(sql) {
+  const lines = sql.split(/\r?\n/);
+  const isBegin = (line) => /^begin\s*;$/i.test(line.trim());
+  const isCommit = (line) => /^commit\s*;$/i.test(line.trim());
+  const begin = lines.findIndex(isBegin);
+  const commit = lines.reduce(
+    (last, line, index) => (isCommit(line) ? index : last),
+    -1,
+  );
+
+  // Algumas migrations antigas não abrem transação própria: o runner já as
+  // envolve, então o arquivo segue inteiro.
+  if (begin === -1 || commit <= begin) return sql;
+
+  return [
+    ...lines.slice(0, begin),
+    ...lines.slice(begin + 1, commit),
+    ...lines.slice(commit + 1),
+  ].join("\n");
+}
+
 export async function ensureMigrationsTable(client) {
   await client.query(`
     CREATE TABLE IF NOT EXISTS mavo_schema_migrations (

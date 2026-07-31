@@ -5,6 +5,7 @@ import {
   ensureMigrationsTable,
   isCompatibleMigrationChecksum,
   listMigrationFiles,
+  migrationBody,
   readMigration,
   releaseMigrationLock,
   runDeployStep,
@@ -61,12 +62,22 @@ await runDeployStep("db:migrate", async () => {
         }
       }
 
+      // O registro entra na mesma transação do DDL: se o build cair no meio,
+      // o banco volta ao estado anterior em vez de ficar à frente do registro.
+      const body = migrationBody(sql);
       console.log(`APPLY ${fileName}`);
-      await client.query(sql);
-      await client.query(
-        "INSERT INTO mavo_schema_migrations (version, checksum) VALUES ($1, $2)",
-        [fileName, checksum],
-      );
+      await client.query("BEGIN");
+      try {
+        await client.query(body);
+        await client.query(
+          "INSERT INTO mavo_schema_migrations (version, checksum) VALUES ($1, $2)",
+          [fileName, checksum],
+        );
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      }
       console.log(`OK ${fileName}`);
     }
 

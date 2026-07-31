@@ -4,6 +4,9 @@ import { readFile } from "node:fs/promises";
 import {
   acquireMigrationLock,
   applyMigrationSessionGuards,
+  listMigrationFiles,
+  migrationBody,
+  readMigration,
   runWithDeadline,
 } from "../../scripts/db-common.mjs";
 
@@ -84,6 +87,70 @@ test("cada etapa de banco aborta ao estourar o prazo em vez de pendurar o build"
       deadlineMs: 1_000,
     }),
     "pronto",
+  );
+});
+
+test("o corpo da migration perde o BEGIN/COMMIT próprio e preserva blocos DO", () => {
+  const body = migrationBody(
+    [
+      "-- comentário",
+      "BEGIN;",
+      "ALTER TABLE t ADD COLUMN IF NOT EXISTS c JSONB;",
+      "DO $$",
+      "BEGIN",
+      "  PERFORM 1;",
+      "END $$;",
+      "COMMIT;",
+      "",
+    ].join("\n"),
+  );
+
+  assert.doesNotMatch(body, /^BEGIN;$/m);
+  assert.doesNotMatch(body, /^COMMIT;$/m);
+  // O BEGIN interno do bloco DO não pode ser confundido com o da transação.
+  assert.match(body, /DO \$\$\nBEGIN\n/);
+  assert.match(body, /ALTER TABLE t ADD COLUMN/);
+});
+
+test("migration antiga sem transação própria segue inteira", () => {
+  const sql = "ALTER TABLE t ADD COLUMN c INT;\n";
+  assert.equal(migrationBody(sql), sql);
+});
+
+test("nenhuma migration versionada mantém transação aninhada ou CONCURRENTLY", async () => {
+  const files = await listMigrationFiles();
+  assert.ok(files.length > 0);
+
+  for (const fileName of files) {
+    const { sql } = await readMigration(fileName);
+    const body = migrationBody(sql);
+    assert.doesNotMatch(
+      body,
+      /^\s*(BEGIN|COMMIT)\s*;\s*$/im,
+      `transação aninhada em ${fileName}`,
+    );
+    assert.ok(body.trim().length, `corpo vazio em ${fileName}`);
+    // CONCURRENTLY não sobrevive dentro da transação que agora envolve tudo.
+    assert.doesNotMatch(
+      sql.replace(/^\s*--.*$/gm, ""),
+      /CONCURRENTLY/i,
+      `CONCURRENTLY em ${fileName}`,
+    );
+  }
+});
+
+test("aplicar e registrar a migration acontece numa transação só", async () => {
+  const migrate = await readFile("scripts/db-migrate.mjs", "utf8");
+
+  assert.match(migrate, /migrationBody/);
+  assert.match(migrate, /await client\.query\("BEGIN"\)/);
+  assert.match(migrate, /await client\.query\("COMMIT"\)/);
+  assert.match(migrate, /ROLLBACK/);
+  // Gravar a versão fora da transação do DDL é o que deixava o banco à frente
+  // do registro quando o build morria no meio.
+  assert.match(
+    migrate,
+    /INSERT INTO mavo_schema_migrations[\s\S]{0,200}?await client\.query\("COMMIT"\)/,
   );
 });
 
