@@ -36,6 +36,10 @@ const COMPATIBLE_MIGRATION_CHECKSUMS = new Map([
     "202607310012_queue_automations.sql",
     new Set(["40b5df7e44b8178d072384913c1286e5eaf54043a44c1cf25481d68aa56071cb"]),
   ],
+  [
+    "202607310013_queue_published_content.sql",
+    new Set(["ebfcf36cb7ef7f67cfa188540c0ff2f21fccfb50f53d9070669a8812b4af3adf"]),
+  ],
 ]);
 
 export function isCompatibleMigrationChecksum(fileName, checksum) {

@@ -5,9 +5,19 @@ BEGIN;
 
 ALTER TABLE queue_configurations
   ADD COLUMN IF NOT EXISTS content_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb;
-ALTER TABLE queue_configurations
-  ADD CONSTRAINT queue_configurations_content_snapshot_object
-  CHECK (jsonb_typeof(content_snapshot) = 'object');
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_constraint
+     WHERE conname = 'queue_configurations_content_snapshot_object'
+       AND conrelid = 'queue_configurations'::regclass
+  ) THEN
+    ALTER TABLE queue_configurations
+      ADD CONSTRAINT queue_configurations_content_snapshot_object
+      CHECK (jsonb_typeof(content_snapshot) = 'object');
+  END IF;
+END $$;
 
 ALTER TABLE promotions ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ;
 ALTER TABLE promotions ADD COLUMN IF NOT EXISTS published_active BOOLEAN NOT NULL DEFAULT false;
