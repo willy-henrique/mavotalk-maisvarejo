@@ -4,8 +4,18 @@
 BEGIN;
 
 ALTER TABLE queues ADD COLUMN IF NOT EXISTS queue_type TEXT NOT NULL DEFAULT 'custom';
-ALTER TABLE queues ADD CONSTRAINT queues_queue_type_check
-  CHECK (queue_type IN ('custom', 'offers_promotions', 'business_hours_location'));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+      FROM pg_constraint
+     WHERE conname = 'queues_queue_type_check'
+       AND conrelid = 'queues'::regclass
+  ) THEN
+    ALTER TABLE queues ADD CONSTRAINT queues_queue_type_check
+      CHECK (queue_type IN ('custom', 'offers_promotions', 'business_hours_location'));
+  END IF;
+END $$;
 UPDATE queues SET queue_type = 'offers_promotions' WHERE menu_option = 1 AND queue_type = 'custom';
 UPDATE queues SET queue_type = 'business_hours_location' WHERE menu_option = 2 AND queue_type = 'custom';
 

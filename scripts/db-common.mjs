@@ -27,6 +27,21 @@ export function migrationDatabaseUrl() {
 
 export const MIGRATION_LOCK_KEY = "mavo-talk-migrations";
 
+// A migration 012 foi ajustada antes de alcançar todos os ambientes para
+// tolerar uma constraint criada previamente. A alteração é idempotente e não
+// muda o schema final, então bancos que aplicaram a revisão original podem
+// continuar reconhecendo-a como aplicada.
+const COMPATIBLE_MIGRATION_CHECKSUMS = new Map([
+  [
+    "202607310012_queue_automations.sql",
+    new Set(["40b5df7e44b8178d072384913c1286e5eaf54043a44c1cf25481d68aa56071cb"]),
+  ],
+]);
+
+export function isCompatibleMigrationChecksum(fileName, checksum) {
+  return COMPATIBLE_MIGRATION_CHECKSUMS.get(fileName)?.has(checksum) ?? false;
+}
+
 function positiveMilliseconds(name, fallback) {
   const parsed = Number(process.env[name]);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;

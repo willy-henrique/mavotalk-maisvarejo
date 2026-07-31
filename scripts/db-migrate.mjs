@@ -3,6 +3,7 @@ import {
   applyMigrationSessionGuards,
   createMigrationPool,
   ensureMigrationsTable,
+  isCompatibleMigrationChecksum,
   listMigrationFiles,
   readMigration,
   releaseMigrationLock,
@@ -33,7 +34,7 @@ await runDeployStep("db:migrate", async () => {
       const { sql, checksum } = await readMigration(fileName);
       const previousChecksum = applied.get(fileName);
       if (previousChecksum) {
-        if (previousChecksum !== checksum) {
+        if (previousChecksum !== checksum && !isCompatibleMigrationChecksum(fileName, previousChecksum)) {
           throw new Error(
             `Migration já aplicada foi alterada: ${fileName}. Crie uma nova migration.`,
           );

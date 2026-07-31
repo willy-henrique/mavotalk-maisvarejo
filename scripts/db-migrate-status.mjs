@@ -1,6 +1,7 @@
 import {
   createMigrationPool,
   ensureMigrationsTable,
+  isCompatibleMigrationChecksum,
   listMigrationFiles,
   readMigration,
 } from "./db-common.mjs";
@@ -20,7 +21,7 @@ try {
       const row = applied.get(fileName);
       const status = !row
         ? "PENDING"
-        : row.checksum === expected.checksum
+        : row.checksum === expected.checksum || isCompatibleMigrationChecksum(fileName, row.checksum)
           ? "APPLIED"
           : "CHANGED";
       console.log(`${status.padEnd(8)} ${fileName}`);
