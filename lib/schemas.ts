@@ -11,6 +11,7 @@ export const queueSchema = z.object({
   colorHex: z.string().regex(/^#([A-Fa-f0-9]{6})$/),
   defaultSlaMins: z.number().int().min(5).max(1440),
   isActive: z.boolean().optional(),
+  queueType: z.enum(["custom", "offers_promotions", "business_hours_location"]).optional(),
 });
 
 export const sendMessageSchema = z.object({

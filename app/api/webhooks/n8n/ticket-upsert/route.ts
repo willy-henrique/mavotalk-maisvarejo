@@ -21,6 +21,7 @@ import { logger } from "@/lib/logger";
 import { decideSupermarketBot } from "@/lib/supermarket-bot";
 import { getSupermarketBotConfigForOrganization } from "@/lib/supermarket-settings";
 import { getOrderForCustomer, listValidPromotions } from "@/lib/commerce";
+import { formatBusinessHoursResponse, formatPromotionResponse, type BotOutboundMessage } from "@/lib/queue-automation-runtime";
 import { applySupermarketQueuePreset } from "@/lib/supermarket-setup";
 import {
   buildOutOfHoursNotice,
@@ -690,6 +691,7 @@ export async function POST(request: Request) {
   let shouldReply = false;
   let replyText: string | null = null;
   let replyMediaUrl: string | null = null;
+  let replySequence: BotOutboundMessage[] | null = null;
   let replyDelivered: boolean | null = null;
   let triageCompleted = Boolean(conversation.triageCompleted);
   let menuAttempts = Number(conversation.menuAttempts || 0);
@@ -749,18 +751,24 @@ export async function POST(request: Request) {
     shouldReply = Boolean(supermarketDecision.replyText);
     replyText = supermarketDecision.replyText;
     replyMediaUrl = supermarketDecision.mediaUrl || null;
-    // A consulta de promoções sempre é tenant-aware e filtra validade no banco.
-    // O status visual pode atrasar, mas esta regra impede o envio de uma oferta expirada.
+    // Configurações publicadas são prioritárias. O fallback legado preserva tenants
+    // ainda não migrados e nunca envia uma promoção fora da janela de validade.
     if (supermarketDecision.reason === "supermarket_self_service_1") {
-      const promotions = await listValidPromotions(organizationId);
-      if (promotions.length) {
-        replyText = `🏷️ *Ofertas e promoções · ${supermarketConfig.storeName}*\n\n${promotions.map((promotion) => `*${promotion.title}*${promotion.description ? `\n${promotion.description}` : ""}`).join("\n\n")}\n\nDigite *0* para voltar ao menu ou *6* para falar com a nossa equipe.`;
-        const firstMedia = promotions.flatMap((promotion) => promotion.media as Array<{url?:string}>)[0];
-        replyMediaUrl = firstMedia?.url || null;
-      } else {
-        replyText = `🏷️ *Ofertas e promoções · ${supermarketConfig.storeName}*\n\nNo momento, não há promoções ativas cadastradas. Posso encaminhar você para a nossa equipe.\n\nDigite *0* para voltar ao menu ou *6* para falar com a nossa equipe.`;
-        replyMediaUrl = null;
+      const offersQueue = queues.find((item) => Number(item.menuOption) === 1);
+      replySequence = offersQueue ? await formatPromotionResponse(organizationId, String(offersQueue.id)) : null;
+      if (replySequence?.length) { replyText = replySequence[0].text; replyMediaUrl = replySequence[0].mediaUrl || null; }
+      else {
+        const promotions = await listValidPromotions(organizationId);
+        if (promotions.length) {
+          replyText = `🏷️ *Ofertas e promoções · ${supermarketConfig.storeName}*\n\n${promotions.map((promotion) => `*${promotion.title}*${promotion.description ? `\n${promotion.description}` : ""}`).join("\n\n")}\n\nDigite *0* para voltar ao menu ou *6* para falar com a nossa equipe.`;
+          replyMediaUrl = promotions.flatMap((promotion) => promotion.media as Array<{ url?: string }>)[0]?.url || null;
+        }
       }
+    }
+    if (supermarketDecision.reason === "supermarket_self_service_2") {
+      const hoursQueue = queues.find((item) => Number(item.menuOption) === 2);
+      replySequence = hoursQueue ? await formatBusinessHoursResponse(organizationId, String(hoursQueue.id)) : null;
+      if (replySequence?.length) { replyText = replySequence[0].text; replyMediaUrl = replySequence[0].mediaUrl || null; }
     }
     if (
       replyText &&
@@ -904,13 +912,9 @@ export async function POST(request: Request) {
   // ── SEND REPLY VIA WHATSAPP ────────────────────────────────────────
   const replyPhone = String(conversation.contactPhone || normalizedPhone);
   if (shouldReply && replyText) {
-    replyDelivered = await sendReplyToWhatsApp(
-      replyPhone,
-      replyText,
-      organizationId,
-      String(conversation.id),
-      replyMediaUrl,
-    );
+    const messages = replySequence?.length ? replySequence : [{ text: replyText, mediaUrl: replyMediaUrl }];
+    const results = await Promise.all(messages.map((message) => sendReplyToWhatsApp(replyPhone, message.text, organizationId, String(conversation.id), message.mediaUrl)));
+    replyDelivered = results.every(Boolean);
   }
 
   // ── OUTBOUND WEBHOOKS ──────────────────────────────────────────────

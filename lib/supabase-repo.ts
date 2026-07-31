@@ -394,6 +394,7 @@ export async function listQueues(organizationId: string): Promise<FireQueue[]> {
     colorHex: String(row.color_hex ?? "#64748B"),
     defaultSlaMins: Number(row.default_sla_mins ?? 30),
     isActive: row.is_active !== false,
+    queueType: row.queue_type === "offers_promotions" || row.queue_type === "business_hours_location" ? row.queue_type : "custom",
   }));
 }
 
@@ -410,6 +411,7 @@ export async function createQueue(organizationId: string, payload: Record<string
       color_hex: String(payload.colorHex ?? "#64748B"),
       default_sla_mins: Number(payload.defaultSlaMins ?? 30),
       is_active: (payload.isActive as boolean | undefined) ?? true,
+      queue_type: payload.queueType === "offers_promotions" || payload.queueType === "business_hours_location" ? payload.queueType : "custom",
     })
     .select("*")
     .maybeSingle();
@@ -422,6 +424,7 @@ export async function createQueue(organizationId: string, payload: Record<string
     colorHex: String(data?.color_hex ?? payload.colorHex ?? "#64748B"),
     defaultSlaMins: Number(data?.default_sla_mins ?? payload.defaultSlaMins ?? 30),
     isActive: (data?.is_active ?? payload.isActive) !== false,
+    queueType: data?.queue_type === "offers_promotions" || data?.queue_type === "business_hours_location" ? data.queue_type : "custom",
   };
 }
 
@@ -437,6 +440,7 @@ export async function updateQueue(
   if ("colorHex" in payload) updates.color_hex = String(payload.colorHex ?? "#64748B");
   if ("defaultSlaMins" in payload) updates.default_sla_mins = Number(payload.defaultSlaMins ?? 30);
   if ("isActive" in payload) updates.is_active = (payload.isActive as boolean | undefined) ?? true;
+  if ("queueType" in payload) updates.queue_type = payload.queueType === "offers_promotions" || payload.queueType === "business_hours_location" ? payload.queueType : "custom";
 
   const { data, error } = await supa(orgId)
     .from("queues")
@@ -455,6 +459,7 @@ export async function updateQueue(
     colorHex: String(data.color_hex ?? "#64748B"),
     defaultSlaMins: Number(data.default_sla_mins ?? 30),
     isActive: data.is_active !== false,
+    queueType: data.queue_type === "offers_promotions" || data.queue_type === "business_hours_location" ? data.queue_type : "custom",
   };
 }
 

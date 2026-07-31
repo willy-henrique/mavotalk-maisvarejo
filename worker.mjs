@@ -52,6 +52,31 @@ export function startWorkers({ standalone = false } = {}) {
     });
   }
 
+  // Segunda barreira de expiração: a leitura do bot também compara as datas,
+  // mas este job mantém o estado operacional e os cards sincronizados.
+  async function expirePromotions() {
+    const { Pool } = await import("pg");
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL_RUNTIME || process.env.DATABASE_URL, ssl: process.env.PG_SSL === "false" ? undefined : process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : undefined });
+    try {
+      const organizations = await pool.query("SELECT id FROM organizations");
+      let expired = 0;
+      for (const organization of organizations.rows) {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          await client.query("SELECT set_config('app.organization_id',$1,true)", [String(organization.id)]);
+          const result = await client.query("UPDATE promotions SET status='expired',updated_at=now() WHERE organization_id=$1 AND archived=false AND active=true AND expires_at <= now() AND status <> 'expired'", [String(organization.id)]);
+          expired += result.rowCount || 0;
+          await client.query("COMMIT");
+        } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; } finally { client.release(); }
+      }
+      if (expired) log("info", { event: "promotions_expired", count: expired });
+    } finally { await pool.end(); }
+  }
+  void expirePromotions().catch((error) => log("error", { event: "promotions_expiration_failed", error_code: error?.name || "EXPIRATION_FAILED" }));
+  const promotionExpirationTimer = setInterval(() => void expirePromotions().catch((error) => log("error", { event: "promotions_expiration_failed", error_code: error?.name || "EXPIRATION_FAILED" })), 5 * 60_000);
+  promotionExpirationTimer.unref();
+
   function worker(name, processor) {
     const instance = new Worker(queueName(name), processor, {
       connection,
@@ -149,6 +174,7 @@ export function startWorkers({ standalone = false } = {}) {
     async close() {
       if (closed) return;
       closed = true;
+      clearInterval(promotionExpirationTimer);
       await Promise.all(workers.map((item) => item.close().catch(() => undefined)));
       await connection.quit().catch(() => connection.disconnect());
     },

@@ -4,6 +4,7 @@ import { Icons } from '../../constants';
 import { Dialog } from '../ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
 import { StatusBadge } from '../ui/StatusBadge';
+import { QueueAutomationDrawer } from './QueueAutomationDrawer';
 
 type Queue = {
   id: string;
@@ -12,6 +13,7 @@ type Queue = {
   colorHex: string;
   defaultSlaMins: number;
   isActive: boolean;
+  queueType?: 'custom' | 'offers_promotions' | 'business_hours_location';
 };
 
 type StoreSettings = {
@@ -67,6 +69,7 @@ const TicketTypeManagement: React.FC = () => {
   const [formColorHex, setFormColorHex] = useState('#64748b');
   const [formDefaultSlaMins, setFormDefaultSlaMins] = useState(30);
   const [formIsActive, setFormIsActive] = useState(true);
+  const [formQueueType, setFormQueueType] = useState<NonNullable<Queue['queueType']>>('custom');
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<Queue | null>(null);
@@ -74,6 +77,7 @@ const TicketTypeManagement: React.FC = () => {
   const [notice, setNotice] = useState('');
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [configuringQueue, setConfiguringQueue] = useState<Queue | null>(null);
   const requestRef = useRef(0);
 
   const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
@@ -213,6 +217,7 @@ const TicketTypeManagement: React.FC = () => {
     setFormColorHex('#64748b');
     setFormDefaultSlaMins(30);
     setFormIsActive(true);
+    setFormQueueType('custom');
     setSubmitError('');
     setNotice('');
     setShowModal(true);
@@ -225,6 +230,7 @@ const TicketTypeManagement: React.FC = () => {
     setFormColorHex(q.colorHex);
     setFormDefaultSlaMins(q.defaultSlaMins);
     setFormIsActive(q.isActive);
+    setFormQueueType(q.queueType || (q.menuOption === 1 ? 'offers_promotions' : q.menuOption === 2 ? 'business_hours_location' : 'custom'));
     setFormOffersText(storeSettings?.offersText || '');
     setFormOffersUrl(storeSettings?.offersUrl || '');
     setFormAddress(storeSettings?.address || '');
@@ -254,6 +260,7 @@ const TicketTypeManagement: React.FC = () => {
         colorHex: formColorHex,
         defaultSlaMins: formDefaultSlaMins,
         isActive: formIsActive,
+        queueType: formQueueType,
       };
       if (editingId) {
         await apiPatch(`/api/queues/${editingId}`, body);
@@ -348,7 +355,7 @@ const TicketTypeManagement: React.FC = () => {
             className="mavo-button-primary"
           >
             <Icons.Settings className="w-5 h-5" />
-            Nova fila
+            Criar nova fila
           </button>
         </div>
       </div>
@@ -409,9 +416,9 @@ const TicketTypeManagement: React.FC = () => {
         <><div className="mavo-card hidden overflow-x-auto p-0 md:block">
           <table className="w-full min-w-[720px] text-left">
             <thead><tr className="border-b border-slate-200 dark:border-slate-700"><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fila</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Menu</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">SLA</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</th><th scope="col" className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ações</th></tr></thead>
-            <tbody>{filteredQueues.map((queue) => <tr key={queue.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/80 dark:hover:bg-slate-800/50"><td className="px-4 py-3"><span className="mr-3 inline-block h-3 w-3 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><span className="font-medium text-slate-800 dark:text-slate-200">{queue.name}</span></td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.menuOption}</td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.defaultSlaMins} min</td><td className="px-4 py-3"><QueueStatusBadge queue={queue} /></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2"><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></td></tr>)}</tbody>
+            <tbody>{filteredQueues.map((queue) => <tr key={queue.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/80 dark:hover:bg-slate-800/50"><td className="px-4 py-3"><span className="mr-3 inline-block h-3 w-3 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><span className="font-medium text-slate-800 dark:text-slate-200">{queue.name}</span></td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.menuOption}</td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.defaultSlaMins} min</td><td className="px-4 py-3"><QueueStatusBadge queue={queue} /></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2"><button type="button" onClick={() => setConfiguringQueue(queue)} className="mavo-button-primary min-h-0 px-3 py-2 text-xs">Configurar</button><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></td></tr>)}</tbody>
           </table>
-        </div><div className="grid gap-3 md:hidden">{filteredQueues.map((queue) => <article key={queue.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{queue.name}</h3></div><QueueStatusBadge queue={queue} className="shrink-0" /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Opção no menu</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{queue.menuOption}</dd></div><div><dt className="font-semibold text-slate-500">SLA</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{queue.defaultSlaMins} min</dd></div></dl><div className="flex flex-wrap gap-2"><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></article>)}</div></>
+        </div><div className="grid gap-3 md:hidden">{filteredQueues.map((queue) => <article key={queue.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{queue.name}</h3></div><QueueStatusBadge queue={queue} className="shrink-0" /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Opção no menu</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{queue.menuOption}</dd></div><div><dt className="font-semibold text-slate-500">SLA</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{queue.defaultSlaMins} min</dd></div></dl><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setConfiguringQueue(queue)} className="mavo-button-primary min-h-0 px-3 py-2 text-xs">Configurar</button><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></article>)}</div></>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredQueues.map((q) => (
@@ -459,11 +466,15 @@ const TicketTypeManagement: React.FC = () => {
                     <span className="text-slate-400 uppercase tracking-widest">SLA Resposta</span>
                     <span className="text-slate-700 dark:text-slate-200">{q.defaultSlaMins} min</span>
                   </div>
+                  <div className="flex justify-between text-xs font-bold">
+                    <span className="text-slate-400 uppercase tracking-widest">Automação</span>
+                    <span className="text-slate-700 dark:text-slate-200">{q.queueType === 'offers_promotions' || q.menuOption === 1 ? 'Ofertas' : q.queueType === 'business_hours_location' || q.menuOption === 2 ? 'Horários' : 'Personalizada'}</span>
+                  </div>
                 </div>
 
                 <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
                   <QueueStatusBadge queue={q} label={q.isActive ? 'Ativo no menu' : 'Inativo'} className="uppercase tracking-widest" />
-                  <span className="text-[10px] font-black text-slate-400 uppercase">Cor: {q.colorHex}</span>
+                  <div className="flex gap-2"><button type="button" onClick={() => setConfiguringQueue(q)} className="mavo-button-primary min-h-0 px-3 py-2 text-xs">Configurar</button><button type="button" onClick={() => setConfiguringQueue(q)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Testar</button></div>
                 </div>
               </div>
             ))}
@@ -528,6 +539,14 @@ const TicketTypeManagement: React.FC = () => {
                   className="mavo-field"
                   required
                 />
+              </div>
+              <div>
+                <label htmlFor="queue-type" className="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo da fila</label>
+                <select id="queue-type" value={formQueueType} onChange={(e) => setFormQueueType(e.target.value as typeof formQueueType)} className="mavo-field">
+                  <option value="custom">Fila personalizada</option>
+                  <option value="offers_promotions">Ofertas e promoções</option>
+                  <option value="business_hours_location">Horários e localização</option>
+                </select>
               </div>
               <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
                 <div><p className="text-sm font-bold text-slate-800 dark:text-slate-100">Ativo no menu do chatbot</p><p className="text-xs text-slate-500 dark:text-slate-400">Filas inativas não aparecem como opção para o cliente.</p></div>
@@ -624,6 +643,7 @@ const TicketTypeManagement: React.FC = () => {
             </div>
         </Dialog>
       )}
+      {configuringQueue && <QueueAutomationDrawer queue={configuringQueue} onClose={() => setConfiguringQueue(null)} onChanged={() => { void fetchQueues(); }} />}
       {confirmRestore && (
         <Dialog title="Restaurar menu padrão" description="As 6 filas padrão do supermercado serão criadas ou reativadas com o nome, cor e SLA originais. Filas que você personalizou continuam como estão." onClose={() => { if (!restoring) setConfirmRestore(false); }}>
           <div className="p-6"><p className="text-sm text-slate-600 dark:text-slate-300">Use isso se quiser trazer de volta uma opção padrão que foi removida ou desativada.</p><div className="mt-5 flex justify-end gap-3"><button type="button" disabled={restoring} onClick={() => setConfirmRestore(false)} className="mavo-button-secondary">Cancelar</button><button type="button" disabled={restoring} onClick={() => void restoreDefaultMenu()} className="mavo-button-primary">{restoring ? 'Restaurando...' : 'Restaurar menu padrão'}</button></div></div>

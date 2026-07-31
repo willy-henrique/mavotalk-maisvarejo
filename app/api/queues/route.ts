@@ -28,6 +28,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Dados invalidos", details: parsed.error.flatten() }, { status: 400 });
   }
 
+  if (parsed.data.isActive !== false && parsed.data.queueType && parsed.data.queueType !== "custom") {
+    const existing = await listQueues(auth.session.organizationId);
+    if (existing.some((queue) => queue.isActive && queue.queueType === parsed.data.queueType)) {
+      return NextResponse.json({ error: "Já existe uma fila ativa deste tipo. Desative-a antes de criar outra." }, { status: 409 });
+    }
+  }
+
   const queue = await createQueue(auth.session.organizationId, {
     ...parsed.data,
     isActive: parsed.data.isActive ?? true,
