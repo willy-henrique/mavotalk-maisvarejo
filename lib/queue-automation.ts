@@ -50,7 +50,8 @@ function inferType(queue: Row): QueueAutomationType {
 }
 function jsonObject(value: unknown): JsonRecord { return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {}; }
 function rowConfig(row: Row | undefined, queue: Row) {
-  const queueType = (row?.queue_type as QueueAutomationType | undefined) || inferType(queue);
+  const storedType = row?.queue_type as QueueAutomationType | undefined;
+  const queueType = storedType && storedType !== "custom" ? storedType : inferType(queue);
   return {
     id: row?.id ? String(row.id) : null, queueId: String(queue.id), queueType,
     status: row?.status === "published" ? "published" as const : "draft" as const,

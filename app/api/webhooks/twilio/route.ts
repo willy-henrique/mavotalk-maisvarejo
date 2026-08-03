@@ -23,6 +23,7 @@ import { buildDemandMenu, normalizePhone } from "@/lib/utils";
 import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
 import { routeBusinessWhatsappMessage } from "@/lib/business-access/business-whatsapp-router";
 import { requestIdFrom } from "@/lib/observability";
+import { formatBusinessHoursResponse } from "@/lib/queue-automation-runtime";
 
 function twimlMessage(body: string) {
   const response = new twilio.twiml.MessagingResponse();
@@ -298,6 +299,17 @@ export async function POST(request: Request) {
           mensagem: body || "[midia]",
         },
       });
+
+      if (selectedOption === 2) {
+        const configuredReply = await formatBusinessHoursResponse(organizationId, String(queue.id));
+        if (configuredReply?.length) {
+          await updateConversationById(organizationId, String(conversation.id), {
+            triageCompleted: true,
+            status: "aguardando",
+          });
+          return withXml(twimlMessage(configuredReply.map((message) => message.text).join("\n\n")));
+        }
+      }
 
       return withXml(twimlMessage(buildInvestigationPrompt(String(queue.name))));
     }

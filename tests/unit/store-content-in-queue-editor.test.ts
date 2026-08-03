@@ -22,12 +22,20 @@ test("conteúdo de ofertas é configurado no editor dedicado da automação", as
 });
 
 test("endereço e horários são configurados no editor dedicado da automação", async () => {
-  const source = await readFile("frontend/components/Admin/QueueAutomationDrawer.tsx", "utf8");
+  const [source, runtime, twilio] = await Promise.all([
+    readFile("frontend/components/Admin/QueueAutomationDrawer.tsx", "utf8"),
+    readFile("lib/queue-automation-runtime.ts", "utf8"),
+    readFile("app/api/webhooks/twilio/route.ts", "utf8"),
+  ]);
 
   assert.match(source, /config\.queueType === 'business_hours_location'/);
   assert.match(source, /Salvar unidade e horários/);
   assert.match(source, /location\/hours/);
   assert.match(source, /Exceções e datas especiais/);
+  assert.match(runtime, /configuration\.queueType !== "business_hours_location"/);
+  assert.match(runtime, /config\.openMessage/);
+  assert.match(twilio, /formatBusinessHoursResponse/);
+  assert.match(twilio, /selectedOption === 2/);
 });
 
 test("salvar dados básicos não publica nem sobrescreve o conteúdo da automação", async () => {
