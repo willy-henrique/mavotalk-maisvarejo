@@ -1,20 +1,40 @@
 import { v2 as cloudinary } from "cloudinary";
 
 const cleanEnv = (value: string | undefined) => String(value || "").trim().replace(/^(['"])(.*)\1$/, "$2");
+/** Descarta os placeholders `<your_api_key>` copiados do painel do Cloudinary. */
+const usable = (value: string) => (value && !/^<.*>$/.test(value) ? value : "");
 function fromCloudinaryUrl(value: string) {
   if (!value) return null;
   try {
     const url = new URL(value);
     if (url.protocol !== "cloudinary:") return null;
-    return { cloudName: decodeURIComponent(url.hostname), apiKey: decodeURIComponent(url.username), apiSecret: decodeURIComponent(url.password) };
+    const parsed = { cloudName: usable(decodeURIComponent(url.hostname)), apiKey: usable(decodeURIComponent(url.username)), apiSecret: usable(decodeURIComponent(url.password)) };
+    return parsed.cloudName && parsed.apiKey && parsed.apiSecret ? parsed : null;
   } catch {
     return null;
   }
 }
-const urlConfig = fromCloudinaryUrl(cleanEnv(process.env.CLOUDINARY_URL));
-const cloudName = urlConfig?.cloudName || cleanEnv(process.env.CLOUDINARY_CLOUD_NAME);
-const apiKey = urlConfig?.apiKey || cleanEnv(process.env.CLOUDINARY_API_KEY);
-const apiSecret = urlConfig?.apiSecret || cleanEnv(process.env.CLOUDINARY_API_SECRET);
+/**
+ * As variáveis explícitas vencem a CLOUDINARY_URL: são elas que se edita no painel do Render,
+ * e uma URL antiga esquecida no ambiente tornava a correção invisível. A URL só entra inteira,
+ * como fallback, para nunca combinar credenciais de contas diferentes.
+ */
+export function resolveCloudinaryConfig(env: Record<string, string | undefined> = process.env) {
+  const explicit = {
+    cloudName: usable(cleanEnv(env.CLOUDINARY_CLOUD_NAME)),
+    apiKey: usable(cleanEnv(env.CLOUDINARY_API_KEY)),
+    apiSecret: usable(cleanEnv(env.CLOUDINARY_API_SECRET)),
+  };
+  if (explicit.cloudName && explicit.apiKey && explicit.apiSecret) return { ...explicit, source: "env" as const };
+  const urlConfig = fromCloudinaryUrl(cleanEnv(env.CLOUDINARY_URL));
+  if (urlConfig) return { ...urlConfig, source: "url" as const };
+  return { ...explicit, source: "none" as const };
+}
+
+const { cloudName, apiKey, apiSecret, source } = resolveCloudinaryConfig();
+
+/** Identificação da conta em uso, sem segredo, para os logs de falha de upload. */
+export const cloudinaryConfigSummary = () => ({ cloudName: cloudName || "unset", apiKeyTail: apiKey ? apiKey.slice(-4) : "unset", source });
 
 function cloudinaryError(error: unknown): Error {
   if (error instanceof Error) return error;

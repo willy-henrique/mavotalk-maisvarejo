@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireMenuPermission, requireSession } from "@/lib/api";
-import { uploadBufferToCloudinary } from "@/lib/cloudinary";
+import { cloudinaryConfigSummary, uploadBufferToCloudinary } from "@/lib/cloudinary";
 import { validatePromotionImage } from "@/lib/image-upload-validation";
 import { logger } from "@/lib/logger";
 import { createQueuePromotion, listQueuePromotions } from "@/lib/queue-automation";
@@ -33,6 +33,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       queueId: id,
       errorCode: error instanceof Error ? error.name : "CLOUDINARY_UPLOAD_FAILED",
       errorMessage: errorMessage.slice(0, 240),
+      cloudinary: cloudinaryConfigSummary(),
     }, "queue_promotion_image_upload_failed");
     return NextResponse.json({ error: credentialsRejected ? "As credenciais do Cloudinary foram rejeitadas. Atualize CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY e CLOUDINARY_API_SECRET no ambiente da API e faça um novo deploy." : "Não foi possível enviar o flyer. Verifique a configuração do armazenamento de imagens e tente novamente." }, { status: credentialsRejected ? 503 : 502 });
   }
