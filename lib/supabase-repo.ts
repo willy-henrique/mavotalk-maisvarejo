@@ -14,7 +14,7 @@ import { createTenantPostgresSupabaseShim, type Row, type SupabaseLikeClient } f
 import { DEFAULT_ORGANIZATION_ID } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { enqueueSlaCheck } from "@/lib/queues";
-import { SUPERMARKET_QUEUE_PRESET } from "@/lib/supermarket-config";
+import { isProtectedSystemQueue, queueTypeForMenuOption, SUPERMARKET_QUEUE_PRESET } from "@/lib/supermarket-config";
 import { randomUUID } from "node:crypto";
 import { queryTenantDatabase, withTenantTransaction } from "@/lib/db";
 
@@ -367,6 +367,7 @@ export async function listQueues(organizationId: string): Promise<FireQueue[]> {
       color_hex: queue.colorHex,
       default_sla_mins: queue.defaultSlaMins,
       is_active: true,
+      queue_type: queueTypeForMenuOption(queue.menuOption),
     }));
 
     const { data: inserted, error: insertError } = await supa(orgId)
@@ -394,7 +395,8 @@ export async function listQueues(organizationId: string): Promise<FireQueue[]> {
     colorHex: String(row.color_hex ?? "#64748B"),
     defaultSlaMins: Number(row.default_sla_mins ?? 30),
     isActive: row.is_active !== false,
-    queueType: row.queue_type === "offers_promotions" || row.queue_type === "business_hours_location" ? row.queue_type : "custom",
+    isSystem: isProtectedSystemQueue(Number(row.menu_option ?? 0)),
+    queueType: row.queue_type === "offers_promotions" || row.queue_type === "business_hours_location" ? row.queue_type : queueTypeForMenuOption(Number(row.menu_option ?? 0)),
   }));
 }
 
@@ -411,7 +413,7 @@ export async function createQueue(organizationId: string, payload: Record<string
       color_hex: String(payload.colorHex ?? "#64748B"),
       default_sla_mins: Number(payload.defaultSlaMins ?? 30),
       is_active: (payload.isActive as boolean | undefined) ?? true,
-      queue_type: payload.queueType === "offers_promotions" || payload.queueType === "business_hours_location" ? payload.queueType : "custom",
+      queue_type: payload.queueType === "offers_promotions" || payload.queueType === "business_hours_location" ? payload.queueType : queueTypeForMenuOption(Number(payload.menuOption ?? 0)),
     })
     .select("*")
     .maybeSingle();
@@ -424,7 +426,8 @@ export async function createQueue(organizationId: string, payload: Record<string
     colorHex: String(data?.color_hex ?? payload.colorHex ?? "#64748B"),
     defaultSlaMins: Number(data?.default_sla_mins ?? payload.defaultSlaMins ?? 30),
     isActive: (data?.is_active ?? payload.isActive) !== false,
-    queueType: data?.queue_type === "offers_promotions" || data?.queue_type === "business_hours_location" ? data.queue_type : "custom",
+    isSystem: isProtectedSystemQueue(Number(data?.menu_option ?? payload.menuOption ?? 0)),
+    queueType: data?.queue_type === "offers_promotions" || data?.queue_type === "business_hours_location" ? data.queue_type : queueTypeForMenuOption(Number(data?.menu_option ?? payload.menuOption ?? 0)),
   };
 }
 
@@ -435,12 +438,23 @@ export async function updateQueue(
 ): Promise<FireQueue | null> {
   const orgId = requireOrganizationId(organizationId);
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  const { data: current } = await supa(orgId)
+    .from("queues")
+    .select("menu_option")
+    .eq("id", id)
+    .eq("organization_id", orgId)
+    .maybeSingle();
+  if (!current) return null;
+  const currentMenuOption = Number(current.menu_option ?? 0);
+  if (isProtectedSystemQueue(currentMenuOption) && "menuOption" in payload && Number(payload.menuOption) !== currentMenuOption) {
+    throw new Error("As filas padrão do sistema não podem mudar de opção no menu.");
+  }
   if ("name" in payload) updates.name = String(payload.name ?? "");
   if ("menuOption" in payload) updates.menu_option = Number(payload.menuOption ?? 0);
   if ("colorHex" in payload) updates.color_hex = String(payload.colorHex ?? "#64748B");
   if ("defaultSlaMins" in payload) updates.default_sla_mins = Number(payload.defaultSlaMins ?? 30);
   if ("isActive" in payload) updates.is_active = (payload.isActive as boolean | undefined) ?? true;
-  if ("queueType" in payload) updates.queue_type = payload.queueType === "offers_promotions" || payload.queueType === "business_hours_location" ? payload.queueType : "custom";
+  if ("queueType" in payload) updates.queue_type = payload.queueType === "offers_promotions" || payload.queueType === "business_hours_location" ? payload.queueType : queueTypeForMenuOption(currentMenuOption);
 
   const { data, error } = await supa(orgId)
     .from("queues")
@@ -459,15 +473,24 @@ export async function updateQueue(
     colorHex: String(data.color_hex ?? "#64748B"),
     defaultSlaMins: Number(data.default_sla_mins ?? 30),
     isActive: data.is_active !== false,
-    queueType: data.queue_type === "offers_promotions" || data.queue_type === "business_hours_location" ? data.queue_type : "custom",
+    isSystem: isProtectedSystemQueue(Number(data.menu_option ?? currentMenuOption)),
+    queueType: data.queue_type === "offers_promotions" || data.queue_type === "business_hours_location" ? data.queue_type : queueTypeForMenuOption(Number(data.menu_option ?? currentMenuOption)),
   };
 }
 
-export type DeleteQueueResult = "deleted" | "in_use" | "not_found";
+export type DeleteQueueResult = "deleted" | "in_use" | "not_found" | "protected";
 
 /** Exclui somente fila sem conversas/tickets para preservar o histórico operacional. */
 export async function deleteQueue(organizationId: string, id: string): Promise<DeleteQueueResult> {
   const orgId = requireOrganizationId(organizationId);
+  const { data: queue } = await supa(orgId)
+    .from("queues")
+    .select("id, menu_option")
+    .eq("organization_id", orgId)
+    .eq("id", id)
+    .maybeSingle();
+  if (!queue) return "not_found";
+  if (isProtectedSystemQueue(Number(queue.menu_option ?? 0))) return "protected";
   const [conversationCheck, ticketCheck] = await Promise.all([
     supa(orgId).from("conversations").select("id").eq("organization_id", orgId).eq("queue_id", id),
     supa(orgId).from("tickets").select("id").eq("organization_id", orgId).eq("queue_id", id),

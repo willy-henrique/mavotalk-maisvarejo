@@ -66,3 +66,13 @@ export const SUPERMARKET_QUEUE_PRESET: readonly SupermarketQueuePresetItem[] = [
 export function getSupermarketPresetByOption(menuOption: number) {
   return SUPERMARKET_QUEUE_PRESET.find((item) => item.menuOption === menuOption) || null;
 }
+
+export function isProtectedSystemQueue(menuOption: number): boolean {
+  return menuOption === 1 || menuOption === 2 || menuOption === 6;
+}
+
+export function queueTypeForMenuOption(menuOption: number): "custom" | "offers_promotions" | "business_hours_location" {
+  if (menuOption === 1) return "offers_promotions";
+  if (menuOption === 2) return "business_hours_location";
+  return "custom";
+}

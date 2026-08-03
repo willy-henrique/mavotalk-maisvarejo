@@ -27,6 +27,7 @@ export type FireQueue = {
   colorHex: string;
   defaultSlaMins: number;
   isActive: boolean;
+  isSystem: boolean;
   queueType?: "custom" | "offers_promotions" | "business_hours_location";
 };
 

@@ -18,7 +18,15 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   }
 
   const { id } = await context.params;
-  const queue = await updateQueue(auth.session.organizationId, id, parsed.data);
+  let queue;
+  try {
+    queue = await updateQueue(auth.session.organizationId, id, parsed.data);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("não podem mudar de opção")) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    throw error;
+  }
   if (!queue) {
     return NextResponse.json({ error: "Demanda nao encontrada" }, { status: 404 });
   }
@@ -38,6 +46,7 @@ export async function DELETE(_: Request, context: { params: Promise<{ id: string
   const { id } = await context.params;
   const result = await deleteQueue(auth.session.organizationId, id);
   if (result === "not_found") return NextResponse.json({ error: "Fila não encontrada" }, { status: 404 });
+  if (result === "protected") return NextResponse.json({ error: "As filas de Ofertas, Horários e Falar com atendente são padrão do sistema e não podem ser excluídas. Você pode personalizar suas configurações." }, { status: 409 });
   if (result === "in_use") {
     return NextResponse.json({ error: "Esta fila possui atendimentos vinculados e não pode ser excluída." }, { status: 409 });
   }

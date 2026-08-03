@@ -13,8 +13,11 @@ test("exclusão de fila falha de forma segura quando há atendimento vinculado",
   assert.match(repository, /from\("conversations"\)/);
   assert.match(repository, /from\("tickets"\)/);
   assert.match(repository, /return "in_use"/);
+  assert.match(repository, /return "protected"/);
+  assert.match(repository, /isProtectedSystemQueue/);
   assert.match(route, /"admin_types", "delete"/);
   assert.match(route, /status: 409/);
+  assert.match(route, /Falar com atendente/);
   assert.match(view, /Excluir fila/);
   assert.match(view, /apiDelete\(`\/api\/queues/);
 });

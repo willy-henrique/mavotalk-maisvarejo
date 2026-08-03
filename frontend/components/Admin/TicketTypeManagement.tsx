@@ -13,6 +13,7 @@ type Queue = {
   colorHex: string;
   defaultSlaMins: number;
   isActive: boolean;
+  isSystem?: boolean;
   queueType?: 'custom' | 'offers_promotions' | 'business_hours_location';
 };
 
@@ -356,7 +357,7 @@ const TicketTypeManagement: React.FC = () => {
                     >
                       <Icons.Settings className="w-4 h-4" />
                     </button>
-                    <button
+                    {!q.isSystem && <button
                       type="button"
                       onClick={() => { setDeleteCandidate(q); setSubmitError(''); }}
                       className="p-2 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30"
@@ -364,7 +365,7 @@ const TicketTypeManagement: React.FC = () => {
                       aria-label={`Excluir fila ${q.name}`}
                     >
                       ×
-                    </button>
+                    </button>}
                   </div>
                 </div>
 

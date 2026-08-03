@@ -1,5 +1,5 @@
 import { createAuditLog, createQueue, listQueues, updateQueue } from "@/lib/repo";
-import { SUPERMARKET_QUEUE_PRESET } from "@/lib/supermarket-config";
+import { queueTypeForMenuOption, SUPERMARKET_QUEUE_PRESET } from "@/lib/supermarket-config";
 
 export type SupermarketPresetResult = {
   queues: Awaited<ReturnType<typeof listQueues>>;
@@ -27,6 +27,7 @@ export async function applySupermarketQueuePreset(
       colorHex: current?.colorHex || preset.colorHex,
       defaultSlaMins: current?.defaultSlaMins || preset.defaultSlaMins,
       isActive: true,
+      queueType: queueTypeForMenuOption(preset.menuOption),
     };
 
     if (current) {
