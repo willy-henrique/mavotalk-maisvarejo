@@ -5,6 +5,18 @@ const cloudName = cleanEnv(process.env.CLOUDINARY_CLOUD_NAME);
 const apiKey = cleanEnv(process.env.CLOUDINARY_API_KEY);
 const apiSecret = cleanEnv(process.env.CLOUDINARY_API_SECRET);
 
+function cloudinaryError(error: unknown): Error {
+  if (error instanceof Error) return error;
+  if (typeof error === "string") return new Error(error);
+  if (error && typeof error === "object") {
+    const value = error as { message?: unknown; error?: { message?: unknown }; http_code?: unknown };
+    const message = value.message || value.error?.message;
+    if (message) return new Error(`Cloudinary (${value.http_code || "upload"}): ${String(message)}`);
+    try { return new Error(`Cloudinary upload failed: ${JSON.stringify(error)}`); } catch { /* fallback below */ }
+  }
+  return new Error("Cloudinary upload failed");
+}
+
 if (cloudName && apiKey && apiSecret) {
   cloudinary.config({
     cloud_name: cloudName,
@@ -39,7 +51,7 @@ export async function uploadTwilioMediaToCloudinary(mediaUrl: string, mimeType?:
       },
       (error, result) => {
         if (error || !result) {
-          reject(error || new Error("Upload cloudinary sem resultado"));
+          reject(error ? cloudinaryError(error) : new Error("Upload cloudinary sem resultado"));
           return;
         }
         resolve({ secure_url: result.secure_url, public_id: result.public_id });
@@ -69,7 +81,7 @@ export async function uploadBufferToCloudinary(buffer: Buffer, mimeType?: string
       { folder, resource_type: resourceType },
       (error, result) => {
         if (error || !result) {
-          reject(error || new Error("Upload cloudinary sem resultado"));
+          reject(error ? cloudinaryError(error) : new Error("Upload cloudinary sem resultado"));
           return;
         }
         resolve({ secure_url: result.secure_url, public_id: result.public_id });
