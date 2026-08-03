@@ -1,8 +1,9 @@
 import { v2 as cloudinary } from "cloudinary";
 
-const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-const apiKey = process.env.CLOUDINARY_API_KEY;
-const apiSecret = process.env.CLOUDINARY_API_SECRET;
+const cleanEnv = (value: string | undefined) => String(value || "").trim().replace(/^(['"])(.*)\1$/, "$2");
+const cloudName = cleanEnv(process.env.CLOUDINARY_CLOUD_NAME);
+const apiKey = cleanEnv(process.env.CLOUDINARY_API_KEY);
+const apiSecret = cleanEnv(process.env.CLOUDINARY_API_SECRET);
 
 if (cloudName && apiKey && apiSecret) {
   cloudinary.config({
@@ -52,19 +53,30 @@ export async function uploadTwilioMediaToCloudinary(mediaUrl: string, mimeType?:
 export async function uploadBase64ToCloudinary(base64Data: string, mimeType?: string | null, folder = "willtalk/messages") {
   if (!cloudName || !apiKey || !apiSecret) return null;
 
-  const dataUri = `data:${mimeType || "application/octet-stream"};base64,${base64Data}`;
+  return uploadBufferToCloudinary(Buffer.from(base64Data, "base64"), mimeType, folder);
+}
+
+export async function uploadBufferToCloudinary(buffer: Buffer, mimeType?: string | null, folder = "willtalk/messages") {
+  if (!cloudName || !apiKey || !apiSecret) return null;
   const resourceType = mimeType?.startsWith("image/")
     ? "image"
     : mimeType?.startsWith("audio/")
       ? "video"
       : "raw";
 
-  const result = await cloudinary.uploader.upload(dataUri, {
-    folder,
-    resource_type: resourceType,
+  return new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder, resource_type: resourceType },
+      (error, result) => {
+        if (error || !result) {
+          reject(error || new Error("Upload cloudinary sem resultado"));
+          return;
+        }
+        resolve({ secure_url: result.secure_url, public_id: result.public_id });
+      },
+    );
+    stream.end(buffer);
   });
-
-  return { secure_url: result.secure_url, public_id: result.public_id };
 }
 
 /** Gera URL assinada (validação de acesso). */

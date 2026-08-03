@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireMenuPermission, requireSession } from "@/lib/api";
-import { uploadBase64ToCloudinary } from "@/lib/cloudinary";
+import { uploadBufferToCloudinary } from "@/lib/cloudinary";
 import { validatePromotionImage } from "@/lib/image-upload-validation";
 import { logger } from "@/lib/logger";
 import { createQueuePromotion, listQueuePromotions } from "@/lib/queue-automation";
@@ -22,14 +22,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const bytes = new Uint8Array(await file.arrayBuffer());
   let image: { mimeType: "image/jpeg" | "image/png" | "image/webp" }; try { image = validatePromotionImage(file, bytes); } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Flyer inválido." }, { status: 422 }); }
   const { id } = await context.params;
-  let upload: Awaited<ReturnType<typeof uploadBase64ToCloudinary>>;
+  let upload: Awaited<ReturnType<typeof uploadBufferToCloudinary>>;
   try {
-    upload = await uploadBase64ToCloudinary(Buffer.from(bytes).toString("base64"), image.mimeType, `willtalk/${auth.session.organizationId}/queues/${id}/promotions`);
+    upload = await uploadBufferToCloudinary(Buffer.from(bytes), image.mimeType, `willtalk/${auth.session.organizationId}/queues/${id}/promotions`);
   } catch (error) {
     logger.error({
       organizationId: auth.session.organizationId,
       queueId: id,
       errorCode: error instanceof Error ? error.name : "CLOUDINARY_UPLOAD_FAILED",
+      errorMessage: error instanceof Error ? error.message.slice(0, 240) : "unknown_error",
     }, "queue_promotion_image_upload_failed");
     return NextResponse.json({ error: "Não foi possível enviar o flyer. Verifique a configuração do armazenamento de imagens e tente novamente." }, { status: 502 });
   }
