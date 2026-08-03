@@ -12,34 +12,30 @@ test("bloco global de identidade do bot fica fora do modal de fila e salva via s
   assert.match(source, /apiPatch<\{ settings: StoreSettings \}>\('\/api\/admin\/supermarket-settings', \{\s*botName,\s*storeName,/);
 });
 
-test("conteúdo de ofertas só aparece ao editar a fila de menuOption 1", async () => {
-  const source = await readFile("frontend/components/Admin/TicketTypeManagement.tsx", "utf8");
+test("conteúdo de ofertas é configurado no editor dedicado da automação", async () => {
+  const source = await readFile("frontend/components/Admin/QueueAutomationDrawer.tsx", "utf8");
 
-  assert.match(source, /editingId && formMenuOption === 1/);
-  assert.match(source, /formOffersText/);
-  assert.match(source, /formOffersUrl/);
-  assert.match(source, /uploadOffersImage/);
-  assert.match(source, /removeOffersImage/);
-  assert.match(source, /\/api\/admin\/supermarket-settings\/offers-image/);
+  assert.match(source, /config\.queueType === 'offers_promotions'/);
+  assert.match(source, /QueuePromotionManager/);
+  assert.match(source, /Salvar rascunho/);
+  assert.match(source, /Publicar alterações/);
 });
 
-test("conteúdo de endereço/horários só aparece ao editar a fila de menuOption 2", async () => {
-  const source = await readFile("frontend/components/Admin/TicketTypeManagement.tsx", "utf8");
+test("endereço e horários são configurados no editor dedicado da automação", async () => {
+  const source = await readFile("frontend/components/Admin/QueueAutomationDrawer.tsx", "utf8");
 
-  assert.match(source, /editingId && formMenuOption === 2/);
-  assert.match(source, /formAddress/);
-  assert.match(source, /formMapsUrl/);
-  assert.match(source, /formPhone/);
-  assert.match(source, /formHours\.map/);
-  assert.match(source, /WEEKDAY_NAMES/);
+  assert.match(source, /config\.queueType === 'business_hours_location'/);
+  assert.match(source, /Salvar unidade e horários/);
+  assert.match(source, /location\/hours/);
+  assert.match(source, /Exceções e datas especiais/);
 });
 
-test("salvar a fila também persiste o conteúdo de autoatendimento correspondente", async () => {
+test("salvar dados básicos não publica nem sobrescreve o conteúdo da automação", async () => {
   const source = await readFile("frontend/components/Admin/TicketTypeManagement.tsx", "utf8");
   const handleSubmit = source.slice(source.indexOf("const handleSubmit"), source.indexOf("const restoreDefaultMenu"));
 
-  assert.match(handleSubmit, /if \(formMenuOption === 1\)/);
-  assert.match(handleSubmit, /offersText: formOffersText\.trim\(\)/);
-  assert.match(handleSubmit, /else if \(formMenuOption === 2\)/);
-  assert.match(handleSubmit, /businessHours: formHours/);
+  assert.match(handleSubmit, /apiPatch\(`\/api\/queues\/\$\{editingId\}`/);
+  assert.match(handleSubmit, /apiPost<\{ queue: Queue \}>\('\/api\/queues', body\)/);
+  assert.doesNotMatch(handleSubmit, /supermarket-settings/);
+  assert.doesNotMatch(handleSubmit, /Publicar alterações/);
 });

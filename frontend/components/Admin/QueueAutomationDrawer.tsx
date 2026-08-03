@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { apiFetch, apiGet, apiPatch, apiPost } from '../../services/api';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { apiFetch, apiPatch, apiPost } from '../../services/api';
+import { QueuePromotionManager, type QueuePromotion } from './QueuePromotionManager';
 
 type Queue = {
   id: string;
@@ -24,12 +25,12 @@ type QueueData = {
   draft: Config | null;
   published: Config | null;
   history: Array<{ id: string; action: string; changedBy: string | null; createdAt: string }>;
-  content: { promotions?: any[]; location?: Record<string, any>; hours?: any[] };
+  content: { promotions?: QueuePromotion[]; location?: Record<string, any>; hours?: any[]; exceptions?: any[] };
 };
 
-type Tab = 'Visão geral' | 'Conteúdo' | 'Mensagens' | 'Prévia' | 'Histórico';
+export type QueueAutomationTab = 'Visão geral' | 'Conteúdo' | 'Mensagens' | 'Prévia' | 'Histórico';
 
-const tabs: Array<{ id: Tab; label: string; hint: string }> = [
+const tabs: Array<{ id: QueueAutomationTab; label: string; hint: string }> = [
   { id: 'Visão geral', label: '1. Visão geral', hint: 'Menu e atendimento' },
   { id: 'Conteúdo', label: '2. Conteúdo', hint: 'Ofertas ou unidade' },
   { id: 'Mensagens', label: '3. Mensagens', hint: 'Resposta automática' },
@@ -122,27 +123,47 @@ function CustomerPreview({ messages, queue }: { messages: string[]; queue: Queue
   </aside>;
 }
 
-export function QueueAutomationDrawer({ queue, onClose, onChanged }: { queue: Queue; onClose: () => void; onChanged: () => void }) {
-  const [tab, setTab] = useState<Tab>('Visão geral');
+export function QueueAutomationDrawer({ queue, initialTab = 'Visão geral', onClose, onChanged }: { queue: Queue; initialTab?: QueueAutomationTab; onClose: () => void; onChanged: () => void }) {
+  const [tab, setTab] = useState<QueueAutomationTab>(initialTab);
   const [data, setData] = useState<QueueData | null>(null);
   const [config, setConfig] = useState<Config>(defaultConfig(queue));
   const [location, setLocation] = useState<Record<string, any> | null>(null);
   const [hours, setHours] = useState<any[]>(defaultHours());
-  const [promotionFile, setPromotionFile] = useState<File | null>(null);
-  const [promotionTitle, setPromotionTitle] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [exceptionDate, setExceptionDate] = useState('');
+  const [exceptionTitle, setExceptionTitle] = useState('');
+  const [exceptionClosed, setExceptionClosed] = useState(true);
+  const [exceptionStart, setExceptionStart] = useState('08:00');
+  const [exceptionEnd, setExceptionEnd] = useState('18:00');
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const load = async () => {
     setLoading(true);
     setError('');
     try {
-      const result = await apiGet<QueueData>(`/api/queues/${queue.id}/configuration`);
+      const response = await apiFetch(`/api/queues/${queue.id}/configuration`, { method: 'GET' });
+      const result = await response.json().catch(() => null) as QueueData | { error?: string } | null;
+      // Filas recém-criadas ainda não têm uma versão salva. Nesse caso, o editor
+      // abre com um rascunho local para que a primeira publicação seja possível.
+      if (response.status === 404) {
+        setData({ draft: null, published: null, history: [], content: {} });
+        setConfig(defaultConfig(queue));
+        setLocation(null);
+        setHours(defaultHours());
+        setHasUnsavedChanges(false);
+        return;
+      }
+      if (!response.ok || !result || !('content' in result)) {
+        throw new Error((result as { error?: string } | null)?.error || 'Não foi possível carregar a configuração.');
+      }
       setData(result);
       setConfig(result.draft || result.published || defaultConfig(queue));
       setLocation(result.content.location || null);
+      setHasUnsavedChanges(false);
       setHours((result.content.hours || []).length
         ? weekDays.map((_, weekday) => {
           const item = result.content.hours?.find((row: any) => Number(row.weekday) === weekday);
@@ -157,15 +178,29 @@ export function QueueAutomationDrawer({ queue, onClose, onChanged }: { queue: Qu
   };
 
   useEffect(() => { void load(); }, [queue.id]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (!hasUnsavedChanges || window.confirm('Você tem alterações não salvas. Fechar mesmo assim?')) onClose();
+      }
+    };
+    const previous = document.activeElement as HTMLElement | null;
+    closeButtonRef.current?.focus();
+    window.addEventListener('keydown', onKeyDown);
+    return () => { window.removeEventListener('keydown', onKeyDown); previous?.focus(); };
+  }, [hasUnsavedChanges, onClose]);
 
   const general = config.generalConfig;
   const automation = config.automationConfig;
   const queueLabel = config.queueType === 'offers_promotions' ? 'Ofertas e promoções' : config.queueType === 'business_hours_location' ? 'Horários e localização' : 'Automação personalizada';
   const hasDraft = Boolean(data?.draft);
   const publishedVersion = data?.published?.version;
-  const updateGeneral = (key: string, value: any) => setConfig((current) => ({ ...current, generalConfig: { ...current.generalConfig, [key]: value } }));
-  const updateAutomation = (key: string, value: any) => setConfig((current) => ({ ...current, automationConfig: { ...current.automationConfig, [key]: value } }));
-  const setLocationField = (key: string, value: string) => setLocation((current) => ({ ...(current || {}), [key]: value }));
+  const isIncomplete = !String(general.name || '').trim() || !Number(general.menuOption) || !Number(general.defaultSlaMins) || !String(automation.initialMessage || '').trim();
+  const requestClose = () => { if (!hasUnsavedChanges || window.confirm('Você tem alterações não salvas. Fechar mesmo assim?')) onClose(); };
+  const updateGeneral = (key: string, value: any) => { setHasUnsavedChanges(true); setConfig((current) => ({ ...current, generalConfig: { ...current.generalConfig, [key]: value } })); };
+  const updateAutomation = (key: string, value: any) => { setHasUnsavedChanges(true); setConfig((current) => ({ ...current, automationConfig: { ...current.automationConfig, [key]: value } })); };
+  const setLocationField = (key: string, value: string) => { setHasUnsavedChanges(true); setLocation((current) => ({ ...(current || {}), [key]: value })); };
 
   const saveDraft = async () => {
     setBusy(true); setError(''); setNotice('');
@@ -212,29 +247,28 @@ export function QueueAutomationDrawer({ queue, onClose, onChanged }: { queue: Qu
         latitude: location?.latitude ? Number(location.latitude) : null, longitude: location?.longitude ? Number(location.longitude) : null,
         timezone: location?.timezone || 'America/Sao_Paulo',
       });
-      await apiFetch(`/api/queues/${queue.id}/location/hours`, { method: 'PUT', body: JSON.stringify(hours) });
+      const hoursResponse = await apiFetch(`/api/queues/${queue.id}/location/hours`, { method: 'PUT', body: JSON.stringify(hours) });
+      if (!hoursResponse.ok) {
+        const body = await hoursResponse.json().catch(() => null) as { error?: string } | null;
+        throw new Error(body?.error || 'Não foi possível salvar os horários.');
+      }
       setNotice('Unidade e horários salvos no rascunho de conteúdo. Publique para usar no bot.');
       await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível salvar a unidade.'); }
     finally { setBusy(false); }
   };
 
-  const createPromotion = async () => {
-    if (!promotionFile || !promotionTitle.trim()) { setError('Escolha o flyer e informe um título para a promoção.'); return; }
-    setBusy(true); setError(''); setNotice('');
+  const saveException = async () => {
+    if (!exceptionDate || !exceptionTitle.trim()) { setError('Informe a data e o motivo da exceção.'); return; }
+    if (!exceptionClosed && exceptionStart >= exceptionEnd) { setError('O horário especial precisa terminar depois de começar.'); return; }
+    setBusy(true); setError('');
     try {
-      const form = new FormData();
-      form.append('file', promotionFile);
-      form.append('data', JSON.stringify({ title: promotionTitle.trim(), startsAt: new Date().toISOString(), expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), active: true, displayOrder: 0, handoffEnabled: true }));
-      const response = await apiFetch(`/api/queues/${queue.id}/promotions`, { method: 'POST', body: form });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Não foi possível enviar o flyer.');
-      setPromotionFile(null); setPromotionTitle('');
-      setNotice('Promoção adicionada ao rascunho com validade de 24 horas.');
-      await load();
-    } catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível criar a promoção.'); }
+      await apiPost(`/api/queues/${queue.id}/location/exceptions`, { date: exceptionDate, title: exceptionTitle.trim(), isClosed: exceptionClosed, openingTime: exceptionClosed ? null : exceptionStart, closingTime: exceptionClosed ? null : exceptionEnd });
+      setExceptionDate(''); setExceptionTitle(''); setNotice('Exceção de horário salva no conteúdo da fila.'); await load();
+    } catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível salvar a exceção.'); }
     finally { setBusy(false); }
   };
+
 
   const preview = useMemo(() => {
     if (config.queueType === 'offers_promotions') return [automation.initialMessage, '🖼️ Flyer da promoção', automation.afterFlyerMessage, automation.closingMessage].filter(Boolean);
@@ -242,21 +276,23 @@ export function QueueAutomationDrawer({ queue, onClose, onChanged }: { queue: Qu
     return [automation.initialMessage, automation.noContentMessage].filter(Boolean);
   }, [automation, config.queueType, location]);
 
-  const updateHour = (index: number, field: string, value: any) => setHours((current) => current.map((hour, position) => position === index ? { ...hour, [field]: value } : hour));
+  const updateHour = (index: number, field: string, value: any) => { setHasUnsavedChanges(true); setHours((current) => current.map((hour, position) => position === index ? { ...hour, [field]: value } : hour)); };
 
   return <div className="fixed inset-0 z-[var(--mavo-z-modal)] flex justify-end bg-slate-950/70 p-0 backdrop-blur-sm sm:p-3" role="dialog" aria-modal="true" aria-label={`Configurar ${queue.name}`}>
-    <aside className="flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-none bg-white text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-white sm:rounded-3xl">
+    <aside className="flex h-full w-full flex-col overflow-hidden rounded-none bg-white text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-white min-[900px]:w-[min(1180px,92vw)] sm:rounded-3xl">
       <header className="border-b border-slate-200 px-5 py-4 dark:border-slate-700 sm:px-7">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-lg font-black text-white shadow-lg" style={{ backgroundColor: queue.colorHex }}>{queue.name.charAt(0)}</span>
             <div className="min-w-0"><p className="text-[11px] font-black uppercase tracking-[.16em] text-blue-600 dark:text-blue-400">Editor de automação</p><h2 className="truncate text-xl font-black">{queue.name}</h2><p className="mt-0.5 text-xs text-slate-500">{queueLabel} · opção {general.menuOption} do menu</p></div>
           </div>
-          <button type="button" onClick={onClose} className="mavo-button-secondary min-h-0 shrink-0 px-3 py-2">Fechar</button>
+          <button ref={closeButtonRef} type="button" onClick={requestClose} className="mavo-button-secondary min-h-0 shrink-0 px-3 py-2" aria-label="Fechar configuração da fila">Fechar</button>
         </div>
         <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold">
           <span className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 ${data?.published ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'}`}><span className={`h-2 w-2 rounded-full ${data?.published ? 'bg-emerald-500' : 'bg-amber-500'}`} />{data?.published ? `Publicado · versão ${publishedVersion}` : 'Ainda não publicado'}</span>
           {hasDraft && <span className="rounded-full bg-blue-50 px-3 py-1.5 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">Há um rascunho aguardando publicação</span>}
+          {hasUnsavedChanges && <span className="rounded-full bg-amber-50 px-3 py-1.5 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">Alterações não salvas</span>}
+          {isIncomplete && <span className="rounded-full bg-rose-50 px-3 py-1.5 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">Configuração incompleta</span>}
           <span className="rounded-full bg-slate-100 px-3 py-1.5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">SLA de {general.defaultSlaMins || 30} min</span>
         </div>
       </header>
@@ -264,10 +300,10 @@ export function QueueAutomationDrawer({ queue, onClose, onChanged }: { queue: Qu
       <div className="flex min-h-0 flex-1">
         <nav className="hidden w-52 shrink-0 border-r border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-950/30 lg:block">
           <p className="px-3 pb-2 pt-1 text-[11px] font-black uppercase tracking-[.14em] text-slate-400">Configure por etapas</p>
-          <div className="space-y-1">{tabs.map((item) => <button type="button" key={item.id} onClick={() => setTab(item.id)} className={`w-full rounded-xl px-3 py-3 text-left transition ${tab === item.id ? 'bg-blue-600 text-white shadow-md shadow-blue-950/20' : 'text-slate-600 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800'}`}><span className="block text-sm font-black">{item.label}</span><span className={`mt-0.5 block text-[11px] ${tab === item.id ? 'text-blue-100' : 'text-slate-400'}`}>{item.hint}</span></button>)}</div>
+          <div className="space-y-1">{tabs.map((item) => <button type="button" key={item.id} onClick={() => setTab(item.id)} className={`w-full rounded-xl px-3 py-3 text-left transition ${tab === item.id ? 'bg-blue-600 text-white shadow-md shadow-blue-950/20' : 'text-slate-600 hover:bg-white dark:text-slate-300 dark:hover:bg-slate-800'}`}><span className="block text-sm font-black">{item.label}{item.id === 'Conteúdo' && (data?.content.promotions?.length || data?.content.exceptions?.length) ? ` · ${data?.content.promotions?.length || data?.content.exceptions?.length}` : ''}</span><span className={`mt-0.5 block text-[11px] ${tab === item.id ? 'text-blue-100' : 'text-slate-400'}`}>{item.hint}</span></button>)}</div>
         </nav>
         <div className="flex min-h-0 flex-1 flex-col">
-          <nav className="flex shrink-0 overflow-x-auto border-b border-slate-200 px-3 dark:border-slate-700 lg:hidden">{tabs.map((item) => <button type="button" key={item.id} onClick={() => setTab(item.id)} className={`shrink-0 border-b-2 px-3 py-3 text-sm font-bold ${tab === item.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>{item.label.replace(/^\d\. /, '')}</button>)}</nav>
+          <nav className="flex shrink-0 overflow-x-auto border-b border-slate-200 px-3 dark:border-slate-700 lg:hidden" aria-label="Etapas da configuração">{tabs.map((item) => <button type="button" key={item.id} onClick={() => setTab(item.id)} className={`shrink-0 border-b-2 px-3 py-3 text-sm font-bold ${tab === item.id ? 'border-blue-600 text-blue-600' : 'border-transparent text-slate-500'}`}>{item.label.replace(/^\d\. /, '')}{item.id === 'Conteúdo' && (data?.content.promotions?.length || data?.content.exceptions?.length) ? ` · ${data?.content.promotions?.length || data?.content.exceptions?.length}` : ''}</button>)}</nav>
           <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-7">
             {loading ? <div className="space-y-4"><div className="h-8 w-56 rounded skeleton" /><div className="h-52 rounded-2xl skeleton" /></div> : <>
               {error && <p role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200">{error}</p>}
@@ -289,16 +325,13 @@ export function QueueAutomationDrawer({ queue, onClose, onChanged }: { queue: Qu
                 </div>
               </div><CustomerPreview messages={preview} queue={queue} /></div>}
 
-              {tab === 'Conteúdo' && config.queueType === 'offers_promotions' && <div className="max-w-4xl">
-                <SectionTitle eyebrow="Conteúdo da fila" title="Ofertas que o bot pode enviar" description="Envie o flyer e dê um nome claro. Ele entra no rascunho; publique quando quiser disponibilizá-lo." />
-                <section className="rounded-2xl border border-blue-100 bg-blue-50/50 p-5 dark:border-blue-900/50 dark:bg-blue-950/20"><div className="grid gap-4 sm:grid-cols-2"><Field label="Título da promoção" value={promotionTitle} required onChange={setPromotionTitle} /><label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Imagem do flyer<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setPromotionFile(event.target.files?.[0] || null)} className="mavo-field mt-1 text-sm" /></label></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-xs text-slate-500">A oferta ficará ativa por 24 horas. Você poderá publicar a nova versão quando estiver pronta.</p><button type="button" onClick={() => void createPromotion()} disabled={busy} className="mavo-button-primary">{busy ? 'Enviando…' : 'Adicionar ao rascunho'}</button></div></section>
-                <div className="mt-6 grid gap-3 sm:grid-cols-2">{data?.content.promotions?.length ? data.content.promotions.map((promotion: any) => <article key={promotion.id} className="flex gap-3 rounded-2xl border border-slate-200 p-3 dark:border-slate-700">{promotion.media?.[0]?.url ? <img src={promotion.media[0].url} alt="" className="h-20 w-20 rounded-xl object-cover" /> : <span className="flex h-20 w-20 items-center justify-center rounded-xl bg-slate-100 text-xl dark:bg-slate-800">🖼️</span>}<div className="min-w-0"><p className="truncate font-bold">{promotion.title}</p><p className="mt-1 text-xs leading-5 text-slate-500">Até {new Date(promotion.expiresAt).toLocaleString('pt-BR')}</p><span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[11px] font-bold ${promotion.archived ? 'bg-slate-100 text-slate-500' : promotion.active ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{promotion.archived ? 'Arquivada' : promotion.active ? 'Ativa' : 'Pausada'}</span></div></article>) : <p className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700">Ainda não há promoções no rascunho.</p>}</div>
-              </div>}
+              {tab === 'Conteúdo' && config.queueType === 'offers_promotions' && <QueuePromotionManager queueId={queue.id} promotions={data?.content.promotions || []} onChanged={load} />}
 
               {tab === 'Conteúdo' && config.queueType === 'business_hours_location' && <div className="max-w-5xl">
                 <SectionTitle eyebrow="Conteúdo da fila" title="Unidade, endereço e horários" description="O bot usa estas informações para responder onde a loja fica e quando ela está aberta." />
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><Field label="Nome da unidade" value={location?.store_name || location?.unit_name} required onChange={(value) => setLocationField('store_name', value)} /><Field label="Nome exibido" value={location?.display_name} onChange={(value) => setLocationField('display_name', value)} /><Field label="Telefone" value={location?.phone} onChange={(value) => setLocationField('phone', value)} /><Field label="Endereço" value={location?.address_line} required onChange={(value) => setLocationField('address_line', value)} /><Field label="Número" value={location?.unit_number} onChange={(value) => setLocationField('unit_number', value)} /><Field label="Bairro" value={location?.district || location?.neighborhood} onChange={(value) => setLocationField('district', value)} /><Field label="Cidade" value={location?.city} required onChange={(value) => setLocationField('city', value)} /><Field label="Estado" value={location?.state} required onChange={(value) => setLocationField('state', value.toUpperCase())} /><Field label="Link do Google Maps" value={location?.maps_url} onChange={(value) => setLocationField('maps_url', value)} /></div>
                 <section className="mt-7"><div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-sm font-black">Horários de funcionamento</p><p className="mt-1 text-xs text-slate-500">Desative os dias em que a unidade não abre.</p></div><button type="button" onClick={() => setHours((current) => current.map((hour) => ({ ...hour, isOpen: hour.weekday !== 0 })))} className="text-xs font-bold text-blue-600 dark:text-blue-400">Aplicar horário de semana</button></div><div className="mt-3 space-y-2">{hours.map((hour, index) => <div key={hour.weekday} className="grid grid-cols-1 items-center gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-[minmax(130px,1fr)_110px_110px_auto] dark:border-slate-700"><button type="button" onClick={() => updateHour(index, 'isOpen', !hour.isOpen)} className={`w-fit rounded-full px-3 py-1.5 text-xs font-bold ${hour.isOpen ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'}`}>{hour.isOpen ? 'Aberto' : 'Fechado'}</button><input aria-label={`Início em ${weekDays[hour.weekday]}`} type="time" disabled={!hour.isOpen} value={hour.openingTime || ''} onChange={(event) => updateHour(index, 'openingTime', event.target.value)} className="mavo-field py-2" /><input aria-label={`Fim em ${weekDays[hour.weekday]}`} type="time" disabled={!hour.isOpen} value={hour.closingTime || ''} onChange={(event) => updateHour(index, 'closingTime', event.target.value)} className="mavo-field py-2" /><span className="text-sm font-bold text-slate-700 dark:text-slate-200">{weekDays[hour.weekday]}</span></div>)}</div></section>
+                <section className="mt-7 rounded-2xl border border-slate-200 p-4 dark:border-slate-700"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-sm font-black">Exceções e datas especiais</p><p className="mt-1 text-xs text-slate-500">Cadastre feriados, fechamentos e horários especiais.</p></div></div>{data?.content.exceptions?.length ? <div className="mt-4 space-y-2">{data.content.exceptions.map((item: any) => <div key={item.id || item.calendar_date} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm dark:bg-slate-950"><span><strong>{new Date(`${item.calendar_date || item.date}T12:00:00`).toLocaleDateString('pt-BR')}</strong> · {item.title || item.note}</span><span className="text-xs font-bold text-slate-500">{item.is_closed ? 'Fechado' : `${String(item.start_time || '').slice(0, 5)}–${String(item.end_time || '').slice(0, 5)}`}</span></div>)}</div> : <p className="mt-4 text-sm text-slate-500">Nenhuma exceção cadastrada.</p>}<div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><Field label="Data" value={exceptionDate} type="date" onChange={setExceptionDate} /><Field label="Motivo" value={exceptionTitle} onChange={setExceptionTitle} /><label className="flex items-center gap-2 self-end pb-3 text-sm font-bold"><input type="checkbox" checked={exceptionClosed} onChange={(event) => setExceptionClosed(event.target.checked)} /> Fechado</label>{!exceptionClosed && <><Field label="Abre" value={exceptionStart} type="time" onChange={setExceptionStart} /><Field label="Fecha" value={exceptionEnd} type="time" onChange={setExceptionEnd} /></>}<button type="button" onClick={() => void saveException()} disabled={busy} className="mavo-button-secondary self-end">Adicionar exceção</button></div></section>
                 <button type="button" onClick={() => void saveLocation()} disabled={busy} className="mavo-button-primary mt-6">{busy ? 'Salvando…' : 'Salvar unidade e horários'}</button>
               </div>}
 
@@ -309,7 +342,7 @@ export function QueueAutomationDrawer({ queue, onClose, onChanged }: { queue: Qu
               {tab === 'Histórico' && <div className="max-w-3xl"><SectionTitle eyebrow="Rastreabilidade" title="Alterações recentes" description="Acompanhe quem mudou o conteúdo e quando isso aconteceu." /><div className="space-y-3">{data?.history?.length ? data.history.map((item) => <article key={item.id} className="flex gap-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-700"><span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500" /><div><p className="font-bold">{item.action}</p><p className="mt-1 text-xs text-slate-500">{item.changedBy || 'Sistema'} · {new Date(item.createdAt).toLocaleString('pt-BR')}</p></div></article>) : <p className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700">Nenhuma alteração registrada nesta fila.</p>}</div></div>}
             </>}
           </div>
-          <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900 sm:px-7"><p className="hidden text-xs text-slate-500 sm:block">Salvar cria um rascunho. Publicar altera o que o cliente recebe.</p><div className="ml-auto flex flex-wrap justify-end gap-2"><button type="button" onClick={() => void discard()} disabled={busy || !hasDraft} className="mavo-button-secondary">Descartar rascunho</button><button type="button" onClick={() => void saveDraft()} disabled={busy} className="mavo-button-secondary">{busy ? 'Processando…' : 'Salvar rascunho'}</button><button type="button" onClick={() => void publish()} disabled={busy} className="mavo-button-primary">{busy ? 'Processando…' : 'Publicar no bot'}</button></div></footer>
+          <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900 sm:px-7"><p className="hidden text-xs text-slate-500 sm:block">{hasUnsavedChanges ? 'Há alterações não salvas.' : hasDraft ? 'Rascunho aguardando publicação.' : data?.published?.updatedAt ? `Última publicação: ${new Date(data.published.updatedAt).toLocaleString('pt-BR')}` : 'Salvar cria um rascunho. Publicar altera o que o cliente recebe.'}</p><div className="ml-auto flex flex-wrap justify-end gap-2"><button type="button" onClick={requestClose} disabled={busy} className="mavo-button-secondary">Cancelar</button><button type="button" onClick={() => setTab('Prévia')} disabled={busy} className="mavo-button-secondary">Testar automação</button><button type="button" onClick={() => void saveDraft()} disabled={busy} className="mavo-button-secondary">{busy ? 'Salvando…' : 'Salvar rascunho'}</button><button type="button" onClick={() => void publish()} disabled={busy || isIncomplete} className="mavo-button-primary">{busy ? 'Publicando…' : 'Publicar alterações'}</button></div></footer>
         </div>
       </div>
     </aside>

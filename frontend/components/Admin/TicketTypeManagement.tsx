@@ -4,7 +4,7 @@ import { Icons } from '../../constants';
 import { Dialog } from '../ui/Dialog';
 import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
 import { StatusBadge } from '../ui/StatusBadge';
-import { QueueAutomationDrawer } from './QueueAutomationDrawer';
+import { QueueAutomationDrawer, type QueueAutomationTab } from './QueueAutomationDrawer';
 
 type Queue = {
   id: string;
@@ -28,27 +28,6 @@ type StoreSettings = {
   offersImageUrl: string | null;
   phone: string | null;
 };
-
-type BusinessHourDraft = {
-  weekday: number;
-  startTime: string;
-  endTime: string;
-  timezone: string;
-  isActive: boolean;
-};
-
-const WEEKDAY_NAMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
-const DEFAULT_HOURS: BusinessHourDraft[] = WEEKDAY_NAMES.map((_, weekday) => ({
-  weekday,
-  startTime: weekday === 0 ? '08:00' : '07:00',
-  endTime: weekday === 0 ? '14:00' : '21:00',
-  timezone: 'America/Sao_Paulo',
-  isActive: weekday !== 0,
-}));
-
-function hoursFromApi(hours: BusinessHourDraft[]): BusinessHourDraft[] {
-  return DEFAULT_HOURS.map((fallback) => hours.find((item) => item.weekday === fallback.weekday) || fallback);
-}
 
 const QueueStatusBadge: React.FC<{ queue: Queue; label?: string; className?: string }> = ({ queue, label, className = '' }) => (
   <StatusBadge tone={queue.isActive ? 'success' : 'neutral'} className={className}>
@@ -77,11 +56,10 @@ const TicketTypeManagement: React.FC = () => {
   const [notice, setNotice] = useState('');
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const [configuringQueue, setConfiguringQueue] = useState<Queue | null>(null);
+  const [configuringQueue, setConfiguringQueue] = useState<{ queue: Queue; tab: QueueAutomationTab } | null>(null);
   const requestRef = useRef(0);
 
   const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
-  const [storeHours, setStoreHours] = useState<BusinessHourDraft[]>(DEFAULT_HOURS);
   const [storeLoading, setStoreLoading] = useState(true);
   const [storeError, setStoreError] = useState('');
 
@@ -92,14 +70,6 @@ const TicketTypeManagement: React.FC = () => {
   const [identitySaving, setIdentitySaving] = useState(false);
   const [identityError, setIdentityError] = useState('');
   const [identityNotice, setIdentityNotice] = useState('');
-
-  const [formOffersText, setFormOffersText] = useState('');
-  const [formOffersUrl, setFormOffersUrl] = useState('');
-  const [formAddress, setFormAddress] = useState('');
-  const [formMapsUrl, setFormMapsUrl] = useState('');
-  const [formPhone, setFormPhone] = useState('');
-  const [formHours, setFormHours] = useState<BusinessHourDraft[]>(DEFAULT_HOURS);
-  const [offersImageBusy, setOffersImageBusy] = useState(false);
 
   const fetchQueues = useCallback(async () => {
     const request = ++requestRef.current;
@@ -129,9 +99,8 @@ const TicketTypeManagement: React.FC = () => {
     setStoreLoading(true);
     setStoreError('');
     try {
-      const data = await apiGet<{ settings: StoreSettings; businessHours: BusinessHourDraft[] }>('/api/admin/supermarket-settings');
+      const data = await apiGet<{ settings: StoreSettings }>('/api/admin/supermarket-settings');
       setStoreSettings(data.settings);
-      setStoreHours(hoursFromApi(data.businessHours || []));
       setIdentityBotName(data.settings.botName);
       setIdentityStoreName(data.settings.storeName);
       setIdentityEnabled(data.settings.enabled);
@@ -175,41 +144,6 @@ const TicketTypeManagement: React.FC = () => {
     }
   };
 
-  const uploadOffersImage = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = '';
-    if (!file) return;
-    setOffersImageBusy(true);
-    setSubmitError('');
-    try {
-      const form = new FormData();
-      form.append('file', file);
-      const response = await apiFetch('/api/admin/supermarket-settings/offers-image', { method: 'POST', body: form });
-      const data = await response.json().catch(() => null) as { settings?: StoreSettings; error?: string } | null;
-      if (!response.ok) throw new Error(data?.error || 'Não foi possível enviar a imagem.');
-      if (data?.settings) setStoreSettings(data.settings);
-    } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Não foi possível enviar a imagem.');
-    } finally {
-      setOffersImageBusy(false);
-    }
-  };
-
-  const removeOffersImage = async () => {
-    setOffersImageBusy(true);
-    setSubmitError('');
-    try {
-      const response = await apiFetch('/api/admin/supermarket-settings/offers-image', { method: 'DELETE' });
-      const data = await response.json().catch(() => null) as { settings?: StoreSettings; error?: string } | null;
-      if (!response.ok) throw new Error(data?.error || 'Não foi possível remover a imagem.');
-      if (data?.settings) setStoreSettings(data.settings);
-    } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Não foi possível remover a imagem.');
-    } finally {
-      setOffersImageBusy(false);
-    }
-  };
-
   const openCreate = () => {
     setEditingId(null);
     setFormName('');
@@ -231,12 +165,6 @@ const TicketTypeManagement: React.FC = () => {
     setFormDefaultSlaMins(q.defaultSlaMins);
     setFormIsActive(q.isActive);
     setFormQueueType(q.queueType || (q.menuOption === 1 ? 'offers_promotions' : q.menuOption === 2 ? 'business_hours_location' : 'custom'));
-    setFormOffersText(storeSettings?.offersText || '');
-    setFormOffersUrl(storeSettings?.offersUrl || '');
-    setFormAddress(storeSettings?.address || '');
-    setFormMapsUrl(storeSettings?.mapsUrl || '');
-    setFormPhone(storeSettings?.phone || '');
-    setFormHours(storeHours);
     setSubmitError('');
     setNotice('');
     setShowModal(true);
@@ -264,27 +192,11 @@ const TicketTypeManagement: React.FC = () => {
       };
       if (editingId) {
         await apiPatch(`/api/queues/${editingId}`, body);
-        if (formMenuOption === 1) {
-          const result = await apiPatch<{ settings: StoreSettings }>('/api/admin/supermarket-settings', {
-            offersText: formOffersText.trim(),
-            offersUrl: formOffersUrl.trim(),
-          });
-          setStoreSettings(result.settings);
-        } else if (formMenuOption === 2) {
-          const result = await apiPatch<{ settings: StoreSettings; businessHours: BusinessHourDraft[] }>('/api/admin/supermarket-settings', {
-            address: formAddress.trim(),
-            mapsUrl: formMapsUrl.trim(),
-            phone: formPhone.trim(),
-            businessHours: formHours,
-          });
-          setStoreSettings(result.settings);
-          setStoreHours(hoursFromApi(result.businessHours || formHours));
-        }
       } else {
-        await apiPost('/api/queues', body);
+        await apiPost<{ queue: Queue }>('/api/queues', body);
       }
       await fetchQueues();
-      setNotice(editingId ? 'Fila atualizada com sucesso.' : 'Fila criada com sucesso.');
+      setNotice(editingId ? 'Dados básicos da fila atualizados.' : 'Fila criada. Agora configure a automação antes de disponibilizá-la ao cliente.');
       closeModal();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Erro ao salvar');
@@ -332,6 +244,7 @@ const TicketTypeManagement: React.FC = () => {
     .filter((queue) => statusFilter === 'all' || (statusFilter === 'active' ? queue.isActive : !queue.isActive))
     .slice()
     .sort((a, b) => a.menuOption - b.menuOption || a.name.localeCompare(b.name, 'pt-BR'));
+  const openAutomation = (queue: Queue, tab: QueueAutomationTab = 'Visão geral') => setConfiguringQueue({ queue, tab });
 
   return (
     <main className="mavo-page"><div className="mavo-page-content">
@@ -416,9 +329,9 @@ const TicketTypeManagement: React.FC = () => {
         <><div className="mavo-card hidden overflow-x-auto p-0 md:block">
           <table className="w-full min-w-[720px] text-left">
             <thead><tr className="border-b border-slate-200 dark:border-slate-700"><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fila</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Menu</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">SLA</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</th><th scope="col" className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ações</th></tr></thead>
-            <tbody>{filteredQueues.map((queue) => <tr key={queue.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/80 dark:hover:bg-slate-800/50"><td className="px-4 py-3"><span className="mr-3 inline-block h-3 w-3 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><span className="font-medium text-slate-800 dark:text-slate-200">{queue.name}</span></td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.menuOption}</td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.defaultSlaMins} min</td><td className="px-4 py-3"><QueueStatusBadge queue={queue} /></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2"><button type="button" onClick={() => setConfiguringQueue(queue)} className="mavo-button-primary min-h-0 px-3 py-2 text-xs">Configurar</button><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></td></tr>)}</tbody>
+            <tbody>{filteredQueues.map((queue) => <tr key={queue.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/80 dark:hover:bg-slate-800/50"><td className="px-4 py-3"><span className="mr-3 inline-block h-3 w-3 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><span className="font-medium text-slate-800 dark:text-slate-200">{queue.name}</span></td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.menuOption}</td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.defaultSlaMins} min</td><td className="px-4 py-3"><QueueStatusBadge queue={queue} /></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2"><button type="button" onClick={() => openAutomation(queue)} className="mavo-button-primary min-h-0 px-3 py-2 text-xs">Configurar</button><button type="button" onClick={() => openAutomation(queue, 'Prévia')} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Testar</button><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar dados</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></td></tr>)}</tbody>
           </table>
-        </div><div className="grid gap-3 md:hidden">{filteredQueues.map((queue) => <article key={queue.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{queue.name}</h3></div><QueueStatusBadge queue={queue} className="shrink-0" /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Opção no menu</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{queue.menuOption}</dd></div><div><dt className="font-semibold text-slate-500">SLA</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{queue.defaultSlaMins} min</dd></div></dl><div className="flex flex-wrap gap-2"><button type="button" onClick={() => setConfiguringQueue(queue)} className="mavo-button-primary min-h-0 px-3 py-2 text-xs">Configurar</button><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></article>)}</div></>
+        </div><div className="grid gap-3 md:hidden">{filteredQueues.map((queue) => <article key={queue.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{queue.name}</h3></div><QueueStatusBadge queue={queue} className="shrink-0" /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Opção no menu</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{queue.menuOption}</dd></div><div><dt className="font-semibold text-slate-500">SLA</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{queue.defaultSlaMins} min</dd></div></dl><div className="flex flex-wrap gap-2"><button type="button" onClick={() => openAutomation(queue)} className="mavo-button-primary min-h-0 px-3 py-2 text-xs">Configurar</button><button type="button" onClick={() => openAutomation(queue, 'Prévia')} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Testar</button><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar dados</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></article>)}</div></>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           {filteredQueues.map((q) => (
@@ -438,8 +351,8 @@ const TicketTypeManagement: React.FC = () => {
                       type="button"
                       onClick={() => openEdit(q)}
                       className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600"
-                      title="Editar"
-                      aria-label={`Editar fila ${q.name}`}
+                      title="Editar dados básicos"
+                      aria-label={`Editar dados básicos da fila ${q.name}`}
                     >
                       <Icons.Settings className="w-4 h-4" />
                     </button>
@@ -474,7 +387,7 @@ const TicketTypeManagement: React.FC = () => {
 
                 <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
                   <QueueStatusBadge queue={q} label={q.isActive ? 'Ativo no menu' : 'Inativo'} className="uppercase tracking-widest" />
-                  <div className="flex gap-2"><button type="button" onClick={() => setConfiguringQueue(q)} className="mavo-button-primary min-h-0 px-3 py-2 text-xs">Configurar</button><button type="button" onClick={() => setConfiguringQueue(q)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Testar</button></div>
+                  <div className="flex gap-2"><button type="button" onClick={() => openAutomation(q)} className="mavo-button-primary min-h-0 px-3 py-2 text-xs">Configurar</button><button type="button" onClick={() => openAutomation(q, 'Prévia')} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Testar</button></div>
                 </div>
               </div>
             ))}
@@ -553,71 +466,9 @@ const TicketTypeManagement: React.FC = () => {
                 <button type="button" role="switch" aria-checked={formIsActive} aria-label="Alternar fila ativa no menu do chatbot" onClick={() => setFormIsActive((value) => !value)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${formIsActive ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'}`}><span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition ${formIsActive ? 'translate-x-6' : 'translate-x-1'}`} /></button>
               </div>
 
-              {editingId && formMenuOption === 1 && (
-                <div className="space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-                  <div>
-                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">Conteúdo enviado ao cliente</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">É isso que o bot responde quando o cliente escolhe esta opção. Sem nada aqui, o bot encaminha direto para um atendente.</p>
-                  </div>
-                  <div>
-                    <label htmlFor="offers-text" className="block text-xs font-bold text-slate-500 uppercase mb-1">Texto do encarte</label>
-                    <textarea id="offers-text" value={formOffersText} onChange={(e) => setFormOffersText(e.target.value)} rows={4} maxLength={4000} className="mavo-field" placeholder="Ex.: Café, arroz e produtos de limpeza com descontos hoje." />
-                  </div>
-                  <div>
-                    <label htmlFor="offers-url" className="block text-xs font-bold text-slate-500 uppercase mb-1">Link do encarte (opcional)</label>
-                    <input id="offers-url" type="url" value={formOffersUrl} onChange={(e) => setFormOffersUrl(e.target.value)} className="mavo-field" placeholder="https://..." />
-                  </div>
-                  <div>
-                    <p className="block text-xs font-bold text-slate-500 uppercase mb-2">Imagem do encarte</p>
-                    {storeSettings?.offersImageUrl ? (
-                      <div className="flex items-center gap-3">
-                        <img src={storeSettings.offersImageUrl} alt="Prévia do encarte" className="h-16 w-16 rounded-lg object-cover" />
-                        <button type="button" onClick={() => void removeOffersImage()} disabled={offersImageBusy} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">{offersImageBusy ? 'Removendo...' : 'Remover imagem'}</button>
-                      </div>
-                    ) : (
-                      <label className="mavo-button-secondary inline-flex min-h-0 cursor-pointer px-3 py-2 text-xs">
-                        {offersImageBusy ? 'Enviando...' : 'Escolher imagem'}
-                        <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={uploadOffersImage} disabled={offersImageBusy} />
-                      </label>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {editingId && formMenuOption === 2 && (
-                <div className="space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
-                  <div>
-                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">Conteúdo enviado ao cliente</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">Endereço, mapa e horários usados na resposta automática e fora do expediente. Sem nada aqui, o bot encaminha direto para um atendente.</p>
-                  </div>
-                  <div>
-                    <label htmlFor="store-address" className="block text-xs font-bold text-slate-500 uppercase mb-1">Endereço</label>
-                    <input id="store-address" type="text" value={formAddress} onChange={(e) => setFormAddress(e.target.value)} maxLength={300} className="mavo-field" placeholder="Rua, número, bairro e cidade" />
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label htmlFor="store-maps-url" className="block text-xs font-bold text-slate-500 uppercase mb-1">Link do mapa</label>
-                      <input id="store-maps-url" type="url" value={formMapsUrl} onChange={(e) => setFormMapsUrl(e.target.value)} className="mavo-field" placeholder="https://maps.google.com/..." />
-                    </div>
-                    <div>
-                      <label htmlFor="store-phone" className="block text-xs font-bold text-slate-500 uppercase mb-1">Telefone</label>
-                      <input id="store-phone" type="text" value={formPhone} onChange={(e) => setFormPhone(e.target.value)} maxLength={40} className="mavo-field" placeholder="(00) 0000-0000" />
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-slate-500 uppercase mb-2">Horário de funcionamento</p>
-                    <div className="space-y-2">
-                      {formHours.map((item) => (
-                        <div key={item.weekday} className="flex flex-wrap items-center gap-2 text-xs">
-                          <span className="w-20 shrink-0 font-semibold text-slate-600 dark:text-slate-300">{WEEKDAY_NAMES[item.weekday]}</span>
-                          <input type="time" value={item.startTime} disabled={!item.isActive} aria-label={`Horário de abertura de ${WEEKDAY_NAMES[item.weekday]}`} onChange={(e) => setFormHours((rows) => rows.map((row) => (row.weekday === item.weekday ? { ...row, startTime: e.target.value } : row)))} className="mavo-field w-auto py-1.5" />
-                          <span className="text-slate-400">até</span>
-                          <input type="time" value={item.endTime} disabled={!item.isActive} aria-label={`Horário de fechamento de ${WEEKDAY_NAMES[item.weekday]}`} onChange={(e) => setFormHours((rows) => rows.map((row) => (row.weekday === item.weekday ? { ...row, endTime: e.target.value } : row)))} className="mavo-field w-auto py-1.5" />
-                          <button type="button" role="switch" aria-checked={item.isActive} aria-label={`Alternar funcionamento de ${WEEKDAY_NAMES[item.weekday]}`} onClick={() => setFormHours((rows) => rows.map((row) => (row.weekday === item.weekday ? { ...row, isActive: !row.isActive } : row)))} className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${item.isActive ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'}`}><span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition ${item.isActive ? 'translate-x-6' : 'translate-x-1'}`} /></button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+              {editingId && (
+                <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-100">
+                  O conteúdo e as mensagens do cliente são configurados separadamente, em etapas, pelo botão <strong>Configurar automação</strong>. Assim, salvar estes dados básicos não publica nada por engano.
                 </div>
               )}
 
@@ -643,7 +494,7 @@ const TicketTypeManagement: React.FC = () => {
             </div>
         </Dialog>
       )}
-      {configuringQueue && <QueueAutomationDrawer queue={configuringQueue} onClose={() => setConfiguringQueue(null)} onChanged={() => { void fetchQueues(); }} />}
+      {configuringQueue && <QueueAutomationDrawer key={`${configuringQueue.queue.id}-${configuringQueue.tab}`} queue={configuringQueue.queue} initialTab={configuringQueue.tab} onClose={() => setConfiguringQueue(null)} onChanged={() => { void fetchQueues(); }} />}
       {confirmRestore && (
         <Dialog title="Restaurar menu padrão" description="As 6 filas padrão do supermercado serão criadas ou reativadas com o nome, cor e SLA originais. Filas que você personalizou continuam como estão." onClose={() => { if (!restoring) setConfirmRestore(false); }}>
           <div className="p-6"><p className="text-sm text-slate-600 dark:text-slate-300">Use isso se quiser trazer de volta uma opção padrão que foi removida ou desativada.</p><div className="mt-5 flex justify-end gap-3"><button type="button" disabled={restoring} onClick={() => setConfirmRestore(false)} className="mavo-button-secondary">Cancelar</button><button type="button" disabled={restoring} onClick={() => void restoreDefaultMenu()} className="mavo-button-primary">{restoring ? 'Restaurando...' : 'Restaurar menu padrão'}</button></div></div>
