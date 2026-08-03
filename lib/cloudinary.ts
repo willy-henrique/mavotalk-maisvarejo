@@ -1,9 +1,20 @@
 import { v2 as cloudinary } from "cloudinary";
 
 const cleanEnv = (value: string | undefined) => String(value || "").trim().replace(/^(['"])(.*)\1$/, "$2");
-const cloudName = cleanEnv(process.env.CLOUDINARY_CLOUD_NAME);
-const apiKey = cleanEnv(process.env.CLOUDINARY_API_KEY);
-const apiSecret = cleanEnv(process.env.CLOUDINARY_API_SECRET);
+function fromCloudinaryUrl(value: string) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "cloudinary:") return null;
+    return { cloudName: decodeURIComponent(url.hostname), apiKey: decodeURIComponent(url.username), apiSecret: decodeURIComponent(url.password) };
+  } catch {
+    return null;
+  }
+}
+const urlConfig = fromCloudinaryUrl(cleanEnv(process.env.CLOUDINARY_URL));
+const cloudName = urlConfig?.cloudName || cleanEnv(process.env.CLOUDINARY_CLOUD_NAME);
+const apiKey = urlConfig?.apiKey || cleanEnv(process.env.CLOUDINARY_API_KEY);
+const apiSecret = urlConfig?.apiSecret || cleanEnv(process.env.CLOUDINARY_API_SECRET);
 
 function cloudinaryError(error: unknown): Error {
   if (error instanceof Error) return error;

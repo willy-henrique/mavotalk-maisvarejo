@@ -26,13 +26,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   try {
     upload = await uploadBufferToCloudinary(Buffer.from(bytes), image.mimeType, `willtalk/${auth.session.organizationId}/queues/${id}/promotions`);
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "unknown_error";
+    const credentialsRejected = /\((?:401|403)\)/.test(errorMessage) || /invalid (?:api key|signature)/i.test(errorMessage);
     logger.error({
       organizationId: auth.session.organizationId,
       queueId: id,
       errorCode: error instanceof Error ? error.name : "CLOUDINARY_UPLOAD_FAILED",
-      errorMessage: error instanceof Error ? error.message.slice(0, 240) : "unknown_error",
+      errorMessage: errorMessage.slice(0, 240),
     }, "queue_promotion_image_upload_failed");
-    return NextResponse.json({ error: "Não foi possível enviar o flyer. Verifique a configuração do armazenamento de imagens e tente novamente." }, { status: 502 });
+    return NextResponse.json({ error: credentialsRejected ? "As credenciais do Cloudinary foram rejeitadas. Atualize CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY e CLOUDINARY_API_SECRET no ambiente da API e faça um novo deploy." : "Não foi possível enviar o flyer. Verifique a configuração do armazenamento de imagens e tente novamente." }, { status: credentialsRejected ? 503 : 502 });
   }
   if (!upload) return NextResponse.json({ error: "Armazenamento de imagens indisponível." }, { status: 503 });
   try {
