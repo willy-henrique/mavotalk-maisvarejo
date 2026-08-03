@@ -21,7 +21,7 @@ import { logger } from "@/lib/logger";
 import { decideSupermarketBot } from "@/lib/supermarket-bot";
 import { getSupermarketBotConfigForOrganization } from "@/lib/supermarket-settings";
 import { getOrderForCustomer, listValidPromotions } from "@/lib/commerce";
-import { formatBusinessHoursResponse, formatPromotionResponse, type BotOutboundMessage } from "@/lib/queue-automation-runtime";
+import { deliverInOrder, formatBusinessHoursResponse, formatPromotionResponse, type BotOutboundMessage } from "@/lib/queue-automation-runtime";
 import { getPublishedQueueConfiguration } from "@/lib/queue-automation";
 import { applySupermarketQueuePreset } from "@/lib/supermarket-setup";
 import {
@@ -928,8 +928,7 @@ export async function POST(request: Request) {
   const replyPhone = String(conversation.contactPhone || normalizedPhone);
   if (shouldReply && replyText) {
     const messages = replySequence?.length ? replySequence : [{ text: replyText, mediaUrl: replyMediaUrl }];
-    const results = await Promise.all(messages.map((message) => sendReplyToWhatsApp(replyPhone, message.text, organizationId, String(conversation.id), message.mediaUrl)));
-    replyDelivered = results.every(Boolean);
+    replyDelivered = await deliverInOrder(messages, (message) => sendReplyToWhatsApp(replyPhone, message.text, organizationId, String(conversation.id), message.mediaUrl));
   }
 
   // ── OUTBOUND WEBHOOKS ──────────────────────────────────────────────
@@ -1064,9 +1063,9 @@ async function sendReplyToWhatsApp(
 ): Promise<boolean> {
   const dryRun = String(process.env.WILLTALK_DRY_RUN_WHATSAPP || "").toLowerCase() === "true";
   if (dryRun) {
-    // A resposta de ofertas pode conter várias mensagens enviadas em paralelo.
-    // O identificador de simulação precisa ser único para respeitar a mesma
-    // garantia de idempotência do provedor sem inventar IDs de produção.
+    // A resposta de ofertas é uma sequência de várias mensagens. O identificador
+    // de simulação precisa ser único para respeitar a mesma garantia de
+    // idempotência do provedor sem inventar IDs de produção.
     const externalId = `dryrun-${randomUUID()}`;
     await addOutboundMessage(organizationId, conversationId, text, externalId, {
       skipStatusUpdate: true,

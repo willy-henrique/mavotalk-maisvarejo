@@ -2,6 +2,20 @@ import { getActivePromotions, getPublishedQueueConfiguration } from "@/lib/queue
 import type { BusinessHoursAutomationConfig, OffersAutomationConfig } from "@/lib/queue-automation-schemas";
 
 export type BotOutboundMessage = { text: string; mediaUrl?: string | null };
+
+/**
+ * Entrega a sequência do bot uma mensagem por vez. O WhatsApp exibe na ordem em que
+ * recebe, então disparar os flyers em paralelo embaralha o encarte na conversa do
+ * cliente. Uma falha isolada não interrompe o restante da sequência.
+ */
+export async function deliverInOrder<T extends BotOutboundMessage>(messages: readonly T[], send: (message: T) => Promise<boolean>): Promise<boolean> {
+  let delivered = true;
+  for (const message of messages) {
+    const sent = await send(message).catch(() => false);
+    if (!sent) delivered = false;
+  }
+  return delivered;
+}
 const footer = (config: { showReturnToMenu: boolean; allowHumanHandoff: boolean }) => {
   const choices = [config.showReturnToMenu ? "Digite *0* para voltar ao menu" : null, config.allowHumanHandoff ? "Digite *6* para falar com a nossa equipe" : null].filter(Boolean);
   return choices.length ? `\n\n${choices.join(" ou ")}.` : "";
