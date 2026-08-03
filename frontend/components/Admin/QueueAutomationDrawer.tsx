@@ -325,7 +325,7 @@ export function QueueAutomationDrawer({ queue, initialTab = 'Visão geral', onCl
                 </div>
               </div><CustomerPreview messages={preview} queue={queue} /></div>}
 
-              {tab === 'Conteúdo' && config.queueType === 'offers_promotions' && <QueuePromotionManager queueId={queue.id} promotions={data?.content.promotions || []} onChanged={load} />}
+              {tab === 'Conteúdo' && config.queueType === 'offers_promotions' && <QueuePromotionManager queueId={queue.id} promotions={data?.content.promotions || []} published={Boolean(data?.published)} onChanged={load} />}
 
               {tab === 'Conteúdo' && config.queueType === 'business_hours_location' && <div className="max-w-5xl">
                 <SectionTitle eyebrow="Conteúdo da fila" title="Unidade, endereço e horários" description="O bot usa estas informações para responder onde a loja fica e quando ela está aberta." />
