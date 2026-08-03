@@ -350,10 +350,10 @@ const TicketTypeManagement: React.FC = () => {
                   <div className="flex gap-2 opacity-0 transition-all group-hover:opacity-100 group-focus-within:opacity-100">
                     <button
                       type="button"
-                      onClick={() => openEdit(q)}
+                      onClick={() => openAutomation(q)}
                       className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600"
-                      title="Editar dados básicos"
-                      aria-label={`Editar dados básicos da fila ${q.name}`}
+                      title="Configurar automação"
+                      aria-label={`Configurar automação da fila ${q.name}`}
                     >
                       <Icons.Settings className="w-4 h-4" />
                     </button>
