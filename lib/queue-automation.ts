@@ -89,27 +89,34 @@ export async function getQueueAutomation(organizationId: string, queueId: string
   return rowConfig({ id: raw.configuration_id, queue_type: raw.config_queue_type, status: raw.config_status, version: raw.config_version, general_config: raw.general_config, automation_config: raw.automation_config, content_snapshot: raw.content_snapshot, published_at: raw.published_at, updated_at: raw.config_updated_at }, raw);
 }
 
+/**
+ * Corpo do salvamento sem abrir transação própria, para que "publicar" possa
+ * gravar e publicar de uma vez só. Aninhar `withTenantTransaction` travaria:
+ * a transação de fora já segura o `FOR UPDATE` da fila.
+ */
+async function saveDraftInTransaction(client: import("pg").PoolClient, organizationId: string, queueId: string, userId: string, parsed: QueueConfigurationInput) {
+  const queueResult = await client.query<Row>("SELECT * FROM queues WHERE organization_id=$1 AND id=$2 FOR UPDATE", [organizationId, queueId]);
+  if (!queueResult.rowCount) return null;
+  // Os dados básicos valem imediatamente: é a tabela `queues` que o card do
+  // painel e o menu enviado ao cliente leem. Deixá-los apenas no rascunho fazia
+  // a posição configurada não mudar em lugar nenhum até uma publicação.
+  const menuOptionSwap = await freeMenuOptionSlot(client, organizationId, queueId, parsed.generalConfig.menuOption);
+  const queueUpdate = await client.query<Row>("UPDATE queues SET name=$3,menu_option=$4,color_hex=$5,default_sla_mins=$6,is_active=$7,queue_type=$8,updated_at=now() WHERE organization_id=$1 AND id=$2 RETURNING *", [organizationId, queueId, parsed.generalConfig.name, parsed.generalConfig.menuOption, parsed.generalConfig.colorHex, parsed.generalConfig.defaultSlaMins, parsed.generalConfig.isActive, parsed.queueType]);
+  const queue = queueUpdate.rows[0] || queueResult.rows[0];
+  const old = await client.query<Row>("SELECT * FROM queue_configurations WHERE organization_id=$1 AND queue_id=$2 AND status='draft' FOR UPDATE", [organizationId, queueId]);
+  const previous = old.rows[0] ? { generalConfig: old.rows[0].general_config, automationConfig: old.rows[0].automation_config } : null;
+  const saved = await client.query<Row>(`INSERT INTO queue_configurations (organization_id,queue_id,queue_type,status,version,general_config,automation_config,created_by,updated_by)
+    VALUES ($1,$2,$3,'draft',1,$4::jsonb,$5::jsonb,$6,$6)
+    ON CONFLICT (organization_id,queue_id,status) DO UPDATE SET queue_type=EXCLUDED.queue_type,general_config=EXCLUDED.general_config,automation_config=EXCLUDED.automation_config,updated_by=EXCLUDED.updated_by,updated_at=now()
+    RETURNING *`, [organizationId, queueId, parsed.queueType, JSON.stringify(parsed.generalConfig), JSON.stringify(parsed.automationConfig), userId]);
+  await client.query(`INSERT INTO queue_configuration_history (organization_id,queue_id,configuration_version,action,previous_value,new_value,changed_by)
+    VALUES ($1,$2,$3,'save_draft',$4::jsonb,$5::jsonb,$6)`, [organizationId, queueId, Number(saved.rows[0].version), JSON.stringify(previous), JSON.stringify({ generalConfig: parsed.generalConfig, automationConfig: parsed.automationConfig }), userId]);
+  return { configuration: rowConfig(saved.rows[0], queue), menuOptionSwap };
+}
+
 export async function saveQueueAutomationDraft(organizationId: string, queueId: string, userId: string, input: QueueConfigurationInput) {
   const parsed = queueConfigurationInputSchema.parse(input);
-  return withTenantTransaction(organizationId, async (client) => {
-    const queueResult = await client.query<Row>("SELECT * FROM queues WHERE organization_id=$1 AND id=$2 FOR UPDATE", [organizationId, queueId]);
-    if (!queueResult.rowCount) return null;
-    // Os dados básicos valem imediatamente: é a tabela `queues` que o card do
-    // painel e o menu enviado ao cliente leem. Deixá-los apenas no rascunho fazia
-    // a posição configurada não mudar em lugar nenhum até uma publicação.
-    const menuOptionSwap = await freeMenuOptionSlot(client, organizationId, queueId, parsed.generalConfig.menuOption);
-    const queueUpdate = await client.query<Row>("UPDATE queues SET name=$3,menu_option=$4,color_hex=$5,default_sla_mins=$6,is_active=$7,queue_type=$8,updated_at=now() WHERE organization_id=$1 AND id=$2 RETURNING *", [organizationId, queueId, parsed.generalConfig.name, parsed.generalConfig.menuOption, parsed.generalConfig.colorHex, parsed.generalConfig.defaultSlaMins, parsed.generalConfig.isActive, parsed.queueType]);
-    const queue = queueUpdate.rows[0] || queueResult.rows[0];
-    const old = await client.query<Row>("SELECT * FROM queue_configurations WHERE organization_id=$1 AND queue_id=$2 AND status='draft' FOR UPDATE", [organizationId, queueId]);
-    const previous = old.rows[0] ? { generalConfig: old.rows[0].general_config, automationConfig: old.rows[0].automation_config } : null;
-    const saved = await client.query<Row>(`INSERT INTO queue_configurations (organization_id,queue_id,queue_type,status,version,general_config,automation_config,created_by,updated_by)
-      VALUES ($1,$2,$3,'draft',1,$4::jsonb,$5::jsonb,$6,$6)
-      ON CONFLICT (organization_id,queue_id,status) DO UPDATE SET queue_type=EXCLUDED.queue_type,general_config=EXCLUDED.general_config,automation_config=EXCLUDED.automation_config,updated_by=EXCLUDED.updated_by,updated_at=now()
-      RETURNING *`, [organizationId, queueId, parsed.queueType, JSON.stringify(parsed.generalConfig), JSON.stringify(parsed.automationConfig), userId]);
-    await client.query(`INSERT INTO queue_configuration_history (organization_id,queue_id,configuration_version,action,previous_value,new_value,changed_by)
-      VALUES ($1,$2,$3,'save_draft',$4::jsonb,$5::jsonb,$6)`, [organizationId, queueId, Number(saved.rows[0].version), JSON.stringify(previous), JSON.stringify({ generalConfig: parsed.generalConfig, automationConfig: parsed.automationConfig }), userId]);
-    return { configuration: rowConfig(saved.rows[0], queue), menuOptionSwap };
-  });
+  return withTenantTransaction(organizationId, (client) => saveDraftInTransaction(client, organizationId, queueId, userId, parsed));
 }
 
 async function validatePublish(client: import("pg").PoolClient, organizationId: string, queueId: string, input: QueueConfigurationInput) {
@@ -128,8 +135,18 @@ async function validatePublish(client: import("pg").PoolClient, organizationId: 
   return errors;
 }
 
-export async function publishQueueAutomation(organizationId: string, queueId: string, userId: string) {
+/**
+ * Publicar aceita o conteúdo em edição: quem clica em "Publicar alterações" com
+ * mudanças na tela espera que elas entrem no ar, não que sejam ignoradas em favor
+ * do último rascunho gravado. Gravar e publicar acontecem na mesma transação —
+ * se a validação barrar a publicação, o rascunho salvo continua lá.
+ */
+export async function publishQueueAutomation(organizationId: string, queueId: string, userId: string, draftInput?: QueueConfigurationInput) {
+  const parsedDraft = draftInput ? queueConfigurationInputSchema.parse(draftInput) : null;
   return withTenantTransaction(organizationId, async (client) => {
+    if (parsedDraft && !(await saveDraftInTransaction(client, organizationId, queueId, userId, parsedDraft))) {
+      return { configuration: null, errors: { queue: "Fila não encontrada." } };
+    }
     const queueResult = await client.query<Row>("SELECT * FROM queues WHERE organization_id=$1 AND id=$2 FOR UPDATE", [organizationId, queueId]);
     if (!queueResult.rowCount) return { configuration: null, errors: { queue: "Fila não encontrada." } };
     const draftResult = await client.query<Row>("SELECT * FROM queue_configurations WHERE organization_id=$1 AND queue_id=$2 AND status='draft' FOR UPDATE", [organizationId, queueId]);

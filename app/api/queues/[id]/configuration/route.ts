@@ -43,9 +43,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const denied = await requireMenuPermission(result.session, "admin_types", "update"); if (denied) return denied;
   const { id } = await context.params; const action = new URL(request.url).searchParams.get("action");
   if (action === "publish") {
+    // O corpo é opcional: quando vem, publicar também grava o que está na tela.
+    const body = await request.json().catch(() => null);
+    const draft = body === null || body === undefined ? null : queueConfigurationInputSchema.safeParse(body);
+    if (draft && !draft.success) return NextResponse.json({ error: "Dados inválidos.", details: draft.error.flatten() }, { status: 422 });
     try {
-      const published = await publishQueueAutomation(result.session.organizationId, id, result.session.userId);
-      return published.configuration ? NextResponse.json(published) : NextResponse.json(published, { status: 422 });
+      const published = await publishQueueAutomation(result.session.organizationId, id, result.session.userId, draft?.data);
+      if (published.configuration) return NextResponse.json(published);
+      // Sem um `error` em texto a UI mostraria só "Unprocessable Entity" e o
+      // motivo real da recusa ("cadastre o endereço", etc.) se perderia.
+      return NextResponse.json({ ...published, error: Object.values(published.errors).join(" ") }, { status: 422 });
     } catch (error) {
       if (isMenuOptionConflict(error)) return NextResponse.json({ error: menuOptionConflictMessage(null) }, { status: 409 });
       throw error;

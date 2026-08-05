@@ -23,7 +23,6 @@ export const MENU_ITEMS: MenuItemDefinition[] = [
   { id: "admin_business_access", label: "Acessos gerenciais" },
   { id: "admin_users", label: "Equipe" },
   { id: "admin_types", label: "Filas e automações" },
-  { id: "admin_promotions", label: "Promoções" },
   { id: "admin_orders", label: "Pedidos" },
   { id: "admin_quick_replies", label: "Respostas Rápidas" },
   { id: "admin_menu_settings", label: "Menu do painel", lockedForAdmin: true },
@@ -40,7 +39,6 @@ const DEFAULT_VISIBILITY: Record<string, Record<MenuRole, boolean>> = {
   admin_business_access: { admin: true, gestor: false, atendente: false },
   admin_users: { admin: true, gestor: false, atendente: false },
   admin_types: { admin: true, gestor: false, atendente: false },
-  admin_promotions: { admin: true, gestor: false, atendente: false },
   admin_orders: { admin: true, gestor: false, atendente: false },
   admin_quick_replies: { admin: true, gestor: false, atendente: false },
   admin_menu_settings: { admin: true, gestor: false, atendente: false },
@@ -69,7 +67,6 @@ const DEFAULT_PERMISSIONS: Record<string, Record<MenuPermissionAction, Record<Me
   admin_business_access: { read: ADMIN_ONLY, create: ADMIN_ONLY, update: ADMIN_ONLY, delete: ADMIN_ONLY, admin: ADMIN_ONLY },
   admin_users: { read: ADMIN_ONLY, create: ADMIN_ONLY, update: ADMIN_ONLY, delete: ADMIN_ONLY, admin: ADMIN_ONLY },
   admin_types: { read: EVERYONE, create: CAN_MANAGE, update: CAN_MANAGE, delete: CAN_MANAGE, admin: CAN_MANAGE },
-  admin_promotions: { read: CAN_MANAGE, create: CAN_MANAGE, update: CAN_MANAGE, delete: CAN_MANAGE, admin: CAN_MANAGE },
   admin_orders: { read: CAN_MANAGE, create: CAN_MANAGE, update: CAN_MANAGE, delete: NONE, admin: CAN_MANAGE },
   admin_quick_replies: { read: EVERYONE, create: CAN_MANAGE, update: CAN_MANAGE, delete: CAN_MANAGE, admin: CAN_MANAGE },
   // Administradores não podem remover o próprio acesso a esta política.

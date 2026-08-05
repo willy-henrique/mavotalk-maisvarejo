@@ -225,14 +225,20 @@ export function QueueAutomationDrawer({ queue, initialTab = 'Visão geral', onCl
 
   const publish = async () => {
     setBusy(true); setError(''); setNotice('');
+    let failure = '';
     try {
-      const result = await apiPost<{ configuration?: Config; errors?: Record<string, string> }>(`/api/queues/${queue.id}/configuration?action=publish`);
+      // Publicar envia o que está na tela: salvar antes deixou de ser obrigatório.
+      const result = await apiPost<{ configuration?: Config; errors?: Record<string, string> }>(`/api/queues/${queue.id}/configuration?action=publish`, { queueType: config.queueType, generalConfig: config.generalConfig, automationConfig: config.automationConfig });
       if (result.errors && Object.keys(result.errors).length) throw new Error(Object.values(result.errors).join(' '));
-      setNotice('Tudo certo: a nova versão já está valendo no bot.');
-      onChanged();
-      await load();
-    } catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível publicar.'); }
-    finally { setBusy(false); }
+    } catch (err) { failure = err instanceof Error ? err.message : 'Não foi possível publicar.'; }
+    // Mesmo com a publicação recusada os dados básicos foram gravados, então a
+    // lista e o editor precisam refletir o estado real do banco. O recado vem
+    // depois do recarregamento porque `load` limpa a área de mensagens.
+    onChanged();
+    await load();
+    if (failure) setError(failure);
+    else setNotice('Tudo certo: alterações salvas e já valendo no bot.');
+    setBusy(false);
   };
 
   const discard = async () => {

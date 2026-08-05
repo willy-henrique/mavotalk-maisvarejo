@@ -93,6 +93,24 @@ export async function getSupermarketBotConfigForOrganization(organizationId: str
   return getSupermarketSettings(organizationId);
 }
 
+/**
+ * Sem nome gravado o bot se apresenta com o rótulo genérico do fallback
+ * ("Supermercado"), e no painel isso é indistinguível de um nome escolhido de
+ * verdade. O painel usa esta informação para pedir a configuração do nome real.
+ */
+export async function isStoreNameConfigured(organizationId: string): Promise<boolean> {
+  try {
+    const result = await queryTenantDatabase<{ store_name: unknown }>(
+      organizationId,
+      "SELECT store_name FROM organizations WHERE id = $1 LIMIT 1",
+      [organizationId],
+    );
+    return Boolean(nullable(result.rows[0]?.store_name));
+  } catch {
+    return false;
+  }
+}
+
 export async function updateSupermarketSettings(
   organizationId: string,
   input: Partial<SupermarketSettings>,

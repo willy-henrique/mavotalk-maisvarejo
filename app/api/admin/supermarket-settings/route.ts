@@ -3,6 +3,7 @@ import { requireSupermarketAdmin } from "@/lib/supermarket-admin-auth";
 import {
   getConfiguredBusinessHours,
   getSupermarketSettings,
+  isStoreNameConfigured,
   updateSupermarketConfiguration,
 } from "@/lib/supermarket-settings";
 import { parseBusinessHoursPatch, parseSupermarketSettingsPatch } from "@/lib/supermarket-settings-validation";
@@ -10,11 +11,12 @@ import { parseBusinessHoursPatch, parseSupermarketSettingsPatch } from "@/lib/su
 export async function GET(request: Request) {
   const auth = await requireSupermarketAdmin(request);
   if (auth.error || !auth.session) return auth.error;
-  const [settings, businessHours] = await Promise.all([
+  const [settings, businessHours, storeNameConfigured] = await Promise.all([
     getSupermarketSettings(auth.session.organizationId),
     getConfiguredBusinessHours(auth.session.organizationId),
+    isStoreNameConfigured(auth.session.organizationId),
   ]);
-  return NextResponse.json({ settings, businessHours });
+  return NextResponse.json({ settings, businessHours, storeNameConfigured });
 }
 
 export async function PATCH(request: Request) {

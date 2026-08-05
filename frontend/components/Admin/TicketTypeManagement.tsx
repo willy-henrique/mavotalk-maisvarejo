@@ -81,6 +81,7 @@ const TicketTypeManagement: React.FC = () => {
   const [identitySaving, setIdentitySaving] = useState(false);
   const [identityError, setIdentityError] = useState('');
   const [identityNotice, setIdentityNotice] = useState('');
+  const [storeNameConfigured, setStoreNameConfigured] = useState(true);
 
   const fetchQueues = useCallback(async () => {
     const request = ++requestRef.current;
@@ -110,8 +111,9 @@ const TicketTypeManagement: React.FC = () => {
     setStoreLoading(true);
     setStoreError('');
     try {
-      const data = await apiGet<{ settings: StoreSettings }>('/api/admin/supermarket-settings');
+      const data = await apiGet<{ settings: StoreSettings; storeNameConfigured?: boolean }>('/api/admin/supermarket-settings');
       setStoreSettings(data.settings);
+      setStoreNameConfigured(data.storeNameConfigured !== false);
       setIdentityBotName(data.settings.botName);
       setIdentityStoreName(data.settings.storeName);
       setIdentityEnabled(data.settings.enabled);
@@ -147,7 +149,8 @@ const TicketTypeManagement: React.FC = () => {
         aiFallbackEnabled: identityAiFallback,
       });
       setStoreSettings(result.settings);
-      setIdentityNotice('Identidade do bot salva com sucesso.');
+      setStoreNameConfigured(true);
+      setIdentityNotice(`Pronto: o bot passa a se apresentar como assistente do ${storeName}.`);
     } catch (error) {
       setIdentityError(error instanceof Error ? error.message : 'Não foi possível salvar.');
     } finally {
@@ -285,8 +288,13 @@ const TicketTypeManagement: React.FC = () => {
       </div>
 
       <section className="mavo-card mb-8 p-5">
-        <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Identidade e automação do bot</h3>
+        <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Nome do supermercado e identidade do bot</h3>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Usados em toda mensagem do bot no WhatsApp. Endereço, horários e ofertas ficam dentro de cada fila correspondente, abaixo.</p>
+        {!storeLoading && !storeError && !storeNameConfigured && (
+          <p role="status" className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+            O nome do supermercado ainda não foi configurado: o bot está se apresentando com o rótulo padrão <strong>“{storeSettings?.storeName}”</strong> para os clientes. Escreva o nome real abaixo e salve.
+          </p>
+        )}
         {storeLoading ? (
           <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Carregando…</p>
         ) : storeError ? (
@@ -295,12 +303,14 @@ const TicketTypeManagement: React.FC = () => {
           <form onSubmit={saveIdentity} className="mt-4 space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label htmlFor="identity-bot-name" className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do assistente</label>
-                <input id="identity-bot-name" type="text" value={identityBotName} onChange={(e) => setIdentityBotName(e.target.value)} maxLength={80} className="mavo-field" required />
+                <label htmlFor="identity-store-name" className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do supermercado</label>
+                <input id="identity-store-name" type="text" value={identityStoreName} onChange={(e) => setIdentityStoreName(e.target.value)} maxLength={160} placeholder="Ex.: Supermercado Bom Preço" className="mavo-field" required />
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Aparece em toda mensagem: “assistente virtual do {identityStoreName.trim() || '…'}”.</p>
               </div>
               <div>
-                <label htmlFor="identity-store-name" className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome da loja</label>
-                <input id="identity-store-name" type="text" value={identityStoreName} onChange={(e) => setIdentityStoreName(e.target.value)} maxLength={160} className="mavo-field" required />
+                <label htmlFor="identity-bot-name" className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do assistente</label>
+                <input id="identity-bot-name" type="text" value={identityBotName} onChange={(e) => setIdentityBotName(e.target.value)} maxLength={80} className="mavo-field" required />
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Como o robô se chama ao falar com o cliente.</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-4">
@@ -316,7 +326,7 @@ const TicketTypeManagement: React.FC = () => {
             {identityError && <p className="text-sm text-rose-600">{identityError}</p>}
             {identityNotice && <p role="status" className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{identityNotice}</p>}
             <div className="flex justify-end">
-              <button type="submit" disabled={identitySaving} className="mavo-button-primary">{identitySaving ? 'Salvando...' : 'Salvar identidade'}</button>
+              <button type="submit" disabled={identitySaving} className="mavo-button-primary">{identitySaving ? 'Salvando...' : 'Salvar nome do supermercado'}</button>
             </div>
           </form>
         )}

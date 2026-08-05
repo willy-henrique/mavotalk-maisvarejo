@@ -80,6 +80,16 @@ test("integração PostgreSQL: a posição do menu salva no editor chega à tabe
     assert.equal(await menuOption(offersQueueId), 2);
     assert.equal(await menuOption(hoursQueueId), 5);
 
+    // Publicar sozinho já grava o que veio da tela: nada de "salve antes".
+    const publishedInOneClick = await publishQueueAutomation(organizationId, hoursQueueId, userId, {
+      ...offersConfig("Horários publicados direto"),
+      queueType: "custom",
+      generalConfig: { ...offersConfig("Horários publicados direto").generalConfig, menuOption: 9 },
+    });
+    assert.deepEqual(publishedInOneClick.errors, {});
+    assert.equal(await menuOption(hoursQueueId), 9);
+    assert.equal((await getQueueAutomation(organizationId, hoursQueueId, "published"))?.generalConfig.name, "Horários publicados direto");
+
     // Uma cópia antiga em general_config não pode reverter o que a fila já grava.
     await withTenantTransaction(organizationId, async (client) => {
       await client.query("UPDATE queues SET menu_option=7 WHERE organization_id=$1 AND id=$2", [organizationId, offersQueueId]);

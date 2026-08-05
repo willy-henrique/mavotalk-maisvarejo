@@ -5,10 +5,13 @@ import { readFile } from "node:fs/promises";
 test("bloco global de identidade do bot fica fora do modal de fila e salva via supermarket-settings", async () => {
   const source = await readFile("frontend/components/Admin/TicketTypeManagement.tsx", "utf8");
 
-  assert.match(source, /Identidade e automação do bot/);
+  assert.match(source, /Nome do supermercado e identidade do bot/);
   assert.match(source, /identityBotName/);
   assert.match(source, /identityStoreName/);
   assert.match(source, /saveIdentity/);
+  // Sem nome gravado o bot fala em nome do rótulo padrão: o painel precisa avisar.
+  assert.match(source, /storeNameConfigured/);
+  assert.match(source, /ainda não foi configurado/);
   assert.match(source, /apiPatch<\{ settings: StoreSettings \}>\('\/api\/admin\/supermarket-settings', \{\s*botName,\s*storeName,/);
 });
 

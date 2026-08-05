@@ -111,18 +111,32 @@ test("colisão de posição é reconhecida para virar 409 na API", () => {
 });
 
 test("a posição no menu salva no editor de automação chega à tabela queues", async () => {
-  const [service, drawer] = await Promise.all([
-    readFile("lib/queue-automation.ts", "utf8"),
-    readFile("frontend/components/Admin/QueueAutomationDrawer.tsx", "utf8"),
-  ]);
+  const service = await readFile("lib/queue-automation.ts", "utf8");
   const saveDraft = service.slice(
+    service.indexOf("async function saveDraftInTransaction"),
     service.indexOf("export async function saveQueueAutomationDraft"),
-    service.indexOf("async function validatePublish"),
   );
 
   // Sem este UPDATE o número configurado ficaria só em queue_configurations,
   // invisível para o card do painel e para o menu enviado ao cliente.
   assert.match(saveDraft, /UPDATE queues SET name=\$3,menu_option=\$4/);
   assert.match(saveDraft, /freeMenuOptionSlot/);
-  assert.match(drawer, /onChanged\(\)/);
+});
+
+test("publicar grava o que está na tela, sem exigir um salvamento antes", async () => {
+  const [service, route, drawer] = await Promise.all([
+    readFile("lib/queue-automation.ts", "utf8"),
+    readFile("app/api/queues/[id]/configuration/route.ts", "utf8"),
+    readFile("frontend/components/Admin/QueueAutomationDrawer.tsx", "utf8"),
+  ]);
+  const publish = service.slice(service.indexOf("export async function publishQueueAutomation"), service.indexOf("export async function discardQueueAutomationDraft"));
+
+  // Gravar e publicar na mesma transação: aninhar transações travaria no FOR UPDATE.
+  assert.match(publish, /draftInput\?: QueueConfigurationInput/);
+  assert.match(publish, /saveDraftInTransaction\(client/);
+  assert.doesNotMatch(publish, /await withTenantTransaction\([^)]*\)\s*=>\s*withTenantTransaction/);
+  assert.match(route, /publishQueueAutomation\(result\.session\.organizationId, id, result\.session\.userId, draft\?\.data\)/);
+  assert.match(drawer, /action=publish`, \{ queueType: config\.queueType, generalConfig: config\.generalConfig, automationConfig: config\.automationConfig \}/);
+  // A recusa precisa chegar como texto, senão a tela mostra "Unprocessable Entity".
+  assert.match(route, /error: Object\.values\(published\.errors\)\.join\(" "\)/);
 });
