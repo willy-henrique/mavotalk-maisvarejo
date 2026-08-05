@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireMenuPermission, requireSession } from "@/lib/api";
 import { createAuditLog, createQueue, listQueues } from "@/lib/repo";
 import { queueSchema } from "@/lib/schemas";
+import { isMenuOptionConflict, menuOptionConflictMessage } from "@/lib/queue-menu-option";
 
 export async function GET() {
   const auth = await requireSession();
@@ -35,10 +36,18 @@ export async function POST(request: Request) {
     }
   }
 
-  const queue = await createQueue(auth.session.organizationId, {
-    ...parsed.data,
-    isActive: parsed.data.isActive ?? true,
-  });
+  let queue;
+  try {
+    queue = await createQueue(auth.session.organizationId, {
+      ...parsed.data,
+      isActive: parsed.data.isActive ?? true,
+    });
+  } catch (error) {
+    if (isMenuOptionConflict(error)) {
+      return NextResponse.json({ error: menuOptionConflictMessage(null) }, { status: 409 });
+    }
+    throw error;
+  }
 
   await createAuditLog(auth.session.organizationId, auth.session.userId, "create_queue", "queue", String(queue.id), {
     menuOption: parsed.data.menuOption,

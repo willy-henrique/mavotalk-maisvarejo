@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireMenuPermission, requireSession } from "@/lib/api";
 import { getQueueAutomation, listBusinessLocationContent, listQueueAutomationHistory, listQueuePromotions, publishQueueAutomation, saveQueueAutomationDraft, discardQueueAutomationDraft } from "@/lib/queue-automation";
 import { queueConfigurationInputSchema } from "@/lib/queue-automation-schemas";
+import { isMenuOptionConflict, menuOptionConflictMessage } from "@/lib/queue-menu-option";
 
 export async function GET(_: Request, context: { params: Promise<{ id: string }> }) {
   const result = await requireSession();
@@ -23,9 +24,16 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   const denied = await requireMenuPermission(result.session, "admin_types", "update"); if (denied) return denied;
   const body = await request.json().catch(() => null); const parsed = queueConfigurationInputSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Dados inválidos.", details: parsed.error.flatten() }, { status: 422 });
-  const { id } = await context.params; const configuration = await saveQueueAutomationDraft(result.session.organizationId, id, result.session.userId, parsed.data);
-  if (!configuration) return NextResponse.json({ error: "Fila não encontrada." }, { status: 404 });
-  return NextResponse.json({ configuration });
+  const { id } = await context.params;
+  let saved: Awaited<ReturnType<typeof saveQueueAutomationDraft>>;
+  try {
+    saved = await saveQueueAutomationDraft(result.session.organizationId, id, result.session.userId, parsed.data);
+  } catch (error) {
+    if (isMenuOptionConflict(error)) return NextResponse.json({ error: menuOptionConflictMessage(null) }, { status: 409 });
+    throw error;
+  }
+  if (!saved) return NextResponse.json({ error: "Fila não encontrada." }, { status: 404 });
+  return NextResponse.json({ configuration: saved.configuration, menuOptionSwap: saved.menuOptionSwap });
 }
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -34,7 +42,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   if (!result.session) return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
   const denied = await requireMenuPermission(result.session, "admin_types", "update"); if (denied) return denied;
   const { id } = await context.params; const action = new URL(request.url).searchParams.get("action");
-  if (action === "publish") { const published = await publishQueueAutomation(result.session.organizationId, id, result.session.userId); return published.configuration ? NextResponse.json(published) : NextResponse.json(published, { status: 422 }); }
+  if (action === "publish") {
+    try {
+      const published = await publishQueueAutomation(result.session.organizationId, id, result.session.userId);
+      return published.configuration ? NextResponse.json(published) : NextResponse.json(published, { status: 422 });
+    } catch (error) {
+      if (isMenuOptionConflict(error)) return NextResponse.json({ error: menuOptionConflictMessage(null) }, { status: 409 });
+      throw error;
+    }
+  }
   if (action === "discard") { await discardQueueAutomationDraft(result.session.organizationId, id, result.session.userId); return NextResponse.json({ ok: true }); }
   return NextResponse.json({ error: "Ação inválida." }, { status: 400 });
 }

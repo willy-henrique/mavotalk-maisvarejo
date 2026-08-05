@@ -30,6 +30,16 @@ type StoreSettings = {
   phone: string | null;
 };
 
+/**
+ * Menor posição livre entre 1 e 99. Somar 1 ao maior número em uso quebrava em
+ * bases migradas, onde uma fila legada ficou em 103 e o limite do schema é 99.
+ */
+const nextFreeMenuOption = (queues: Queue[]): number => {
+  const used = new Set(queues.map((queue) => queue.menuOption));
+  for (let option = 1; option <= 99; option += 1) if (!used.has(option)) return option;
+  return 99;
+};
+
 const QueueStatusBadge: React.FC<{ queue: Queue; label?: string; className?: string }> = ({ queue, label, className = '' }) => (
   <StatusBadge tone={queue.isActive ? 'success' : 'neutral'} className={className}>
     {label || (queue.isActive ? 'Ativa' : 'Inativa')}
@@ -148,7 +158,7 @@ const TicketTypeManagement: React.FC = () => {
   const openCreate = () => {
     setEditingId(null);
     setFormName('');
-    setFormMenuOption(Math.max(1, ...queues.map((q) => q.menuOption)) + 1);
+    setFormMenuOption(nextFreeMenuOption(queues));
     setFormColorHex('#64748b');
     setFormDefaultSlaMins(30);
     setFormIsActive(true);
@@ -165,7 +175,7 @@ const TicketTypeManagement: React.FC = () => {
     setFormColorHex(q.colorHex);
     setFormDefaultSlaMins(q.defaultSlaMins);
     setFormIsActive(q.isActive);
-    setFormQueueType(q.queueType || (q.menuOption === 1 ? 'offers_promotions' : q.menuOption === 2 ? 'business_hours_location' : 'custom'));
+    setFormQueueType(q.queueType || 'custom');
     setSubmitError('');
     setNotice('');
     setShowModal(true);
@@ -357,6 +367,15 @@ const TicketTypeManagement: React.FC = () => {
                     >
                       <Icons.Settings className="w-4 h-4" />
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => openEdit(q)}
+                      className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600"
+                      title="Editar dados básicos"
+                      aria-label={`Editar dados básicos da fila ${q.name}`}
+                    >
+                      ✎
+                    </button>
                     {!q.isSystem && <button
                       type="button"
                       onClick={() => { setDeleteCandidate(q); setSubmitError(''); }}
@@ -382,7 +401,9 @@ const TicketTypeManagement: React.FC = () => {
                   </div>
                   <div className="flex justify-between text-xs font-bold">
                     <span className="text-slate-400 uppercase tracking-widest">Automação</span>
-                    <span className="text-slate-700 dark:text-slate-200">{q.queueType === 'offers_promotions' || q.menuOption === 1 ? 'Ofertas' : q.queueType === 'business_hours_location' || q.menuOption === 2 ? 'Horários' : 'Personalizada'}</span>
+                    {/* O comportamento vem do tipo da fila, nunca da posição: mover
+                        "Ofertas" para outro número não muda o que o cliente recebe. */}
+                    <span className="text-slate-700 dark:text-slate-200">{q.queueType === 'offers_promotions' ? 'Ofertas' : q.queueType === 'business_hours_location' ? 'Horários' : 'Personalizada'}</span>
                   </div>
                 </div>
 

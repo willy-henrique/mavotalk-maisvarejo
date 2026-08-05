@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireMenuPermission, requireSession } from "@/lib/api";
 import { createAuditLog, deleteQueue, updateQueue } from "@/lib/repo";
 import { queueSchema } from "@/lib/schemas";
+import { isMenuOptionConflict, menuOptionConflictMessage } from "@/lib/queue-menu-option";
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
   const auth = await requireSession();
@@ -22,8 +23,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   try {
     queue = await updateQueue(auth.session.organizationId, id, parsed.data);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("não podem mudar de opção")) {
-      return NextResponse.json({ error: error.message }, { status: 409 });
+    if (isMenuOptionConflict(error)) {
+      return NextResponse.json({ error: menuOptionConflictMessage(null) }, { status: 409 });
     }
     throw error;
   }

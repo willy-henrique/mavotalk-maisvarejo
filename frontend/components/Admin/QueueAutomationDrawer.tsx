@@ -12,6 +12,9 @@ type Queue = {
   queueType?: Config['queueType'];
 };
 
+/** Fila deslocada quando a posição escolhida já pertencia a outra. */
+type MenuOptionSwap = { id: string; name: string; menuOption: number };
+
 type Config = {
   queueType: 'custom' | 'offers_promotions' | 'business_hours_location';
   generalConfig: Record<string, any>;
@@ -48,8 +51,9 @@ const defaultHours = () => weekDays.map((_, weekday) => ({
   secondClosingTime: null,
 }));
 
+/** O tipo é o que define o comportamento do bot; a posição no menu é livre. */
 function typeFor(queue: Queue): Config['queueType'] {
-  return queue.queueType || (queue.menuOption === 1 ? 'offers_promotions' : queue.menuOption === 2 ? 'business_hours_location' : 'custom');
+  return queue.queueType || 'custom';
 }
 
 function defaultConfig(queue: Queue): Config {
@@ -96,11 +100,11 @@ function Toggle({ checked, onChange, label, description }: { checked: boolean; o
   </label>;
 }
 
-function Field({ label, value, onChange, type = 'text', required = false, hint }: { label: string; value: any; onChange: (value: string) => void; type?: string; required?: boolean; hint?: string }) {
+function Field({ label, value, onChange, type = 'text', required = false, hint, min, max }: { label: string; value: any; onChange: (value: string) => void; type?: string; required?: boolean; hint?: string; min?: number; max?: number }) {
   return <label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
     {label}
     {hint && <span className="ml-2 normal-case tracking-normal text-slate-400">{hint}</span>}
-    <input required={required} type={type} value={value ?? ''} onChange={(event) => onChange(event.target.value)} className="mavo-field mt-1 text-sm" />
+    <input required={required} type={type} min={min} max={max} value={value ?? ''} onChange={(event) => onChange(event.target.value)} className="mavo-field mt-1 text-sm" />
   </label>;
 }
 
@@ -205,9 +209,15 @@ export function QueueAutomationDrawer({ queue, initialTab = 'Visão geral', onCl
   const saveDraft = async () => {
     setBusy(true); setError(''); setNotice('');
     try {
-      const result = await apiPatch<{ configuration: Config }>(`/api/queues/${queue.id}/configuration`, { queueType: config.queueType, generalConfig: config.generalConfig, automationConfig: config.automationConfig });
+      const result = await apiPatch<{ configuration: Config; menuOptionSwap: MenuOptionSwap | null }>(`/api/queues/${queue.id}/configuration`, { queueType: config.queueType, generalConfig: config.generalConfig, automationConfig: config.automationConfig });
       setConfig(result.configuration);
-      setNotice('Rascunho salvo. O bot continua usando a última versão publicada.');
+      setHasUnsavedChanges(false);
+      // Nome, posição no menu, cor, SLA e visibilidade valem na hora — é o que o
+      // cliente já vê no menu. Só as mensagens esperam a publicação.
+      setNotice(result.menuOptionSwap
+        ? `Dados do menu salvos. A fila "${result.menuOptionSwap.name}" assumiu a opção ${result.menuOptionSwap.menuOption}. As mensagens ficaram no rascunho — publique para o cliente recebê-las.`
+        : 'Dados do menu salvos e já valendo. As mensagens ficaram no rascunho — publique para o cliente recebê-las.');
+      onChanged();
       await load();
     } catch (err) { setError(err instanceof Error ? err.message : 'Não foi possível salvar o rascunho.'); }
     finally { setBusy(false); }
@@ -310,8 +320,8 @@ export function QueueAutomationDrawer({ queue, initialTab = 'Visão geral', onCl
               {notice && <p role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">{notice}</p>}
 
               {tab === 'Visão geral' && <div className="max-w-3xl">
-                <SectionTitle eyebrow="Base da fila" title="Como essa opção aparece e atende" description="Esses dados organizam o menu e definem para onde a conversa será encaminhada." />
-                <div className="grid gap-4 sm:grid-cols-2"><Field label="Nome no menu" value={general.name} required onChange={(value) => updateGeneral('name', value)} /><Field label="Descrição curta" value={general.description} onChange={(value) => updateGeneral('description', value || null)} /><Field label="Posição no menu" value={general.menuOption} type="number" hint="Ex.: 1" onChange={(value) => updateGeneral('menuOption', Number(value))} /><Field label="SLA da primeira resposta" value={general.defaultSlaMins} type="number" hint="minutos" onChange={(value) => updateGeneral('defaultSlaMins', Number(value))} /><label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Cor de identificação<div className="mt-1 flex items-center gap-3"><input aria-label="Cor da fila" type="color" value={general.colorHex || '#2563eb'} onChange={(event) => updateGeneral('colorHex', event.target.value)} className="h-11 w-14 cursor-pointer rounded-xl border border-slate-300 bg-white p-1 dark:border-slate-700 dark:bg-slate-950" /><span className="text-sm normal-case tracking-normal text-slate-500">{general.colorHex || '#2563eb'}</span></div></label></div>
+                <SectionTitle eyebrow="Base da fila" title="Como essa opção aparece e atende" description="Estes dados montam o menu do WhatsApp e valem assim que você salvar. As mensagens da automação continuam esperando a publicação." />
+                <div className="grid gap-4 sm:grid-cols-2"><Field label="Nome no menu" value={general.name} required onChange={(value) => updateGeneral('name', value)} /><Field label="Descrição curta" value={general.description} onChange={(value) => updateGeneral('description', value || null)} /><Field label="Posição no menu" value={general.menuOption} type="number" min={1} max={99} hint="1 a 99 · vale assim que você salvar" onChange={(value) => updateGeneral('menuOption', Number(value))} /><Field label="SLA da primeira resposta" value={general.defaultSlaMins} type="number" hint="minutos" onChange={(value) => updateGeneral('defaultSlaMins', Number(value))} /><label className="block text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Cor de identificação<div className="mt-1 flex items-center gap-3"><input aria-label="Cor da fila" type="color" value={general.colorHex || '#2563eb'} onChange={(event) => updateGeneral('colorHex', event.target.value)} className="h-11 w-14 cursor-pointer rounded-xl border border-slate-300 bg-white p-1 dark:border-slate-700 dark:bg-slate-950" /><span className="text-sm normal-case tracking-normal text-slate-500">{general.colorHex || '#2563eb'}</span></div></label></div>
                 <div className="mt-6 grid gap-3 sm:grid-cols-2"><Toggle label="Exibir esta fila no menu" description="Clientes poderão selecionar essa opção." checked={Boolean(general.isActive)} onChange={() => updateGeneral('isActive', !general.isActive)} /><Toggle label="Permitir voltar ao menu" description="Mostra uma saída simples para o cliente." checked={Boolean(general.allowReturnToMenu)} onChange={() => updateGeneral('allowReturnToMenu', !general.allowReturnToMenu)} /><Toggle label="Criar ticket no atendimento humano" description="Registra a solicitação ao transferir." checked={Boolean(general.createTicketOnHumanHandoff)} onChange={() => updateGeneral('createTicketOnHumanHandoff', !general.createTicketOnHumanHandoff)} /></div>
               </div>}
 
@@ -342,7 +352,7 @@ export function QueueAutomationDrawer({ queue, initialTab = 'Visão geral', onCl
               {tab === 'Histórico' && <div className="max-w-3xl"><SectionTitle eyebrow="Rastreabilidade" title="Alterações recentes" description="Acompanhe quem mudou o conteúdo e quando isso aconteceu." /><div className="space-y-3">{data?.history?.length ? data.history.map((item) => <article key={item.id} className="flex gap-3 rounded-2xl border border-slate-200 p-4 dark:border-slate-700"><span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full bg-blue-500" /><div><p className="font-bold">{item.action}</p><p className="mt-1 text-xs text-slate-500">{item.changedBy || 'Sistema'} · {new Date(item.createdAt).toLocaleString('pt-BR')}</p></div></article>) : <p className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700">Nenhuma alteração registrada nesta fila.</p>}</div></div>}
             </>}
           </div>
-          <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900 sm:px-7"><p className="hidden text-xs text-slate-500 sm:block">{hasUnsavedChanges ? 'Há alterações não salvas.' : hasDraft ? 'Rascunho aguardando publicação.' : data?.published?.updatedAt ? `Última publicação: ${new Date(data.published.updatedAt).toLocaleString('pt-BR')}` : 'Salvar cria um rascunho. Publicar altera o que o cliente recebe.'}</p><div className="ml-auto flex flex-wrap justify-end gap-2"><button type="button" onClick={requestClose} disabled={busy} className="mavo-button-secondary">Cancelar</button><button type="button" onClick={() => setTab('Prévia')} disabled={busy} className="mavo-button-secondary">Testar automação</button><button type="button" onClick={() => void saveDraft()} disabled={busy} className="mavo-button-secondary">{busy ? 'Salvando…' : 'Salvar rascunho'}</button><button type="button" onClick={() => void publish()} disabled={busy || isIncomplete} className="mavo-button-primary">{busy ? 'Publicando…' : 'Publicar alterações'}</button></div></footer>
+          <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-5 py-4 dark:border-slate-700 dark:bg-slate-900 sm:px-7"><p className="hidden text-xs text-slate-500 sm:block">{hasUnsavedChanges ? 'Há alterações não salvas.' : hasDraft ? 'Rascunho aguardando publicação.' : data?.published?.updatedAt ? `Última publicação: ${new Date(data.published.updatedAt).toLocaleString('pt-BR')}` : 'Salvar aplica os dados do menu. Publicar altera as mensagens que o cliente recebe.'}</p><div className="ml-auto flex flex-wrap justify-end gap-2"><button type="button" onClick={requestClose} disabled={busy} className="mavo-button-secondary">Cancelar</button><button type="button" onClick={() => setTab('Prévia')} disabled={busy} className="mavo-button-secondary">Testar automação</button><button type="button" onClick={() => void saveDraft()} disabled={busy} className="mavo-button-secondary">{busy ? 'Salvando…' : 'Salvar alterações'}</button><button type="button" onClick={() => void publish()} disabled={busy || isIncomplete} className="mavo-button-primary">{busy ? 'Publicando…' : 'Publicar alterações'}</button></div></footer>
         </div>
       </div>
     </aside>

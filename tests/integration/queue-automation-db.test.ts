@@ -5,6 +5,7 @@ import { closeDatabasePool, withTenantTransaction } from "../../lib/db";
 import {
   createQueuePromotion,
   getActivePromotions,
+  getQueueAutomation,
   getPublishedQueueConfiguration,
   publishQueueAutomation,
   saveBusinessHourException,
@@ -40,6 +41,60 @@ const hoursConfig = (name: string) => ({
   queueType: "business_hours_location" as const,
   generalConfig: { name, description: null, menuOption: 2, defaultSlaMins: 5, colorHex: "#2563EB", icon: null, isActive: true, allowReturnToMenu: true, createTicketOnHumanHandoff: true },
   automationConfig: { initialMessage: "Horários", noContentMessage: "Sem horário", closingMessage: null, allowHumanHandoff: true, showReturnToMenu: true, useAiFallback: false, enabled: true, openMessage: "Aberto até {closingTime}", closedMessage: "Fechado", intervalMessage: "Intervalo até {nextOpeningTime}", specialHoursMessage: "Especial {openingTime}-{closingTime}", showPhone: true, showAddress: true, showReferencePoint: true, showMapsUrl: true, showNextOpening: true },
+});
+
+test("integração PostgreSQL: a posição do menu salva no editor chega à tabela queues", { skip: !runDatabaseIntegration }, async () => {
+  const suffix = randomUUID().replaceAll("-", "");
+  const organizationId = `qa_menu_${suffix}`;
+  const userId = `qa_menu_user_${suffix}`;
+  const offersQueueId = `qa_menu_offers_${suffix}`;
+  const hoursQueueId = `qa_menu_hours_${suffix}`;
+  const menuOption = async (queueId: string) =>
+    withTenantTransaction(organizationId, async (client) => {
+      const result = await client.query<{ menu_option: number }>("SELECT menu_option FROM queues WHERE organization_id=$1 AND id=$2", [organizationId, queueId]);
+      return Number(result.rows[0]?.menu_option);
+    });
+
+  try {
+    await withTenantTransaction(organizationId, async (client) => {
+      await client.query("INSERT INTO organizations (id,name) VALUES ($1,$2)", [organizationId, "QA posição no menu"]);
+      await client.query("INSERT INTO users (id,organization_id,name,email,password_hash,role) VALUES ($1,$2,$3,$4,$5,'admin')", [userId, organizationId, "QA", `qa-menu-${suffix}@example.test`, "not-used"]);
+      await client.query("INSERT INTO queues (id,organization_id,name,menu_option,queue_type) VALUES ($1,$2,$3,1,'offers_promotions'),($4,$2,$5,2,'business_hours_location')", [offersQueueId, organizationId, "Ofertas", hoursQueueId, "Horários"]);
+    });
+
+    // Só salvar já move a fila no menu: era exatamente isso que não acontecia.
+    const moved = await saveQueueAutomationDraft(organizationId, offersQueueId, userId, {
+      ...offersConfig("Ofertas"),
+      generalConfig: { ...offersConfig("Ofertas").generalConfig, menuOption: 5 },
+    });
+    assert.equal(moved?.menuOptionSwap, null);
+    assert.equal(await menuOption(offersQueueId), 5);
+    assert.equal(moved?.configuration.generalConfig.menuOption, 5);
+
+    // Posição ocupada: as duas filas trocam de lugar em vez de estourar o índice único.
+    const swapped = await saveQueueAutomationDraft(organizationId, offersQueueId, userId, {
+      ...offersConfig("Ofertas"),
+      generalConfig: { ...offersConfig("Ofertas").generalConfig, menuOption: 2 },
+    });
+    assert.equal(swapped?.menuOptionSwap?.id, hoursQueueId);
+    assert.equal(await menuOption(offersQueueId), 2);
+    assert.equal(await menuOption(hoursQueueId), 5);
+
+    // Uma cópia antiga em general_config não pode reverter o que a fila já grava.
+    await withTenantTransaction(organizationId, async (client) => {
+      await client.query("UPDATE queues SET menu_option=7 WHERE organization_id=$1 AND id=$2", [organizationId, offersQueueId]);
+    });
+    const reopened = await getQueueAutomation(organizationId, offersQueueId, "draft");
+    assert.equal(reopened?.generalConfig.menuOption, 7);
+  } finally {
+    await withTenantTransaction(organizationId, async (client) => {
+      await client.query("DELETE FROM queue_configuration_history WHERE organization_id=$1", [organizationId]);
+      await client.query("DELETE FROM queue_configurations WHERE organization_id=$1", [organizationId]);
+      await client.query("DELETE FROM queues WHERE organization_id=$1", [organizationId]);
+      await client.query("DELETE FROM users WHERE organization_id=$1", [organizationId]);
+      await client.query("DELETE FROM organizations WHERE id=$1", [organizationId]);
+    }).catch(() => undefined);
+  }
 });
 
 test("integração PostgreSQL: publicação, runtime e isolamento das automações", { skip: !runDatabaseIntegration }, async () => {

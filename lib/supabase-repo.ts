@@ -15,6 +15,7 @@ import { DEFAULT_ORGANIZATION_ID } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { enqueueSlaCheck } from "@/lib/queues";
 import { isProtectedSystemQueue, normalizeQueueType, queueTypeForMenuOption, SUPERMARKET_QUEUE_PRESET } from "@/lib/supermarket-config";
+import { freeMenuOptionSlot } from "@/lib/queue-menu-option";
 import { randomUUID } from "node:crypto";
 import { queryTenantDatabase, withTenantTransaction } from "@/lib/db";
 
@@ -437,7 +438,6 @@ export async function updateQueue(
   payload: Record<string, unknown>,
 ): Promise<FireQueue | null> {
   const orgId = requireOrganizationId(organizationId);
-  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   const { data: current } = await supa(orgId)
     .from("queues")
     .select("menu_option")
@@ -446,24 +446,35 @@ export async function updateQueue(
     .maybeSingle();
   if (!current) return null;
   const currentMenuOption = Number(current.menu_option ?? 0);
-  if (isProtectedSystemQueue(currentMenuOption) && "menuOption" in payload && Number(payload.menuOption) !== currentMenuOption) {
-    throw new Error("As filas padrão do sistema não podem mudar de opção no menu.");
-  }
-  if ("name" in payload) updates.name = String(payload.name ?? "");
-  if ("menuOption" in payload) updates.menu_option = Number(payload.menuOption ?? 0);
-  if ("colorHex" in payload) updates.color_hex = String(payload.colorHex ?? "#64748B");
-  if ("defaultSlaMins" in payload) updates.default_sla_mins = Number(payload.defaultSlaMins ?? 30);
-  if ("isActive" in payload) updates.is_active = (payload.isActive as boolean | undefined) ?? true;
-  if ("queueType" in payload) updates.queue_type = normalizeQueueType(payload.queueType, currentMenuOption);
+  const nextMenuOption = "menuOption" in payload ? Number(payload.menuOption ?? 0) : currentMenuOption;
+  // `null` mantém a coluna como está: só o que veio no payload é alterado.
+  const values = [
+    "name" in payload ? String(payload.name ?? "") : null,
+    "menuOption" in payload ? nextMenuOption : null,
+    "colorHex" in payload ? String(payload.colorHex ?? "#64748B") : null,
+    "defaultSlaMins" in payload ? Number(payload.defaultSlaMins ?? 30) : null,
+    "isActive" in payload ? ((payload.isActive as boolean | undefined) ?? true) : null,
+    // A posição é do administrador — o comportamento do bot vem do `queueType`,
+    // nunca do número. Por isso o tipo acompanha a posição nova, não a antiga.
+    "queueType" in payload ? normalizeQueueType(payload.queueType, nextMenuOption) : null,
+  ];
 
-  const { data, error } = await supa(orgId)
-    .from("queues")
-    .update(updates)
-    .eq("id", id)
-    .eq("organization_id", orgId)
-    .select("*")
-    .maybeSingle();
-  if (error) { logger.error({ err: error, organizationId: orgId }, "supa updateQueue"); throw error; }
+  // A troca de posições precisa ser atômica: o índice único
+  // (organization_id, menu_option) recusaria as duas filas no mesmo número.
+  const data = await withTenantTransaction(orgId, async (client) => {
+    await freeMenuOptionSlot(client, orgId, id, nextMenuOption);
+    const result = await client.query<Row>(
+      `UPDATE queues SET name=COALESCE($3::text,name), menu_option=COALESCE($4::int,menu_option),
+         color_hex=COALESCE($5::text,color_hex), default_sla_mins=COALESCE($6::int,default_sla_mins),
+         is_active=COALESCE($7::boolean,is_active), queue_type=COALESCE($8::text,queue_type), updated_at=now()
+       WHERE organization_id=$1 AND id=$2 RETURNING *`,
+      [orgId, id, ...values],
+    );
+    return result.rows[0] || null;
+  }).catch((error: unknown) => {
+    logger.error({ err: error, organizationId: orgId }, "supa updateQueue");
+    throw error;
+  });
   if (!data) return null;
   return {
     id,

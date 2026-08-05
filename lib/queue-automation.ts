@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import { addCloudinaryCleanupJob } from "@/lib/cloudinary-queue";
 import { queryTenantDatabase, withTenantTransaction } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { freeMenuOptionSlot } from "@/lib/queue-menu-option";
+import { normalizeQueueType } from "@/lib/supermarket-config";
 import {
   businessHoursAutomationConfigSchema,
   businessHoursSchema,
@@ -28,10 +30,15 @@ export async function recordQueueContentHistory(organizationId: string, queueId:
   await queryTenantDatabase(organizationId, "INSERT INTO queue_configuration_history (organization_id,queue_id,configuration_version,action,previous_value,new_value,changed_by) VALUES ($1,$2,0,$3,$4::jsonb,$5::jsonb,$6)", [organizationId, queueId, action, JSON.stringify(previousValue ?? null), JSON.stringify(newValue ?? null), userId]);
 }
 
+/** Campos que pertencem à fila: o card do painel e o menu do WhatsApp leem daqui. */
+const queueOwnedGeneral = (queue: Row) => ({
+  name: String(queue.name || ""), menuOption: Number(queue.menu_option || 1),
+  defaultSlaMins: Number(queue.default_sla_mins || 30), colorHex: String(queue.color_hex || "#64748B"),
+  isActive: queue.is_active !== false,
+});
 const defaultGeneral = (queue: Row) => ({
-  name: String(queue.name || ""), description: null, menuOption: Number(queue.menu_option || 1),
-  defaultSlaMins: Number(queue.default_sla_mins || 30), colorHex: String(queue.color_hex || "#64748B"), icon: null,
-  isActive: queue.is_active !== false, allowReturnToMenu: true, createTicketOnHumanHandoff: true,
+  ...queueOwnedGeneral(queue), description: null, icon: null,
+  allowReturnToMenu: true, createTicketOnHumanHandoff: true,
 });
 const defaultAutomation = (type: QueueAutomationType) => type === "offers_promotions" ? ({
   initialMessage: "Confira nossas ofertas.", noContentMessage: "No momento não temos nenhuma oferta ativa.", closingMessage: null,
@@ -44,10 +51,13 @@ const defaultAutomation = (type: QueueAutomationType) => type === "offers_promot
   showPhone: true, showAddress: true, showReferencePoint: true, showMapsUrl: true, showNextOpening: true,
 }) : ({ initialMessage: "Olá! Como podemos ajudar?", noContentMessage: "Não há conteúdo disponível.", closingMessage: null, allowHumanHandoff: true, showReturnToMenu: true, useAiFallback: false, enabled: true });
 
+/**
+ * O tipo gravado sempre vence — inclusive `custom`. A inferência pela posição
+ * só cobre linhas antigas, anteriores à coluna `queue_type`: sem isso, mover
+ * uma fila personalizada para a opção 1 a faria responder como Ofertas.
+ */
 function inferType(queue: Row): QueueAutomationType {
-  if (queue.queue_type === "offers_promotions" || Number(queue.menu_option) === 1) return "offers_promotions";
-  if (queue.queue_type === "business_hours_location" || Number(queue.menu_option) === 2) return "business_hours_location";
-  return "custom";
+  return normalizeQueueType(queue.queue_type, Number(queue.menu_option || 0));
 }
 function jsonObject(value: unknown): JsonRecord { return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {}; }
 function rowConfig(row: Row | undefined, queue: Row) {
@@ -57,7 +67,10 @@ function rowConfig(row: Row | undefined, queue: Row) {
     id: row?.id ? String(row.id) : null, queueId: String(queue.id), queueType,
     status: row?.status === "published" ? "published" as const : "draft" as const,
     version: Number(row?.version || 0),
-    generalConfig: { ...defaultGeneral(queue), ...jsonObject(row?.general_config) },
+    // A fila é a fonte de verdade dos dados básicos. Uma cópia antiga guardada em
+    // `general_config` não pode reverter o nome ou a posição no menu ajustados
+    // depois: o editor mostraria um número que já não vale mais.
+    generalConfig: { ...defaultGeneral(queue), ...jsonObject(row?.general_config), ...queueOwnedGeneral(queue) },
     automationConfig: { ...defaultAutomation(queueType), ...jsonObject(row?.automation_config) },
     publishedAt: row?.published_at ? String(row.published_at) : null, updatedAt: String(row?.updated_at || queue.updated_at || queue.created_at || ""),
     contentSnapshot: jsonObject(row?.content_snapshot),
@@ -81,7 +94,12 @@ export async function saveQueueAutomationDraft(organizationId: string, queueId: 
   return withTenantTransaction(organizationId, async (client) => {
     const queueResult = await client.query<Row>("SELECT * FROM queues WHERE organization_id=$1 AND id=$2 FOR UPDATE", [organizationId, queueId]);
     if (!queueResult.rowCount) return null;
-    const queue = queueResult.rows[0];
+    // Os dados básicos valem imediatamente: é a tabela `queues` que o card do
+    // painel e o menu enviado ao cliente leem. Deixá-los apenas no rascunho fazia
+    // a posição configurada não mudar em lugar nenhum até uma publicação.
+    const menuOptionSwap = await freeMenuOptionSlot(client, organizationId, queueId, parsed.generalConfig.menuOption);
+    const queueUpdate = await client.query<Row>("UPDATE queues SET name=$3,menu_option=$4,color_hex=$5,default_sla_mins=$6,is_active=$7,queue_type=$8,updated_at=now() WHERE organization_id=$1 AND id=$2 RETURNING *", [organizationId, queueId, parsed.generalConfig.name, parsed.generalConfig.menuOption, parsed.generalConfig.colorHex, parsed.generalConfig.defaultSlaMins, parsed.generalConfig.isActive, parsed.queueType]);
+    const queue = queueUpdate.rows[0] || queueResult.rows[0];
     const old = await client.query<Row>("SELECT * FROM queue_configurations WHERE organization_id=$1 AND queue_id=$2 AND status='draft' FOR UPDATE", [organizationId, queueId]);
     const previous = old.rows[0] ? { generalConfig: old.rows[0].general_config, automationConfig: old.rows[0].automation_config } : null;
     const saved = await client.query<Row>(`INSERT INTO queue_configurations (organization_id,queue_id,queue_type,status,version,general_config,automation_config,created_by,updated_by)
@@ -90,7 +108,7 @@ export async function saveQueueAutomationDraft(organizationId: string, queueId: 
       RETURNING *`, [organizationId, queueId, parsed.queueType, JSON.stringify(parsed.generalConfig), JSON.stringify(parsed.automationConfig), userId]);
     await client.query(`INSERT INTO queue_configuration_history (organization_id,queue_id,configuration_version,action,previous_value,new_value,changed_by)
       VALUES ($1,$2,$3,'save_draft',$4::jsonb,$5::jsonb,$6)`, [organizationId, queueId, Number(saved.rows[0].version), JSON.stringify(previous), JSON.stringify({ generalConfig: parsed.generalConfig, automationConfig: parsed.automationConfig }), userId]);
-    return rowConfig(saved.rows[0], queue);
+    return { configuration: rowConfig(saved.rows[0], queue), menuOptionSwap };
   });
 }
 
@@ -138,6 +156,7 @@ export async function publishQueueAutomation(organizationId: string, queueId: st
     const saved = await client.query<Row>(`INSERT INTO queue_configurations (organization_id,queue_id,queue_type,status,version,general_config,automation_config,content_snapshot,published_at,published_by,created_by,updated_by)
       VALUES ($1,$2,$3,'published',$4,$5::jsonb,$6::jsonb,$7::jsonb,now(),$8,$8,$8)
       ON CONFLICT (organization_id,queue_id,status) DO UPDATE SET queue_type=EXCLUDED.queue_type,version=EXCLUDED.version,general_config=EXCLUDED.general_config,automation_config=EXCLUDED.automation_config,content_snapshot=EXCLUDED.content_snapshot,published_at=now(),published_by=EXCLUDED.published_by,updated_by=EXCLUDED.updated_by,updated_at=now() RETURNING *`, [organizationId, queueId, input.queueType, version, JSON.stringify(input.generalConfig), JSON.stringify(input.automationConfig), JSON.stringify(contentSnapshot), userId]);
+    await freeMenuOptionSlot(client, organizationId, queueId, input.generalConfig.menuOption);
     await client.query("UPDATE queues SET name=$3,menu_option=$4,color_hex=$5,default_sla_mins=$6,is_active=$7,queue_type=$8,updated_at=now() WHERE organization_id=$1 AND id=$2", [organizationId, queueId, input.generalConfig.name, input.generalConfig.menuOption, input.generalConfig.colorHex, input.generalConfig.defaultSlaMins, input.generalConfig.isActive, input.queueType]);
     await client.query(`INSERT INTO queue_configuration_history (organization_id,queue_id,configuration_version,action,previous_value,new_value,changed_by) VALUES ($1,$2,$3,'publish',$4::jsonb,$5::jsonb,$6)`, [organizationId, queueId, version, JSON.stringify(publishedCurrent.rows[0] || null), JSON.stringify({ generalConfig: input.generalConfig, automationConfig: input.automationConfig }), userId]);
     return { configuration: rowConfig(saved.rows[0], { ...queueResult.rows[0], name: input.generalConfig.name, menu_option: input.generalConfig.menuOption, color_hex: input.generalConfig.colorHex, default_sla_mins: input.generalConfig.defaultSlaMins, is_active: input.generalConfig.isActive }), errors: {} };

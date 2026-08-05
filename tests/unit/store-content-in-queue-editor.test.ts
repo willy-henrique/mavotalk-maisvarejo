@@ -17,7 +17,7 @@ test("conteúdo de ofertas é configurado no editor dedicado da automação", as
 
   assert.match(source, /config\.queueType === 'offers_promotions'/);
   assert.match(source, /QueuePromotionManager/);
-  assert.match(source, /Salvar rascunho/);
+  assert.match(source, /Salvar alterações/);
   assert.match(source, /Publicar alterações/);
 });
 
