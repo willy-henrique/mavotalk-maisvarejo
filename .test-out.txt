@@ -1,0 +1,1558 @@
+TAP version 13
+# Subtest: integração PostgreSQL: publicação, runtime e isolamento das automações
+ok 1 - integração PostgreSQL: publicação, runtime e isolamento das automações # SKIP
+  ---
+  duration_ms: 1.1824
+  ...
+# Subtest: entrada WhatsApp decide Cliente 1/Cliente 2 antes de criar ticket
+ok 2 - entrada WhatsApp decide Cliente 1/Cliente 2 antes de criar ticket
+  ---
+  duration_ms: 10.146
+  ...
+# Subtest: Socket.IO autentica o cookie e transmite somente na sala do tenant
+ok 3 - Socket.IO autentica o cookie e transmite somente na sala do tenant
+  ---
+  duration_ms: 3.3487
+  ...
+# Subtest: camada oficial de repositório não faz fallback para Firestore
+ok 4 - camada oficial de repositório não faz fallback para Firestore
+  ---
+  duration_ms: 1.7949
+  ...
+# Subtest: migrations e consultas analíticas carregam organization_id
+ok 5 - migrations e consultas analíticas carregam organization_id
+  ---
+  duration_ms: 3.5183
+  ...
+# Subtest: credencial do agente resolve o tenant sem confiar no payload
+ok 6 - credencial do agente resolve o tenant sem confiar no payload
+  ---
+  duration_ms: 9.2252
+  ...
+# Subtest: modo suporte sobrevive à expiração sem reabrir sessão gerencial
+ok 7 - modo suporte sobrevive à expiração sem reabrir sessão gerencial
+  ---
+  duration_ms: 1.6263
+  ...
+# Subtest: mutações de respostas rápidas entram na auditoria sem registrar conteúdo
+ok 8 - mutações de respostas rápidas entram na auditoria sem registrar conteúdo
+  ---
+  duration_ms: 12.6848
+  ...
+# Subtest: administração confirma revogação, mantém ações acessíveis e torna erros recuperáveis
+not ok 9 - administração confirma revogação, mantém ações acessíveis e torna erros recuperáveis
+  ---
+  duration_ms: 28.2557
+  location: 'C:\\willydev\\willtalk\\tests\\unit\\admin-interaction-feedback.test.ts:2:946'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input did not match the regular expression /aria-label=\{`Editar dados básicos da fila \$\{q\.name\}`\}/. Input:
+    
+    "import React, { useState, useEffect, useCallback, useRef } from 'react';\n" +
+      "import { apiDelete, apiFetch, apiGet, apiPost, apiPatch } from '../../services/api';\n" +
+      "import { Icons } from '../../constants';\n" +
+      "import { Dialog } from '../ui/Dialog';\n" +
+      "import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';\n" +
+      "import { StatusBadge } from '../ui/StatusBadge';\n" +
+      "import { QueueAutomationDrawer, type QueueAutomationTab } from './QueueAutomationDrawer';\n" +
+      '\n' +
+      'type Queue = {\n' +
+      '  id: string;\n' +
+      '  name: string;\n' +
+      '  menuOption: number;\n' +
+      '  colorHex: string;\n' +
+      '  defaultSlaMins: number;\n' +
+      '  isActive: boolean;\n' +
+      '  isSystem?: boolean;\n' +
+      "  queueType?: 'custom' | 'offers_promotions' | 'business_hours_location';\n" +
+      '};\n' +
+      '\n' +
+      'type StoreSettings = {\n' +
+      '  enabled: boolean;\n' +
+      '  aiFallbackEnabled: boolean;\n' +
+      '  botName: string;\n' +
+      '  storeName: string;\n' +
+      '  address: string | null;\n' +
+      '  mapsUrl: string | null;\n' +
+      '  offersUrl: string | null;\n' +
+      '  offersText: string | null;\n' +
+      '  offersImageUrl: string | null;\n' +
+      '  phone: string | null;\n' +
+      '};\n' +
+      '\n' +
+      "const QueueStatusBadge: React.FC<{ queue: Queue; label?: string; className?: string }> = ({ queue, label, className = '' }) => (\n" +
+      "  <StatusBadge tone={queue.isActive ? 'success' : 'neutral'} className={className}>\n" +
+      "    {label || (queue.isActive ? 'Ativa' : 'Inativa')}\n" +
+      '  </StatusBadge>\n' +
+      ');\n' +
+      '\n' +
+      'const TicketTypeManagement: React.FC = () => {\n' +
+      '  const [queues, setQueues] = useState<Queue[]>([]);\n' +
+      "  const [search, setSearch] = useState('');\n" +
+      "  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');\n" +
+      '  const [loading, setLoading] = useState(true);\n' +
+      "  const [loadError, setLoadError] = useState('');\n" +
+      '  const [showModal, setShowModal] = useState(false);\n' +
+      '  const [editingId, setEditingId] = useState<string | null>(null);\n' +
+      "  const [formName, setFormName] = useState('');\n" +
+      '  const [formMenuOption, setFormMenuOption] = useState(1);\n' +
+      "  const [formColorHex, setFormColorHex] = useState('#64748b');\n" +
+      '  const [formDefaultSlaMins, setFormDefaultSlaMins] = useState(30);\n' +
+      '  const [formIsActive, setFormIsActive] = useState(true);\n' +
+      "  const [formQueueType, setFormQueueType] = useState<NonNullable<Queue['queueType']>>('custom');\n" +
+      "  const [submitError, setSubmitError] = useState('');\n" +
+      '  const [submitting, setSubmitting] = useState(false);\n' +
+      '  const [deleteCandidate, setDeleteCandidate] = useState<Queue | null>(null);\n' +
+      '  const [deleting, setDeleting] = useState(false);\n' +
+      "  const [notice, setNotice] = useState('');\n" +
+      '  const [confirmRestore, setConfirmRestore] = useState(false);\n' +
+      '  const [restoring, setRestoring] = useState(false);\n' +
+      '  const [configuringQueue, setConfiguringQueue] = useState<{ queue: Queue; tab: QueueAutomationTab } | null>(null);\n' +
+      '  const requestRef = useRef(0);\n' +
+      '\n' +
+      '  const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);\n' +
+      '  const [storeLoading, setStoreLoading] = useState(true);\n' +
+      "  const [storeError, setStoreError] = useState('');\n" +
+      '\n' +
+      "  const [identityBotName, setIdentityBotName] = useState('');\n" +
+      "  const [identityStoreName, setIdentityStoreName] = useState('');\n" +
+      '  const [identityEnabled, setIdentityEnabled] = useState(true);\n' +
+      '  const [identityAiFallback, setIdentityAiFallback] = useState(false);\n' +
+      '  const [identitySaving, setIdentitySaving] = useState(false);\n' +
+      "  const [identityError, setIdentityError] = useState('');\n" +
+      "  const [identityNotice, setIdentityNotice] = useState('');\n" +
+      '\n' +
+      '  const fetchQueues = useCallback(async () => {\n' +
+      '    const request = ++requestRef.current;\n' +
+      '    setLoading(true);\n' +
+      "    setLoadError('');\n" +
+      '    try {\n' +
+      "      const res = await apiFetch('/api/queues', { method: 'GET' });\n" +
+      '      const data = (await res.json()) as { queues?: Queue[] };\n' +
+      '      if (request !== requestRef.current) return false;\n' +
+      '      if (res.ok && Array.isArray(data.queues)) {\n' +
+      '        setQueues(data.queues);\n' +
+      '        return true;\n' +
+      '      } else {\n' +
+      "        setLoadError('Não foi possível carregar as filas. Tente novamente.');\n" +
+      '        return false;\n' +
+      '      }\n' +
+      '    } catch {\n' +
+      '      if (request !== requestRef.current) return false;\n' +
+      "      setLoadError('Não foi possível carregar as filas. Verifique a conexão e tente novamente.');\n" +
+      '      return false;\n' +
+      '    } finally {\n' +
+      '      if (request === requestRef.current) setLoading(false);\n' +
+      '    }\n' +
+      '  }, []);\n' +
+      '\n' +
+      '  const fetchStoreSettings = useCallback(async () => {\n' +
+      '    setStoreLoading(true);\n' +
+      "    setStoreError('');\n" +
+      '    try {\n' +
+      "      const data = await apiGet<{ settings: StoreSettings }>('/api/admin/supermarket-settings');\n" +
+      '      setStoreSettings(data.settings);\n' +
+      '      setIdentityBotName(data.settings.botName);\n' +
+      '      setIdentityStoreName(data.settings.storeName);\n' +
+      '      setIdentityEnabled(data.settings.enabled);\n' +
+      '      setIdentityAiFallback(data.settings.aiFallbackEnabled);\n' +
+      '    } catch (error) {\n' +
+      "      setStoreError(error instanceof Error ? error.message : 'Não foi possível carregar as configurações da loja.');\n" +
+      '    } finally {\n' +
+      '      setStoreLoading(false);\n' +
+      '    }\n' +
+      '  }, []);\n' +
+      '\n' +
+      '  useEffect(() => {\n' +
+      '    fetchQueues();\n' +
+      '    fetchStoreSettings();\n' +
+      '  }, [fetchQueues, fetchStoreSettings]);\n' +
+      '\n' +
+      '  const saveIdentity = async (event: React.FormEvent) => {\n' +
+      '    event.preventDefault();\n' +
+      '    const botName = identityBotName.trim();\n' +
+      '    const storeName = identityStoreName.trim();\n' +
+      '    if (!botName || !storeName) {\n' +
+      "      setIdentityError('Informe o nome do assistente e o nome da loja.');\n" +
+      '      return;\n' +
+      '    }\n' +
+      '    setIdentitySaving(true);\n' +
+      "    setIdentityError('');\n" +
+      "    setIdentityNotice('');\n" +
+      '    try {\n' +
+      "      const result = await apiPatch<{ settings: StoreSettings }>('/api/admin/supermarket-settings', {\n" +
+      '        botName,\n' +
+      '        storeName,\n' +
+      '        enabled: identityEnabled,\n' +
+      '        aiFallbackEnabled: identityAiFallback,\n' +
+      '      });\n' +
+      '      setStoreSettings(result.settings);\n' +
+      "      setIdentityNotice('Identidade do bot salva com sucesso.');\n" +
+      '    } catch (error) {\n' +
+      "      setIdentityError(error instanceof Error ? error.message : 'Não foi possível salvar.');\n" +
+      '    } finally {\n' +
+      '      setIdentitySaving(false);\n' +
+      '    }\n' +
+      '  };\n' +
+      '\n' +
+      '  const openCreate = () => {\n' +
+      '    setEditingId(null);\n' +
+      "    setFormName('');\n" +
+      '    setFormMenuOption(Math.max(1, ...queues.map((q) => q.menuOption)) + 1);\n' +
+      "    setFormColorHex('#64748b');\n" +
+      '    setFormDefaultSlaMins(30);\n' +
+      '    setFormIsActive(true);\n' +
+      "    setFormQueueType('custom');\n" +
+      "    setSubmitError('');\n" +
+      "    setNotice('');\n" +
+      '    setShowModal(true);\n' +
+      '  };\n' +
+      '\n' +
+      '  const openEdit = (q: Queue) => {\n' +
+      '    setEditingId(q.id);\n' +
+      '    setFormName(q.name);\n' +
+      '    setFormMenuOption(q.menuOption);\n' +
+      '    setFormColorHex(q.colorHex);\n' +
+      '    setFormDefaultSlaMins(q.defaultSlaMins);\n' +
+      '    setFormIsActive(q.isActive);\n' +
+      "    setFormQueueType(q.queueType || (q.menuOption === 1 ? 'offers_promotions' : q.menuOption === 2 ? 'business_hours_location' : 'custom'));\n" +
+      "    setSubmitError('');\n" +
+      "    setNotice('');\n" +
+      '    setShowModal(true);\n' +
+      '  };\n' +
+      '\n' +
+      '  const closeModal = () => {\n' +
+      '    setShowModal(false);\n' +
+      '    setEditingId(null);\n' +
+      "    setSubmitError('');\n" +
+      '  };\n' +
+      '\n' +
+      '  const handleSubmit = async (e: React.FormEvent) => {\n' +
+      '    e.preventDefault();\n' +
+      "    setSubmitError('');\n" +
+      "    setNotice('');\n" +
+      '    setSubmitting(true);\n' +
+      '    try {\n' +
+      '      const body = {\n' +
+      '        name: formName.trim(),\n' +
+      '        menuOption: formMenuOption,\n' +
+      '        colorHex: formColorHex,\n' +
+      '        defaultSlaMins: formDefaultSlaMins,\n' +
+      '        isActive: formIsActive,\n' +
+      '        queueType: formQueueType,\n' +
+      '      };\n' +
+      '      if (editingId) {\n' +
+      '        await apiPatch(`/api/queues/${editingId}`, body);\n' +
+      '      } else {\n' +
+      "        await apiPost<{ queue: Queue }>('/api/queues', body);\n" +
+      '      }\n' +
+      '      await fetchQueues();\n' +
+      "      setNotice(editingId ? 'Dados básicos da fila atualizados.' : 'Fila criada. Agora configure a automação antes de disponibilizá-la ao cliente.');\n" +
+      '      closeModal();\n' +
+      '    } catch (err) {\n' +
+      "      setSubmitError(err instanceof Error ? err.message : 'Erro ao salvar');\n" +
+      '    } finally {\n' +
+      '      setSubmitting(false);\n' +
+      '    }\n' +
+      '  };\n' +
+      '\n' +
+      '  const restoreDefaultMenu = async () => {\n' +
+      '    setConfirmRestore(false);\n' +
+      '    setRestoring(true);\n' +
+      "    setSubmitError('');\n" +
+      "    setNotice('');\n" +
+      '    try {\n' +
+      "      const result = await apiPost<{ created: number; updated: number }>('/api/queues/supermarket-preset');\n" +
+      '      await fetchQueues();\n' +
+      '      setNotice(`Menu padrão restaurado: ${result.created} fila(s) criada(s) e ${result.updated} reativada(s).`);\n' +
+      '    } catch (error) {\n' +
+      "      setSubmitError(error instanceof Error ? error.message : 'Não foi possível restaurar o menu padrão.');\n" +
+      '    } finally {\n' +
+      '      setRestoring(false);\n' +
+      '    }\n' +
+      '  };\n' +
+      '\n' +
+      '  const removeQueue = async () => {\n' +
+      '    if (!deleteCandidate) return;\n' +
+      '    setDeleting(true);\n' +
+      "    setSubmitError('');\n" +
+      "    setNotice('');\n" +
+      '    try {\n' +
+      '      await apiDelete(`/api/queues/${deleteCandidate.id}`);\n' +
+      '      setDeleteCandidate(null);\n' +
+      '      await fetchQueues();\n' +
+      "      setNotice('Fila excluída com sucesso.');\n" +
+      '    } catch (error) {\n' +
+      "      setSubmitError(error instanceof Error ? error.message : 'Não foi possível excluir a fila.');\n" +
+      '    } finally {\n' +
+      '      setDeleting(false);\n' +
+      '    }\n' +
+      '  };\n' +
+      '\n' +
+      "  const normalizedSearch = search.trim().toLocaleLowerCase('pt-BR');\n" +
+      '  const filteredQueues = queues\n' +
+      "    .filter((queue) => !normalizedSearch || queue.name.toLocaleLowerCase('pt-BR').includes(normalizedSearch))\n" +
+      "    .filter((queue) => statusFilter === 'all' || (statusFilter === 'active' ? queue.isActive : !queue.isActive))\n" +
+      '    .slice()\n' +
+      "    .sort((a, b) => a.menuOption - b.menuOption || a.name.localeCompare(b.name, 'pt-BR'));\n" +
+      "  const openAutomation = (queue: Queue, tab: QueueAutomationTab = 'Visão geral') => setConfiguringQueue({ queue, tab });\n" +
+      '\n' +
+      '  return (\n' +
+      '    <main className="mavo-page"><div className="mavo-page-content">\n' +
+      '      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">\n' +
+      '        <div>\n' +
+      '          <p className="text-xs font-black uppercase tracking-[.16em] text-blue-600 dark:text-blue-400">Administração</p>\n' +
+      '          <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Filas e automações</h2>\n' +
+      '          <p className="mt-2 text-slate-500 dark:text-slate-400">Configure a opção do menu do bot, cor operacional e SLA de primeira resposta.</p>\n' +
+      '        </div>\n' +
+      '        <div className="flex flex-wrap gap-2">\n' +
+      '          <button\n' +
+      '            type="button"\n' +
+      '            onClick={() => setConfirmRestore(true)}\n' +
+      '            disabled={restoring}\n' +
+      '            '... 21013 more characters
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: |-
+    import React, { useState, useEffect, useCallback, useRef } from 'react';
+    import { apiDelete, apiFetch, apiGet, apiPost, apiPatch } from '../../services/api';
+    import { Icons } from '../../constants';
+    import { Dialog } from '../ui/Dialog';
+    import { EmptyState, ErrorState, LoadingState } from '../ui/PageState';
+    import { StatusBadge } from '../ui/StatusBadge';
+    import { QueueAutomationDrawer, type QueueAutomationTab } from './QueueAutomationDrawer';
+    
+    type Queue = {
+      id: string;
+      name: string;
+      menuOption: number;
+      colorHex: string;
+      defaultSlaMins: number;
+      isActive: boolean;
+      isSystem?: boolean;
+      queueType?: 'custom' | 'offers_promotions' | 'business_hours_location';
+    };
+    
+    type StoreSettings = {
+      enabled: boolean;
+      aiFallbackEnabled: boolean;
+      botName: string;
+      storeName: string;
+      address: string | null;
+      mapsUrl: string | null;
+      offersUrl: string | null;
+      offersText: string | null;
+      offersImageUrl: string | null;
+      phone: string | null;
+    };
+    
+    const QueueStatusBadge: React.FC<{ queue: Queue; label?: string; className?: string }> = ({ queue, label, className = '' }) => (
+      <StatusBadge tone={queue.isActive ? 'success' : 'neutral'} className={className}>
+        {label || (queue.isActive ? 'Ativa' : 'Inativa')}
+      </StatusBadge>
+    );
+    
+    const TicketTypeManagement: React.FC = () => {
+      const [queues, setQueues] = useState<Queue[]>([]);
+      const [search, setSearch] = useState('');
+      const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+      const [loading, setLoading] = useState(true);
+      const [loadError, setLoadError] = useState('');
+      const [showModal, setShowModal] = useState(false);
+      const [editingId, setEditingId] = useState<string | null>(null);
+      const [formName, setFormName] = useState('');
+      const [formMenuOption, setFormMenuOption] = useState(1);
+      const [formColorHex, setFormColorHex] = useState('#64748b');
+      const [formDefaultSlaMins, setFormDefaultSlaMins] = useState(30);
+      const [formIsActive, setFormIsActive] = useState(true);
+      const [formQueueType, setFormQueueType] = useState<NonNullable<Queue['queueType']>>('custom');
+      const [submitError, setSubmitError] = useState('');
+      const [submitting, setSubmitting] = useState(false);
+      const [deleteCandidate, setDeleteCandidate] = useState<Queue | null>(null);
+      const [deleting, setDeleting] = useState(false);
+      const [notice, setNotice] = useState('');
+      const [confirmRestore, setConfirmRestore] = useState(false);
+      const [restoring, setRestoring] = useState(false);
+      const [configuringQueue, setConfiguringQueue] = useState<{ queue: Queue; tab: QueueAutomationTab } | null>(null);
+      const requestRef = useRef(0);
+    
+      const [storeSettings, setStoreSettings] = useState<StoreSettings | null>(null);
+      const [storeLoading, setStoreLoading] = useState(true);
+      const [storeError, setStoreError] = useState('');
+    
+      const [identityBotName, setIdentityBotName] = useState('');
+      const [identityStoreName, setIdentityStoreName] = useState('');
+      const [identityEnabled, setIdentityEnabled] = useState(true);
+      const [identityAiFallback, setIdentityAiFallback] = useState(false);
+      const [identitySaving, setIdentitySaving] = useState(false);
+      const [identityError, setIdentityError] = useState('');
+      const [identityNotice, setIdentityNotice] = useState('');
+    
+      const fetchQueues = useCallback(async () => {
+        const request = ++requestRef.current;
+        setLoading(true);
+        setLoadError('');
+        try {
+          const res = await apiFetch('/api/queues', { method: 'GET' });
+          const data = (await res.json()) as { queues?: Queue[] };
+          if (request !== requestRef.current) return false;
+          if (res.ok && Array.isArray(data.queues)) {
+            setQueues(data.queues);
+            return true;
+          } else {
+            setLoadError('Não foi possível carregar as filas. Tente novamente.');
+            return false;
+          }
+        } catch {
+          if (request !== requestRef.current) return false;
+          setLoadError('Não foi possível carregar as filas. Verifique a conexão e tente novamente.');
+          return false;
+        } finally {
+          if (request === requestRef.current) setLoading(false);
+        }
+      }, []);
+    
+      const fetchStoreSettings = useCallback(async () => {
+        setStoreLoading(true);
+        setStoreError('');
+        try {
+          const data = await apiGet<{ settings: StoreSettings }>('/api/admin/supermarket-settings');
+          setStoreSettings(data.settings);
+          setIdentityBotName(data.settings.botName);
+          setIdentityStoreName(data.settings.storeName);
+          setIdentityEnabled(data.settings.enabled);
+          setIdentityAiFallback(data.settings.aiFallbackEnabled);
+        } catch (error) {
+          setStoreError(error instanceof Error ? error.message : 'Não foi possível carregar as configurações da loja.');
+        } finally {
+          setStoreLoading(false);
+        }
+      }, []);
+    
+      useEffect(() => {
+        fetchQueues();
+        fetchStoreSettings();
+      }, [fetchQueues, fetchStoreSettings]);
+    
+      const saveIdentity = async (event: React.FormEvent) => {
+        event.preventDefault();
+        const botName = identityBotName.trim();
+        const storeName = identityStoreName.trim();
+        if (!botName || !storeName) {
+          setIdentityError('Informe o nome do assistente e o nome da loja.');
+          return;
+        }
+        setIdentitySaving(true);
+        setIdentityError('');
+        setIdentityNotice('');
+        try {
+          const result = await apiPatch<{ settings: StoreSettings }>('/api/admin/supermarket-settings', {
+            botName,
+            storeName,
+            enabled: identityEnabled,
+            aiFallbackEnabled: identityAiFallback,
+          });
+          setStoreSettings(result.settings);
+          setIdentityNotice('Identidade do bot salva com sucesso.');
+        } catch (error) {
+          setIdentityError(error instanceof Error ? error.message : 'Não foi possível salvar.');
+        } finally {
+          setIdentitySaving(false);
+        }
+      };
+    
+      const openCreate = () => {
+        setEditingId(null);
+        setFormName('');
+        setFormMenuOption(Math.max(1, ...queues.map((q) => q.menuOption)) + 1);
+        setFormColorHex('#64748b');
+        setFormDefaultSlaMins(30);
+        setFormIsActive(true);
+        setFormQueueType('custom');
+        setSubmitError('');
+        setNotice('');
+        setShowModal(true);
+      };
+    
+      const openEdit = (q: Queue) => {
+        setEditingId(q.id);
+        setFormName(q.name);
+        setFormMenuOption(q.menuOption);
+        setFormColorHex(q.colorHex);
+        setFormDefaultSlaMins(q.defaultSlaMins);
+        setFormIsActive(q.isActive);
+        setFormQueueType(q.queueType || (q.menuOption === 1 ? 'offers_promotions' : q.menuOption === 2 ? 'business_hours_location' : 'custom'));
+        setSubmitError('');
+        setNotice('');
+        setShowModal(true);
+      };
+    
+      const closeModal = () => {
+        setShowModal(false);
+        setEditingId(null);
+        setSubmitError('');
+      };
+    
+      const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSubmitError('');
+        setNotice('');
+        setSubmitting(true);
+        try {
+          const body = {
+            name: formName.trim(),
+            menuOption: formMenuOption,
+            colorHex: formColorHex,
+            defaultSlaMins: formDefaultSlaMins,
+            isActive: formIsActive,
+            queueType: formQueueType,
+          };
+          if (editingId) {
+            await apiPatch(`/api/queues/${editingId}`, body);
+          } else {
+            await apiPost<{ queue: Queue }>('/api/queues', body);
+          }
+          await fetchQueues();
+          setNotice(editingId ? 'Dados básicos da fila atualizados.' : 'Fila criada. Agora configure a automação antes de disponibilizá-la ao cliente.');
+          closeModal();
+        } catch (err) {
+          setSubmitError(err instanceof Error ? err.message : 'Erro ao salvar');
+        } finally {
+          setSubmitting(false);
+        }
+      };
+    
+      const restoreDefaultMenu = async () => {
+        setConfirmRestore(false);
+        setRestoring(true);
+        setSubmitError('');
+        setNotice('');
+        try {
+          const result = await apiPost<{ created: number; updated: number }>('/api/queues/supermarket-preset');
+          await fetchQueues();
+          setNotice(`Menu padrão restaurado: ${result.created} fila(s) criada(s) e ${result.updated} reativada(s).`);
+        } catch (error) {
+          setSubmitError(error instanceof Error ? error.message : 'Não foi possível restaurar o menu padrão.');
+        } finally {
+          setRestoring(false);
+        }
+      };
+    
+      const removeQueue = async () => {
+        if (!deleteCandidate) return;
+        setDeleting(true);
+        setSubmitError('');
+        setNotice('');
+        try {
+          await apiDelete(`/api/queues/${deleteCandidate.id}`);
+          setDeleteCandidate(null);
+          await fetchQueues();
+          setNotice('Fila excluída com sucesso.');
+        } catch (error) {
+          setSubmitError(error instanceof Error ? error.message : 'Não foi possível excluir a fila.');
+        } finally {
+          setDeleting(false);
+        }
+      };
+    
+      const normalizedSearch = search.trim().toLocaleLowerCase('pt-BR');
+      const filteredQueues = queues
+        .filter((queue) => !normalizedSearch || queue.name.toLocaleLowerCase('pt-BR').includes(normalizedSearch))
+        .filter((queue) => statusFilter === 'all' || (statusFilter === 'active' ? queue.isActive : !queue.isActive))
+        .slice()
+        .sort((a, b) => a.menuOption - b.menuOption || a.name.localeCompare(b.name, 'pt-BR'));
+      const openAutomation = (queue: Queue, tab: QueueAutomationTab = 'Visão geral') => setConfiguringQueue({ queue, tab });
+    
+      return (
+        <main className="mavo-page"><div className="mavo-page-content">
+          <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-black uppercase tracking-[.16em] text-blue-600 dark:text-blue-400">Administração</p>
+              <h2 className="mt-1 text-2xl font-black tracking-tight text-slate-900 dark:text-white">Filas e automações</h2>
+              <p className="mt-2 text-slate-500 dark:text-slate-400">Configure a opção do menu do bot, cor operacional e SLA de primeira resposta.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmRestore(true)}
+                disabled={restoring}
+                className="mavo-button-secondary"
+              >
+                {restoring ? 'Restaurando...' : 'Restaurar menu padrão'}
+              </button>
+              <button
+                onClick={openCreate}
+                className="mavo-button-primary"
+              >
+                <Icons.Settings className="w-5 h-5" />
+                Criar nova fila
+              </button>
+            </div>
+          </div>
+    
+          <section className="mavo-card mb-8 p-5">
+            <h3 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400">Identidade e automação do bot</h3>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Usados em toda mensagem do bot no WhatsApp. Endereço, horários e ofertas ficam dentro de cada fila correspondente, abaixo.</p>
+            {storeLoading ? (
+              <p className="mt-4 text-sm text-slate-500 dark:text-slate-400">Carregando…</p>
+            ) : storeError ? (
+              <ErrorState className="mt-4" description={storeError} action={<button type="button" onClick={() => void fetchStoreSettings()} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />
+            ) : (
+              <form onSubmit={saveIdentity} className="mt-4 space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="identity-bot-name" className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome do assistente</label>
+                    <input id="identity-bot-name" type="text" value={identityBotName} onChange={(e) => setIdentityBotName(e.target.value)} maxLength={80} className="mavo-field" required />
+                  </div>
+                  <div>
+                    <label htmlFor="identity-store-name" className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome da loja</label>
+                    <input id="identity-store-name" type="text" value={identityStoreName} onChange={(e) => setIdentityStoreName(e.target.value)} maxLength={160} className="mavo-field" required />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-4">
+                  <div className="flex min-w-56 flex-1 items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">Bot ativo</p>
+                    <button type="button" role="switch" aria-checked={identityEnabled} aria-label="Alternar bot ativo" onClick={() => setIdentityEnabled((v) => !v)} className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${identityEnabled ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'}`}><span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition ${identityEnabled ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+                  </div>
+                  <div className="flex min-w-56 flex-1 items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100">Usar IA para mensagens não reconhecidas</p>
+                    <button type="button" role="switch" aria-checked={identityAiFallback} aria-label="Alternar fallback de IA" onClick={() => setIdentityAiFallback((v) => !v)} className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${identityAiFallback ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'}`}><span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition ${identityAiFallback ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+                  </div>
+                </div>
+                {identityError && <p className="text-sm text-rose-600">{identityError}</p>}
+                {identityNotice && <p role="status" className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{identityNotice}</p>}
+                <div className="flex justify-end">
+                  <button type="submit" disabled={identitySaving} className="mavo-button-primary">{identitySaving ? 'Salvando...' : 'Salvar identidade'}</button>
+                </div>
+              </form>
+            )}
+          </section>
+    
+          {notice && <div role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">{notice}</div>}
+          {loadError && <ErrorState className="mb-5" description={loadError} action={<button type="button" onClick={() => void fetchQueues()} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
+          {!loading && queues.length > 0 && (
+            <div className="mb-5 flex flex-wrap gap-3">
+              <label className="block min-w-[16rem] flex-1"><span className="sr-only">Buscar filas</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome da fila" className="mavo-field" /></label>
+              <label className="min-w-44"><span className="sr-only">Filtrar por status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)} className="mavo-field"><option value="all">Todos os status</option><option value="active">Ativas no menu</option><option value="inactive">Inativas</option></select></label>
+            </div>
+          )}
+          {loading ? (
+            <LoadingState title="Carregando filas e automações…" />
+          ) : queues.length === 0 ? (
+            <EmptyState title="Nenhuma fila cadastrada." description="Crie a primeira fila para disponibilizar uma opção no menu do bot e direcionar os atendimentos." action={<button type="button" onClick={openCreate} className="mavo-button-primary">Criar a primeira fila</button>} />
+          ) : filteredQueues.length === 0 ? (
+            <EmptyState title="Nenhuma fila encontrada." description="Altere a busca ou limpe os filtros para visualizar as filas cadastradas." action={<button type="button" onClick={() => { setSearch(''); setStatusFilter('all'); }} className="mavo-button-secondary">Limpar filtros</button>} />
+          ) : filteredQueues.length > 8 ? (
+            <><div className="mavo-card hidden overflow-x-auto p-0 md:block">
+              <table className="w-full min-w-[720px] text-left">
+                <thead><tr className="border-b border-slate-200 dark:border-slate-700"><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fila</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Menu</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">SLA</th><th scope="col" className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Status</th><th scope="col" className="px-4 py-3 text-right text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Ações</th></tr></thead>
+                <tbody>{filteredQueues.map((queue) => <tr key={queue.id} className="border-b border-slate-100 transition-colors hover:bg-slate-50 dark:border-slate-700/80 dark:hover:bg-slate-800/50"><td className="px-4 py-3"><span className="mr-3 inline-block h-3 w-3 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><span className="font-medium text-slate-800 dark:text-slate-200">{queue.name}</span></td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.menuOption}</td><td className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{queue.defaultSlaMins} min</td><td className="px-4 py-3"><QueueStatusBadge queue={queue} /></td><td className="px-4 py-3 text-right"><div className="flex justify-end gap-2"><button type="button" onClick={() => openAutomation(queue)} className="mavo-button-primary min-h-0 px-3 py-2 text-xs">Configurar</button><button type="button" onClick={() => openAutomation(queue, 'Prévia')} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Testar</button><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar dados</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></td></tr>)}</tbody>
+              </table>
+            </div><div className="grid gap-3 md:hidden">{filteredQueues.map((queue) => <article key={queue.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: queue.colorHex }} aria-hidden="true" /><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{queue.name}</h3></div><QueueStatusBadge queue={queue} className="shrink-0" /></div><dl className="grid grid-cols-2 gap-3 text-xs"><div><dt className="font-semibold text-slate-500">Opção no menu</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{queue.menuOption}</dd></div><div><dt className="font-semibold text-slate-500">SLA</dt><dd className="mt-1 text-slate-700 dark:text-slate-200">{queue.defaultSlaMins} min</dd></div></dl><div className="flex flex-wrap gap-2"><button type="button" onClick={() => openAutomation(queue)} className="mavo-button-primary min-h-0 px-3 py-2 text-xs">Configurar</button><button type="button" onClick={() => openAutomation(queue, 'Prévia')} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Testar</button><button type="button" onClick={() => openEdit(queue)} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Editar dados</button><button type="button" onClick={() => { setDeleteCandidate(queue); setSubmitError(''); }} className="mavo-button-danger min-h-0 px-3 py-2 text-xs">Excluir</button></div></article>)}</div></>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {filteredQueues.map((q) => (
+                  <div
+                    key={q.id}
+                    className="mavo-card group p-6 transition hover:shadow-xl"
+                  >
+                    <div className="flex justify-between items-start mb-6">
+                      <div
+                        className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg"
+                        style={{ backgroundColor: q.colorHex }}
+                      >
+                        {q.name.charAt(0)}
+                      </div>
+                      <div className="flex gap-2 opacity-0 transition-all group-hover:opacity-100 group-focus-within:opacity-100">
+                        <button
+                          type="button"
+                          onClick={() => openAutomation(q)}
+                          className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-blue-600"
+                          title="Configurar automação"
+                          aria-label={`Configurar automação da fila ${q.name}`}
+                        >
+                          <Icons.Settings className="w-4 h-4" />
+                        </button>
+                        {!q.isSystem && <button
+                          type="button"
+                          onClick={() => { setDeleteCandidate(q); setSubmitError(''); }}
+                          className="p-2 rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30"
+                          title="Excluir"
+                          aria-label={`Excluir fila ${q.name}`}
+                        >
+                          ×
+                        </button>}
+                      </div>
+                    </div>
+    
+                    <h3 className="mb-4 text-lg font-bold text-slate-800 dark:text-slate-100">{q.name}</h3>
+    
+                    <div className="space-y-3">
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-slate-400 uppercase tracking-widest">Opção no menu</span>
+                        <span className="text-slate-700 dark:text-slate-200">{q.menuOption}</span>
+                      </div>
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-slate-400 uppercase tracking-widest">SLA Resposta</span>
+                        <span className="text-slate-700 dark:text-slate-200">{q.defaultSlaMins} min</span>
+                      </div>
+                      <div className="flex justify-between text-xs font-bold">
+                        <span className="text-slate-400 uppercase tracking-widest">Automação</span>
+                        <span className="text-slate-700 dark:text-slate-200">{q.queueType === 'offers_promotions' || q.menuOption === 1 ? 'Ofertas' : q.queueType === 'business_hours_location' || q.menuOption === 2 ? 'Horários' : 'Personalizada'}</span>
+                      </div>
+                    </div>
+    
+                    <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
+                      <QueueStatusBadge queue={q} label={q.isActive ? 'Ativo no menu' : 'Inativo'} className="uppercase tracking-widest" />
+                      <div className="flex gap-2"><button type="button" onClick={() => openAutomation(q)} className="mavo-button-primary min-h-0 px-3 py-2 text-xs">Configurar</button><button type="button" onClick={() => openAutomation(q, 'Prévia')} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Testar</button></div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+    
+          {showModal && (
+            <Dialog title={editingId ? 'Editar fila' : 'Nova fila'} description="A opção escolhida será exibida no menu do bot quando a fila estiver ativa." onClose={() => { if (!submitting) closeModal(); }}>
+                <div className="p-6">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div>
+                    <label htmlFor="queue-name" className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome</label>
+                    <input
+                      id="queue-name"
+                      type="text"
+                      value={formName}
+                      onChange={(e) => setFormName(e.target.value)}
+                      placeholder="Ex: Sped Fiscal"
+                      className="mavo-field"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="queue-menu-option" className="block text-xs font-bold text-slate-500 uppercase mb-1">Opção no menu (número)</label>
+                    <input
+                      id="queue-menu-option"
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={formMenuOption}
+                      onChange={(e) => setFormMenuOption(Number(e.target.value))}
+                      className="mavo-field"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="queue-color" className="block text-xs font-bold text-slate-500 uppercase mb-1">Cor</label>
+                    <input
+                      id="queue-color"
+                      type="color"
+                      value={formColorHex}
+                      onChange={(e) => setFormColorHex(e.target.value)}
+                      className="w-full h-10 rounded-xl border border-slate-200 cursor-pointer"
+                    />
+                    <input aria-label="Código hexadecimal da cor"
+                      type="text"
+                      value={formColorHex}
+                      onChange={(e) => setFormColorHex(e.target.value)}
+                      placeholder="#64748b"
+                      className="mavo-field mt-2 py-2"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="queue-sla" className="block text-xs font-bold text-slate-500 uppercase mb-1">SLA Resposta (minutos)</label>
+                    <input
+                      id="queue-sla"
+                      type="number"
+                      min={5}
+                      max={1440}
+                      value={formDefaultSlaMins}
+                      onChange={(e) => setFormDefaultSlaMins(Number(e.target.value))}
+                      className="mavo-field"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="queue-type" className="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo da fila</label>
+                    <select id="queue-type" value={formQueueType} onChange={(e) => setFormQueueType(e.target.value as typeof formQueueType)} className="mavo-field">
+                      <option value="custom">Fila personalizada</option>
+                      <option value="offers_promotions">Ofertas e promoções</option>
+                      <option value="business_hours_location">Horários e localização</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                    <div><p className="text-sm font-bold text-slate-800 dark:text-slate-100">Ativo no menu do chatbot</p><p className="text-xs text-slate-500 dark:text-slate-400">Filas inativas não aparecem como opção para o cliente.</p></div>
+                    <button type="button" role="switch" aria-checked={formIsActive} aria-label="Alternar fila ativa no menu do chatbot" onClick={() => setFormIsActive((value) => !value)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${formIsActive ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'}`}><span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition ${formIsActive ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+                  </div>
+    
+                  {editingId && (
+                    <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-100">
+                      O conteúdo e as mensagens do cliente são configurados separadamente, em etapas, pelo botão <strong>Configurar automação</strong>. Assim, salvar estes dados básicos não publica nada por engano.
+                    </div>
+                  )}
+    
+                  {submitError && <p className="text-sm text-rose-600">{submitError}</p>}
+                  <div className="flex gap-2 justify-end pt-2">
+                    <button
+                      type="button"
+                      onClick={closeModal}
+                      disabled={submitting}
+                      className="mavo-button-secondary"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={submitting || !formName.trim()}
+                      className="mavo-button-primary"
+                    >
+                      {submitting ? 'Salvando...' : editingId ? 'Atualizar' : 'Criar'}
+                    </button>
+                  </div>
+                </form>
+                </div>
+            </Dialog>
+          )}
+          {configuringQueue && <QueueAutomationDrawer key={`${configuringQueue.queue.id}-${configuringQueue.tab}`} queue={configuringQueue.queue} initialTab={configuringQueue.tab} onClose={() => setConfiguringQueue(null)} onChanged={() => { void fetchQueues(); }} />}
+          {confirmRestore && (
+            <Dialog title="Restaurar menu padrão" description="As 6 filas padrão do supermercado serão criadas ou reativadas com o nome, cor e SLA originais. Filas que você personalizou continuam como estão." onClose={() => { if (!restoring) setConfirmRestore(false); }}>
+              <div className="p-6"><p className="text-sm text-slate-600 dark:text-slate-300">Use isso se quiser trazer de volta uma opção padrão que foi removida ou desativada.</p><div className="mt-5 flex justify-end gap-3"><button type="button" disabled={restoring} onClick={() => setConfirmRestore(false)} className="mavo-button-secondary">Cancelar</button><button type="button" disabled={restoring} onClick={() => void restoreDefaultMenu()} className="mavo-button-primary">{restoring ? 'Restaurando...' : 'Restaurar menu padrão'}</button></div></div>
+            </Dialog>
+          )}
+          {deleteCandidate && (
+            <Dialog title="Excluir fila" description={`A fila “${deleteCandidate.name}” só será removida se não houver atendimentos vinculados. O histórico nunca será apagado.`} onClose={() => { if (!deleting) setDeleteCandidate(null); }}>
+              <div className="p-6"><p className="text-sm text-slate-600 dark:text-slate-300">Caso a fila esteja em uso, desative-a ou transfira os atendimentos antes de tentar excluí-la.</p>{submitError && <p role="alert" className="mt-3 text-sm text-rose-600 dark:text-rose-300">{submitError}</p>}<div className="mt-5 flex justify-end gap-3"><button type="button" disabled={deleting} onClick={() => setDeleteCandidate(null)} className="mavo-button-secondary">Cancelar</button><button type="button" disabled={deleting} onClick={() => void removeQueue()} className="mavo-button-danger">{deleting ? 'Excluindo...' : 'Excluir fila'}</button></div></div>
+            </Dialog>
+          )}
+        </div></main>
+      );
+    };
+    
+    export default TicketTypeManagement;
+    
+  operator: 'match'
+  stack: |-
+    TestContext.<anonymous> (C:\willydev\willtalk\tests\unit\admin-interaction-feedback.test.ts:26:10)
+    async Test.run (node:internal/test_runner/test:797:9)
+    async Test.processPendingSubtests (node:internal/test_runner/test:527:7)
+  ...
+# Subtest: tabelas administrativas críticas preservam ações em cartões no mobile
+ok 10 - tabelas administrativas críticas preservam ações em cartões no mobile
+  ---
+  duration_ms: 15.0524
+  ...
+# Subtest: monitoramento de agentes filtra instalações no servidor e no tenant atual
+ok 11 - monitoramento de agentes filtra instalações no servidor e no tenant atual
+  ---
+  duration_ms: 14.3078
+  ...
+# Subtest: agentes exibem uma ação recomendada sem expor dados de rede
+ok 12 - agentes exibem uma ação recomendada sem expor dados de rede
+  ---
+  duration_ms: 13.2908
+  ...
+# Subtest: assinatura HMAC cobre método, caminho, timestamp, nonce e corpo
+ok 13 - assinatura HMAC cobre método, caminho, timestamp, nonce e corpo
+  ---
+  duration_ms: 6.1459
+  ...
+# Subtest: segredo do agente é cifrado com AES-GCM e recuperado
+ok 14 - segredo do agente é cifrado com AES-GCM e recuperado
+  ---
+  duration_ms: 6.2733
+  ...
+# Subtest: checksum é estável e rejeita alteração de registros
+ok 15 - checksum é estável e rejeita alteração de registros
+  ---
+  duration_ms: 1.0639
+  ...
+# Subtest: schemas recusam versão incompatível, campos extras e datas fora do lote
+ok 16 - schemas recusam versão incompatível, campos extras e datas fora do lote
+  ---
+  duration_ms: 7.5174
+  ...
+# Subtest: exportação da auditoria preserva escopo do tenant e mascara telefone
+ok 17 - exportação da auditoria preserva escopo do tenant e mascara telefone
+  ---
+  duration_ms: 13.3586
+  ...
+# Subtest: entrega a sequência de ofertas na ordem em que foi montada
+ok 18 - entrega a sequência de ofertas na ordem em que foi montada
+  ---
+  duration_ms: 90.863
+  ...
+# Subtest: um flyer que falha não impede o restante da sequência
+ok 19 - um flyer que falha não impede o restante da sequência
+  ---
+  duration_ms: 0.919
+  ...
+# Subtest: a rota do webhook entrega a sequência em ordem, sem Promise.all
+ok 20 - a rota do webhook entrega a sequência em ordem, sem Promise.all
+  ---
+  duration_ms: 6.8306
+  ...
+# Subtest: acessos gerenciais filtram no servidor dentro do tenant autenticado
+ok 21 - acessos gerenciais filtram no servidor dentro do tenant autenticado
+  ---
+  duration_ms: 11.4625
+  ...
+# Subtest: auditoria passa o tenant antes do SQL em todas as consultas estritas
+ok 22 - auditoria passa o tenant antes do SQL em todas as consultas estritas
+  ---
+  duration_ms: 5.2638
+  ...
+# Subtest: calcula média diária pelos dias corridos do período
+ok 23 - calcula média diária pelos dias corridos do período
+  ---
+  duration_ms: 9.2116
+  ...
+# Subtest: agrega dias pelo dia da semana e ordena pelo total
+ok 24 - agrega dias pelo dia da semana e ordena pelo total
+  ---
+  duration_ms: 5.5087
+  ...
+# Subtest: formata moeda e limita séries longas para WhatsApp
+ok 25 - formata moeda e limita séries longas para WhatsApp
+  ---
+  duration_ms: 662.2764
+  ...
+# Subtest: resumo não inventa produto ou dia quando não existem
+ok 26 - resumo não inventa produto ou dia quando não existem
+  ---
+  duration_ms: 0.5609
+  ...
+# Subtest: horários da organização são persistidos em um único upsert tenant-scoped
+ok 27 - horários da organização são persistidos em um único upsert tenant-scoped
+  ---
+  duration_ms: 5.0432
+  ...
+# ⚠️  Node.js 20 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 22 or later. For more information, visit: https://github.com/orgs/supabase/discussions/45715
+# Subtest: usa o expediente padrão do supermercado quando o banco não está configurado
+ok 28 - usa o expediente padrão do supermercado quando o banco não está configurado
+  ---
+  duration_ms: 2.0023
+  ...
+# Subtest: permite configurar sábado e domingo por ambiente
+ok 29 - permite configurar sábado e domingo por ambiente
+  ---
+  duration_ms: 0.3431
+  ...
+# Subtest: ignora horários inválidos e mantém defaults seguros
+ok 30 - ignora horários inválidos e mantém defaults seguros
+  ---
+  duration_ms: 1.656
+  ...
+# Subtest: dia desativado no banco permanece fechado e não cai no fallback
+ok 31 - dia desativado no banco permanece fechado e não cai no fallback
+  ---
+  duration_ms: 0.3107
+  ...
+# Subtest: cadastro ativo do banco tem prioridade sobre as variáveis
+ok 32 - cadastro ativo do banco tem prioridade sobre as variáveis
+  ---
+  duration_ms: 0.2097
+  ...
+# Subtest: interpreta períodos conhecidos no timezone do negócio
+ok 33 - interpreta períodos conhecidos no timezone do negócio
+  ---
+  duration_ms: 646.3724
+  ...
+# Subtest: calcula período anterior com o mesmo número de dias
+ok 34 - calcula período anterior com o mesmo número de dias
+  ---
+  duration_ms: 0.676
+  ...
+# Subtest: recusa intervalos invertidos ou maiores que um ano
+ok 35 - recusa intervalos invertidos ou maiores que um ano
+  ---
+  duration_ms: 1.7656
+  ...
+# Subtest: roteia intenções determinísticas e não confunde período com limite
+ok 36 - roteia intenções determinísticas e não confunde período com limite
+  ---
+  duration_ms: 1.7097
+  ...
+# Subtest: matriz de papéis aplica permissões e overrides
+ok 37 - matriz de papéis aplica permissões e overrides
+  ---
+  duration_ms: 1.7091
+  ...
+# Subtest: PIN exige 6 a 12 dígitos e nunca é armazenado em texto
+ok 38 - PIN exige 6 a 12 dígitos e nunca é armazenado em texto
+  ---
+  duration_ms: 1138.6509
+  ...
+# Subtest: quinta falha bloqueia e uma trava expirada abre nova janela
+ok 39 - quinta falha bloqueia e uma trava expirada abre nova janela
+  ---
+  duration_ms: 3.6955
+  ...
+# Subtest: sessão expira e revogação tem efeito imediato
+ok 40 - sessão expira e revogação tem efeito imediato
+  ---
+  duration_ms: 0.3174
+  ...
+# Subtest: as variáveis explícitas vencem uma CLOUDINARY_URL antiga
+ok 41 - as variáveis explícitas vencem uma CLOUDINARY_URL antiga
+  ---
+  duration_ms: 1.9471
+  ...
+# Subtest: usa CLOUDINARY_URL quando as variáveis explícitas não estão definidas
+ok 42 - usa CLOUDINARY_URL quando as variáveis explícitas não estão definidas
+  ---
+  duration_ms: 0.3131
+  ...
+# Subtest: não mistura fontes quando as variáveis explícitas estão incompletas
+ok 43 - não mistura fontes quando as variáveis explícitas estão incompletas
+  ---
+  duration_ms: 0.3556
+  ...
+# Subtest: ignora o CLOUDINARY_URL de exemplo copiado do painel do Cloudinary
+ok 44 - ignora o CLOUDINARY_URL de exemplo copiado do painel do Cloudinary
+  ---
+  duration_ms: 0.2356
+  ...
+# Subtest: aceita apenas o esquema cloudinary: e limpa aspas e espaços
+ok 45 - aceita apenas o esquema cloudinary: e limpa aspas e espaços
+  ---
+  duration_ms: 0.246
+  ...
+# Subtest: relata configuração ausente sem quebrar
+ok 46 - relata configuração ausente sem quebrar
+  ---
+  duration_ms: 0.1973
+  ...
+# Subtest: preserva a estimativa calculada a partir da configuração vigente
+ok 47 - preserva a estimativa calculada a partir da configuração vigente
+  ---
+  duration_ms: 3.3115
+  ...
+# Subtest: migração comercial aplica RLS e índices tenant-aware
+ok 48 - migração comercial aplica RLS e índices tenant-aware
+  ---
+  duration_ms: 7.4501
+  ...
+# Subtest: serviço mantém o filtro de validade e a idempotência no tenant
+ok 49 - serviço mantém o filtro de validade e a idempotência no tenant
+  ---
+  duration_ms: 2.0049
+  ...
+# Subtest: contatos pesquisam e paginam no servidor dentro do tenant autenticado
+ok 50 - contatos pesquisam e paginam no servidor dentro do tenant autenticado
+  ---
+  duration_ms: 5.8724
+  ...
+# Subtest: inclui frontend e a URL pública da própria API nas origens
+ok 51 - inclui frontend e a URL pública da própria API nas origens
+  ---
+  duration_ms: 1.6458
+  ...
+# Subtest: permite a própria origem recebida pelo proxy sem liberar terceiros
+ok 52 - permite a própria origem recebida pelo proxy sem liberar terceiros
+  ---
+  duration_ms: 0.2966
+  ...
+# Subtest: recusa mutação autenticada sem Origin e preserva integrações sem cookie
+ok 53 - recusa mutação autenticada sem Origin e preserva integrações sem cookie
+  ---
+  duration_ms: 0.1855
+  ...
+# Subtest: frame-ancestors é entregue por header, não por meta CSP
+ok 54 - frame-ancestors é entregue por header, não por meta CSP
+  ---
+  duration_ms: 6.1232
+  ...
+# Subtest: adquire o lock de migration sem bloquear quando ele está livre
+ok 55 - adquire o lock de migration sem bloquear quando ele está livre
+  ---
+  duration_ms: 2.0095
+  ...
+# Subtest: espera o lock enquanto outro deploy ainda o segura
+ok 56 - espera o lock enquanto outro deploy ainda o segura
+  ---
+  duration_ms: 10.4867
+  ...
+# Subtest: falha rápido em vez de deixar o deploy travado quando o lock nunca é liberado
+ok 57 - falha rápido em vez de deixar o deploy travado quando o lock nunca é liberado
+  ---
+  duration_ms: 32.5333
+  ...
+# Subtest: sessão de migration limita lock, statement e transação ociosa
+ok 58 - sessão de migration limita lock, statement e transação ociosa
+  ---
+  duration_ms: 0.861
+  ...
+# Subtest: cada etapa de banco aborta ao estourar o prazo em vez de pendurar o build
+ok 59 - cada etapa de banco aborta ao estourar o prazo em vez de pendurar o build
+  ---
+  duration_ms: 26.8597
+  ...
+# Subtest: o corpo da migration perde o BEGIN/COMMIT próprio e preserva blocos DO
+ok 60 - o corpo da migration perde o BEGIN/COMMIT próprio e preserva blocos DO
+  ---
+  duration_ms: 0.853
+  ...
+# Subtest: migration antiga sem transação própria segue inteira
+ok 61 - migration antiga sem transação própria segue inteira
+  ---
+  duration_ms: 0.4063
+  ...
+# Subtest: nenhuma migration versionada mantém transação aninhada ou CONCURRENTLY
+ok 62 - nenhuma migration versionada mantém transação aninhada ou CONCURRENTLY
+  ---
+  duration_ms: 46.6283
+  ...
+# Subtest: aplicar e registrar a migration acontece numa transação só
+ok 63 - aplicar e registrar a migration acontece numa transação só
+  ---
+  duration_ms: 1.5518
+  ...
+# Subtest: scripts de deploy não usam mais chamadas de banco sem limite de tempo
+ok 64 - scripts de deploy não usam mais chamadas de banco sem limite de tempo
+  ---
+  duration_ms: 2.3362
+  ...
+# Subtest: direciona as telas duplicadas do backend ao frontend canônico
+ok 65 - direciona as telas duplicadas do backend ao frontend canônico
+  ---
+  duration_ms: 1.9812
+  ...
+# Subtest: usa a SPA canônica também durante desenvolvimento
+ok 66 - usa a SPA canônica também durante desenvolvimento
+  ---
+  duration_ms: 0.3302
+  ...
+# Subtest: Inbox preserva a conversa selecionada na URL e suporta teclado
+ok 67 - Inbox preserva a conversa selecionada na URL e suporta teclado
+  ---
+  duration_ms: 5.4076
+  ...
+# Subtest: Inbox é carregado sob demanda e não integra o bundle inicial de login
+ok 68 - Inbox é carregado sob demanda e não integra o bundle inicial de login
+  ---
+  duration_ms: 5.2627
+  ...
+# Subtest: sincronização master usa confirmação acessível em vez de diálogo nativo
+ok 69 - sincronização master usa confirmação acessível em vez de diálogo nativo
+  ---
+  duration_ms: 6.2353
+  ...
+# Subtest: configuração do bot usa switches acessíveis em vez de checkboxes nativos
+ok 70 - configuração do bot usa switches acessíveis em vez de checkboxes nativos
+  ---
+  duration_ms: 1.9566
+  ...
+# Subtest: master avisa antes de descartar a configuração não salva
+ok 71 - master avisa antes de descartar a configuração não salva
+  ---
+  duration_ms: 2.0952
+  ...
+# Subtest: painel master mantém escala legível para dados operacionais claros
+ok 72 - painel master mantém escala legível para dados operacionais claros
+  ---
+  duration_ms: 8.0332
+  ...
+# Subtest: painel master valida a organização antes de consultar ou alterar outro tenant
+ok 73 - painel master valida a organização antes de consultar ou alterar outro tenant
+  ---
+  duration_ms: 7.4212
+  ...
+# Subtest: registry MCP contém somente ferramentas gerenciais de leitura
+ok 74 - registry MCP contém somente ferramentas gerenciais de leitura
+  ---
+  duration_ms: 8.4455
+  ...
+# Subtest: matriz de permissões é persistida por organização e aplicada antes das rotas críticas
+ok 75 - matriz de permissões é persistida por organização e aplicada antes das rotas críticas
+  ---
+  duration_ms: 6.572
+  ...
+# Subtest: sidebar usa a política de leitura por tenant, sem tratar visibilidade como autorização
+ok 76 - sidebar usa a política de leitura por tenant, sem tratar visibilidade como autorização
+  ---
+  duration_ms: 5.6259
+  ...
+# Subtest: tabs do menu do painel conectam painel e oferecem teclado
+ok 77 - tabs do menu do painel conectam painel e oferecem teclado
+  ---
+  duration_ms: 1.9413
+  ...
+# Subtest: drawer de navegação móvel fecha com Escape
+ok 78 - drawer de navegação móvel fecha com Escape
+  ---
+  duration_ms: 4.9482
+  ...
+# Subtest: erro sanitizado preserva domínio controlado e oculta detalhes internos
+ok 79 - erro sanitizado preserva domínio controlado e oculta detalhes internos
+  ---
+  duration_ms: 2.192
+  ...
+# Subtest: entrada de auditoria remove PIN, telefone e e-mail
+ok 80 - entrada de auditoria remove PIN, telefone e e-mail
+  ---
+  duration_ms: 0.8366
+  ...
+# Subtest: estados de página compartilhados cobrem áreas administrativas e operacionais
+ok 81 - estados de página compartilhados cobrem áreas administrativas e operacionais
+  ---
+  duration_ms: 8.7824
+  ...
+# Subtest: paginação operacional é compartilhada e tem nomes acessíveis
+ok 82 - paginação operacional é compartilhada e tem nomes acessíveis
+  ---
+  duration_ms: 8.5246
+  ...
+# Subtest: central de conexão trata falha de status sem manter a tela em carregamento
+ok 83 - central de conexão trata falha de status sem manter a tela em carregamento
+  ---
+  duration_ms: 6.0151
+  ...
+# Subtest: normaliza telefones brasileiros e preserva E.164 sem símbolos
+ok 84 - normaliza telefones brasileiros e preserva E.164 sem símbolos
+  ---
+  duration_ms: 1.4347
+  ...
+# Subtest: recusa identificadores que não podem ser um telefone
+ok 85 - recusa identificadores que não podem ser um telefone
+  ---
+  duration_ms: 0.3055
+  ...
+# Subtest: deploy garante a organização padrão sem alterar credenciais de usuários
+ok 86 - deploy garante a organização padrão sem alterar credenciais de usuários
+  ---
+  duration_ms: 7.4383
+  ...
+# Subtest: falha do provedor impede persistência enganosa da mensagem de saída
+ok 87 - falha do provedor impede persistência enganosa da mensagem de saída
+  ---
+  duration_ms: 9.7107
+  ...
+# Subtest: upload valida tipo e limite e remove órfão quando a entrega falha
+ok 88 - upload valida tipo e limite e remove órfão quando a entrega falha
+  ---
+  duration_ms: 2.4486
+  ...
+# Subtest: mídia assinada exige vínculo da conversa com o tenant autenticado
+ok 89 - mídia assinada exige vínculo da conversa com o tenant autenticado
+  ---
+  duration_ms: 1.6793
+  ...
+# Subtest: novo contato após encerramento cria protocolo novo
+ok 90 - novo contato após encerramento cria protocolo novo
+  ---
+  duration_ms: 2.6414
+  ...
+# Subtest: contatos bloqueados são filtrados nos três canais de entrada
+ok 91 - contatos bloqueados são filtrados nos três canais de entrada
+  ---
+  duration_ms: 2.5379
+  ...
+# Subtest: QR e diagnóstico do WhatsApp são restritos por permissão de painel no servidor
+ok 92 - QR e diagnóstico do WhatsApp são restritos por permissão de painel no servidor
+  ---
+  duration_ms: 7.571
+  ...
+# Subtest: shutdown usa a API do Baileys
+ok 93 - shutdown usa a API do Baileys
+  ---
+  duration_ms: 1.8785
+  ...
+# Subtest: somente administrador altera contas e a última conta admin é protegida
+ok 94 - somente administrador altera contas e a última conta admin é protegida
+  ---
+  duration_ms: 3.4386
+  ...
+# Subtest: métricas gerenciais não ficam disponíveis ao atendente por API direta
+ok 95 - métricas gerenciais não ficam disponíveis ao atendente por API direta
+  ---
+  duration_ms: 2.2579
+  ...
+# Subtest: banco serializa a proteção do último administrador por tenant
+ok 96 - banco serializa a proteção do último administrador por tenant
+  ---
+  duration_ms: 1.4677
+  ...
+# Subtest: preset do supermercado só faz bootstrap quando o tenant não tem nenhuma fila, não a cada mensagem
+ok 97 - preset do supermercado só faz bootstrap quando o tenant não tem nenhuma fila, não a cada mensagem
+  ---
+  duration_ms: 1.8725
+  ...
+# Subtest: o editor avisa que promoções não publicadas não chegam ao bot
+ok 98 - o editor avisa que promoções não publicadas não chegam ao bot
+  ---
+  duration_ms: 5.4138
+  ...
+# Subtest: o drawer informa ao gerenciador se a fila está publicada
+ok 99 - o drawer informa ao gerenciador se a fila está publicada
+  ---
+  duration_ms: 1.9967
+  ...
+# Subtest: schemas de automação recusam campos arbitrários e datas invertidas
+ok 100 - schemas de automação recusam campos arbitrários e datas invertidas
+  ---
+  duration_ms: 8.4691
+  ...
+# Subtest: horários aceitam dois períodos válidos e recusam intervalo sobreposto
+ok 101 - horários aceitam dois períodos válidos e recusam intervalo sobreposto
+  ---
+  duration_ms: 1.7362
+  ...
+# Subtest: validação de flyer confere assinatura do arquivo, não apenas MIME informado
+ok 102 - validação de flyer confere assinatura do arquivo, não apenas MIME informado
+  ---
+  duration_ms: 0.6217
+  ...
+# Subtest: migration e bot usam configuração publicada e isolamento por tenant
+ok 103 - migration e bot usam configuração publicada e isolamento por tenant
+  ---
+  duration_ms: 15.3977
+  ...
+# Subtest: exclusão de fila falha de forma segura quando há atendimento vinculado
+ok 104 - exclusão de fila falha de forma segura quando há atendimento vinculado
+  ---
+  duration_ms: 6.1972
+  ...
+# Subtest: filas oferecem busca, filtro de status e tabela para volume operacional
+ok 105 - filas oferecem busca, filtro de status e tabela para volume operacional
+  ---
+  duration_ms: 6.123
+  ...
+# Subtest: worker mantém somente filas com processamento e produtor reais
+ok 106 - worker mantém somente filas com processamento e produtor reais
+  ---
+  duration_ms: 6.1481
+  ...
+# Subtest: prévia de resposta rápida substitui somente as variáveis documentadas
+ok 107 - prévia de resposta rápida substitui somente as variáveis documentadas
+  ---
+  duration_ms: 34.5174
+  ...
+# Subtest: respostas rápidas usam busca e paginação no servidor sem perder o estado vazio
+ok 108 - respostas rápidas usam busca e paginação no servidor sem perder o estado vazio
+  ---
+  duration_ms: 5.9904
+  ...
+# Subtest: cabeçalho aplica metadados de rota na aba e no breadcrumb
+ok 109 - cabeçalho aplica metadados de rota na aba e no breadcrumb
+  ---
+  duration_ms: 5.9515
+  ...
+# Subtest: ambiente de produção exige Supabase, Redis e segredo JWT forte
+ok 110 - ambiente de produção exige Supabase, Redis e segredo JWT forte
+  ---
+  duration_ms: 6.1044
+  ...
+# Subtest: ambiente da API valida chave de cifra e disco persistente
+ok 111 - ambiente da API valida chave de cifra e disco persistente
+  ---
+  duration_ms: 2.1857
+  ...
+# Subtest: sessão efêmera do WhatsApp exige opt-in explícito no Render
+ok 112 - sessão efêmera do WhatsApp exige opt-in explícito no Render
+  ---
+  duration_ms: 1.168
+  ...
+# Subtest: sessão WhatsApp no banco exige chave forte e dispensa disco
+ok 113 - sessão WhatsApp no banco exige chave forte e dispensa disco
+  ---
+  duration_ms: 0.8291
+  ...
+# Subtest: worker falha fechado sem Redis em produção
+ok 114 - worker falha fechado sem Redis em produção
+  ---
+  duration_ms: 0.3536
+  ...
+# Subtest: provedor WhatsApp inválido falha antes de iniciar produção
+ok 115 - provedor WhatsApp inválido falha antes de iniciar produção
+  ---
+  duration_ms: 0.7985
+  ...
+# Subtest: SLA de primeira resposta é agendado com contexto de tenant
+ok 116 - SLA de primeira resposta é agendado com contexto de tenant
+  ---
+  duration_ms: 5.7682
+  ...
+# Subtest: worker de SLA revalida prazo, tenant e idempotência antes de auditar
+ok 117 - worker de SLA revalida prazo, tenant e idempotência antes de auditar
+  ---
+  duration_ms: 3.1987
+  ...
+# Subtest: bloco global de identidade do bot fica fora do modal de fila e salva via supermarket-settings
+ok 118 - bloco global de identidade do bot fica fora do modal de fila e salva via supermarket-settings
+  ---
+  duration_ms: 7.8982
+  ...
+# Subtest: conteúdo de ofertas é configurado no editor dedicado da automação
+ok 119 - conteúdo de ofertas é configurado no editor dedicado da automação
+  ---
+  duration_ms: 20.0808
+  ...
+# Subtest: endereço e horários são configurados no editor dedicado da automação
+ok 120 - endereço e horários são configurados no editor dedicado da automação
+  ---
+  duration_ms: 2.7068
+  ...
+# Subtest: salvar dados básicos não publica nem sobrescreve o conteúdo da automação
+ok 121 - salvar dados básicos não publica nem sobrescreve o conteúdo da automação
+  ---
+  duration_ms: 2.456
+  ...
+# Subtest: apresenta o menu completo e informa a disponibilidade da equipe
+ok 122 - apresenta o menu completo e informa a disponibilidade da equipe
+  ---
+  duration_ms: 30.6855
+  ...
+# Subtest: resolve ofertas por autoatendimento quando o link está configurado
+ok 123 - resolve ofertas por autoatendimento quando o link está configurado
+  ---
+  duration_ms: 0.5928
+  ...
+# Subtest: encaminha para a fila correta quando falta configuração de autoatendimento
+ok 124 - encaminha para a fila correta quando falta configuração de autoatendimento
+  ---
+  duration_ms: 0.5254
+  ...
+# Subtest: coleta produto e conclui a triagem com o contexto informado
+ok 125 - coleta produto e conclui a triagem com o contexto informado
+  ---
+  duration_ms: 0.4591
+  ...
+# Subtest: mantém o nome configurado da loja nas respostas de localização e triagem
+ok 126 - mantém o nome configurado da loja nas respostas de localização e triagem
+  ---
+  duration_ms: 0.3459
+  ...
+# Subtest: não repete respostas automáticas depois que a conversa aguarda uma pessoa
+ok 127 - não repete respostas automáticas depois que a conversa aguarda uma pessoa
+  ---
+  duration_ms: 0.2276
+  ...
+# Subtest: permite fallback externo somente quando habilitado
+ok 128 - permite fallback externo somente quando habilitado
+  ---
+  duration_ms: 0.3629
+  ...
+# Subtest: não intercepta mensagens quando o bot está desabilitado
+ok 129 - não intercepta mensagens quando o bot está desabilitado
+  ---
+  duration_ms: 0.196
+  ...
+# Subtest: instrui o cliente a digitar o número da opção desejada
+ok 130 - instrui o cliente a digitar o número da opção desejada
+  ---
+  duration_ms: 0.648
+  ...
+# Subtest: fila desativada some do menu e deixa de ser uma opção válida
+ok 131 - fila desativada some do menu e deixa de ser uma opção válida
+  ---
+  duration_ms: 0.7063
+  ...
+# Subtest: falar com atendente continua disponível mesmo se a opção 6 estiver fora da lista ativa
+ok 132 - falar com atendente continua disponível mesmo se a opção 6 estiver fora da lista ativa
+  ---
+  duration_ms: 0.2921
+  ...
+# Subtest: leitura da configuração do supermercado respeita a organização escolhida no painel master
+ok 133 - leitura da configuração do supermercado respeita a organização escolhida no painel master
+  ---
+  duration_ms: 6.3126
+  ...
+# Subtest: configuração pública exige identidade e aceita limpar campos opcionais
+ok 134 - configuração pública exige identidade e aceita limpar campos opcionais
+  ---
+  duration_ms: 2.1625
+  ...
+# Subtest: configuração pública recusa identidade vazia e links não HTTP
+ok 135 - configuração pública recusa identidade vazia e links não HTTP
+  ---
+  duration_ms: 0.531
+  ...
+# Subtest: horários recusam dias duplicados, fuso enganoso e intervalos invertidos
+ok 136 - horários recusam dias duplicados, fuso enganoso e intervalos invertidos
+  ---
+  duration_ms: 0.5309
+  ...
+# Subtest: equipe usa a paginação do servidor e retorna à primeira página ao alterar filtros
+ok 137 - equipe usa a paginação do servidor e retorna à primeira página ao alterar filtros
+  ---
+  duration_ms: 6.0382
+  ...
+# Subtest: equipe filtra e pagina no servidor dentro do tenant autenticado
+ok 138 - equipe filtra e pagina no servidor dentro do tenant autenticado
+  ---
+  duration_ms: 5.8745
+  ...
+# Subtest: contexto estrito de tenant aceita IDs técnicos e recusa SQL acidental
+ok 139 - contexto estrito de tenant aceita IDs técnicos e recusa SQL acidental
+  ---
+  duration_ms: 1.2162
+  ...
+# Subtest: consultas administrativas críticas executam com contexto RLS do tenant
+ok 140 - consultas administrativas críticas executam com contexto RLS do tenant
+  ---
+  duration_ms: 8.1372
+  ...
+# Subtest: último login é persistido por tenant sem bloquear autenticação
+ok 141 - último login é persistido por tenant sem bloquear autenticação
+  ---
+  duration_ms: 5.8368
+  ...
+# Subtest: usa o PN alternativo quando o Baileys entrega a conversa por LID
+ok 142 - usa o PN alternativo quando o Baileys entrega a conversa por LID
+  ---
+  duration_ms: 1.3387
+  ...
+# Subtest: consulta o mapeamento do Signal quando remoteJidAlt não veio
+ok 143 - consulta o mapeamento do Signal quando remoteJidAlt não veio
+  ---
+  duration_ms: 0.3178
+  ...
+# Subtest: nunca converte o identificador LID em número de telefone
+ok 144 - nunca converte o identificador LID em número de telefone
+  ---
+  duration_ms: 0.238
+  ...
+# Subtest: cifra e recupera valores binários do auth state do Baileys
+ok 145 - cifra e recupera valores binários do auth state do Baileys
+  ---
+  duration_ms: 4.0126
+  ...
+# Subtest: AES-GCM recusa chave, contexto ou conteúdo adulterado
+ok 146 - AES-GCM recusa chave, contexto ou conteúdo adulterado
+  ---
+  duration_ms: 1.3374
+  ...
+# Subtest: classifica store SQL como persistente e filesystem efêmero corretamente
+ok 147 - classifica store SQL como persistente e filesystem efêmero corretamente
+  ---
+  duration_ms: 0.4964
+  ...
+# Subtest: usa chave dedicada com fallback estável no JWT durante a sincronização
+ok 148 - usa chave dedicada com fallback estável no JWT durante a sincronização
+  ---
+  duration_ms: 0.4776
+  ...
+# Subtest: reconecta apenas quedas transitórias, nunca logout ou parada manual
+ok 149 - reconecta apenas quedas transitórias, nunca logout ou parada manual
+  ---
+  duration_ms: 0.1612
+  ...
+# Subtest: migration cria tabela cifrada com isolamento RLS e verificação de deploy
+ok 150 - migration cria tabela cifrada com isolamento RLS e verificação de deploy
+  ---
+  duration_ms: 8.2114
+  ...
+# Subtest: classifica falhas de inicialização do WhatsApp sem expor detalhes
+ok 151 - classifica falhas de inicialização do WhatsApp sem expor detalhes
+  ---
+  duration_ms: 0.8122
+  ...
+1..151
+# tests 151
+# suites 0
+# pass 149
+# fail 1
+# cancelled 0
+# skipped 1
+# todo 0
+# duration_ms 4774.4571

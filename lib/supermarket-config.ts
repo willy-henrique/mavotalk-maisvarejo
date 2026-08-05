@@ -76,3 +76,18 @@ export function queueTypeForMenuOption(menuOption: number): "custom" | "offers_p
   if (menuOption === 2) return "business_hours_location";
   return "custom";
 }
+
+/**
+ * Resolve o tipo efetivo de uma fila. Um valor gravado sempre vence — inclusive
+ * `custom` — para que o administrador possa ter uma fila comum na posição 1. A
+ * inferência por posição só cobre linhas antigas, anteriores à coluna queue_type.
+ */
+export function normalizeQueueType(
+  stored: unknown,
+  menuOption: number,
+): "custom" | "offers_promotions" | "business_hours_location" {
+  if (stored === "custom" || stored === "offers_promotions" || stored === "business_hours_location") {
+    return stored;
+  }
+  return queueTypeForMenuOption(menuOption);
+}

@@ -5,6 +5,7 @@ import {
   type DecideSupermarketBotParams,
   type SupermarketBotConfig,
 } from "../../lib/supermarket-bot";
+import type { BotMenuEntry } from "../../lib/bot-menu";
 
 const completeConfig: SupermarketBotConfig = {
   enabled: true,
@@ -70,7 +71,7 @@ test("encaminha para a fila correta quando falta configuração de autoatendimen
   assert.equal(decision?.queueMenuOption, 1);
   assert.equal(decision?.triageCompleted, true);
   assert.equal(decision?.appendOutOfHours, true);
-  assert.match(decision?.reason || "", /missing_self_service_config_1/);
+  assert.match(decision?.reason || "", /missing_self_service_config_offers/);
 });
 
 test("coleta produto e conclui a triagem com o contexto informado", () => {
@@ -147,4 +148,67 @@ test("falar com atendente continua disponível mesmo se a opção 6 estiver fora
   const decision = decide({ message: "6", activeMenuOptions: [1, 2, 3, 4, 5] });
   assert.equal(decision?.kind, "human-handoff");
   assert.equal(decision?.queueMenuOption, 6);
+});
+
+// ── Menu derivado das filas do tenant ────────────────────────────────
+// O preset de supermercado deixa de ser a fonte de verdade: o cliente vê o
+// nome cadastrado no painel e o comportamento segue o queue_type da fila.
+
+const filasDoTenant: BotMenuEntry[] = [
+  { queueId: "q-tele", menuOption: 1, name: "Tele Vendas", queueType: "custom" },
+  { queueId: "q-ofertas", menuOption: 2, name: "Ofertas Anunciadas", queueType: "offers_promotions" },
+  { queueId: "q-adm", menuOption: 3, name: "Administrativo", queueType: "custom" },
+  { queueId: "q-nf", menuOption: 9, name: "Nota fiscal de Saída", queueType: "custom" },
+];
+
+test("o menu mostra as filas do tenant, não o preset de supermercado", () => {
+  const decision = decide({ message: "menu", menuEntries: filasDoTenant });
+
+  assert.equal(decision?.kind, "menu");
+  assert.match(decision?.replyText || "", /\*1\* - Tele Vendas/);
+  assert.match(decision?.replyText || "", /\*9\* - Nota fiscal de Saída/);
+  assert.doesNotMatch(decision?.replyText || "", /Açougue|hortifruti/);
+});
+
+test("ofertas disparam pelo queue_type mesmo fora da posição 1", () => {
+  const decision = decide({ message: "2", menuEntries: filasDoTenant });
+
+  assert.equal(decision?.kind, "self-service");
+  assert.equal(decision?.queueId, "q-ofertas");
+  assert.equal(decision?.queueType, "offers_promotions");
+  assert.match(decision?.reason || "", /self_service_offers/);
+});
+
+test("a fila da posição 1 deixa de ser oferta quando é uma fila comum", () => {
+  const decision = decide({ message: "1", menuEntries: filasDoTenant });
+
+  assert.equal(decision?.kind, "collect-details");
+  assert.equal(decision?.queueId, "q-tele");
+  assert.match(decision?.replyText || "", /Tele Vendas/);
+});
+
+test("o cliente pode escolher escrevendo o nome da opção", () => {
+  const decision = decide({ message: "Ofertas Anunciadas", menuEntries: filasDoTenant });
+
+  assert.equal(decision?.kind, "self-service");
+  assert.equal(decision?.queueId, "q-ofertas");
+});
+
+test("filas acima da opção 6 são selecionáveis", () => {
+  const decision = decide({ message: "9", menuEntries: filasDoTenant });
+
+  assert.equal(decision?.kind, "collect-details");
+  assert.equal(decision?.queueId, "q-nf");
+});
+
+test("com filas do tenant, o 6 não é mais atalho fixo para atendente", () => {
+  const decision = decide({ message: "6", menuEntries: filasDoTenant });
+
+  assert.equal(decision?.kind, "menu");
+});
+
+test("pedir atendente por escrito continua encaminhando para uma pessoa", () => {
+  const decision = decide({ message: "quero falar com atendente", menuEntries: filasDoTenant });
+
+  assert.equal(decision?.kind, "human-handoff");
 });

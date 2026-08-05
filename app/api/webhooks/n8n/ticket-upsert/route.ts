@@ -706,15 +706,18 @@ export async function POST(request: Request) {
   // O decisor legado só reconhece autoatendimento quando há conteúdo nos
   // campos antigos da organização. Uma configuração publicada da própria fila
   // é igualmente suficiente e será formatada pelo runtime logo abaixo.
-  const offersQueue = queues.find((item) => Number(item.menuOption) === 1);
-  const hoursQueue = queues.find((item) => Number(item.menuOption) === 2);
-  const [publishedOffers, publishedHours] = await Promise.all([
-    offersQueue ? getPublishedQueueConfiguration(organizationId, String(offersQueue.id)) : null,
-    hoursQueue ? getPublishedQueueConfiguration(organizationId, String(hoursQueue.id)) : null,
-  ]);
+  const offersQueue = queues.find((item) => item.queueType === "offers_promotions");
+  const hoursQueue = queues.find((item) => item.queueType === "business_hours_location");
+  // Horários dependem do snapshot gravado na publicação; ofertas não, por isso
+  // só a fila de horários ainda precisa ser consultada aqui.
+  const publishedHours = hoursQueue
+    ? await getPublishedQueueConfiguration(organizationId, String(hoursQueue.id))
+    : null;
   const botDecisionConfig = {
     ...supermarketConfig,
-    offersText: supermarketConfig.offersText || (publishedOffers?.queueType === "offers_promotions" && publishedOffers.automationConfig.enabled ? "published-queue-content" : null),
+    // Basta existir uma fila de ofertas: os encartes salvos já são entregues pelo
+    // runtime, com a configuração publicada quando houver ou os padrões do tipo.
+    offersText: supermarketConfig.offersText || (offersQueue ? "published-queue-content" : null),
     address: supermarketConfig.address || (publishedHours?.queueType === "business_hours_location" && publishedHours.automationConfig.enabled ? "published-queue-content" : null),
   };
   const supermarketDecision = supermarketQueuesReady
@@ -727,15 +730,25 @@ export async function POST(request: Request) {
         businessOpen,
         config: botDecisionConfig,
         activeMenuOptions: queues.map((item) => Number(item.menuOption)),
+        // O menu exibe o nome cadastrado no painel e cada opção se comporta
+        // conforme o tipo da sua fila, não conforme a posição que ocupa.
+        menuEntries: queues.map((item) => ({
+          queueId: String(item.id),
+          menuOption: Number(item.menuOption),
+          name: String(item.name),
+          queueType: item.queueType || "custom",
+        })),
       })
     : null;
 
   if (supermarketDecision) {
-    const targetQueue = supermarketDecision.queueMenuOption
-      ? queues.find(
-          (item) => Number(item.menuOption) === supermarketDecision.queueMenuOption,
-        )
-      : null;
+    const targetQueue = supermarketDecision.queueId
+      ? queues.find((item) => String(item.id) === supermarketDecision.queueId)
+      : supermarketDecision.queueMenuOption
+        ? queues.find(
+            (item) => Number(item.menuOption) === supermarketDecision.queueMenuOption,
+          )
+        : null;
     const previousQueueId = conversation.queueId ? String(conversation.queueId) : null;
     queueId = supermarketDecision.clearQueue
       ? null
@@ -768,9 +781,13 @@ export async function POST(request: Request) {
     replyMediaUrl = supermarketDecision.mediaUrl || null;
     // Configurações publicadas são prioritárias. O fallback legado preserva tenants
     // ainda não migrados e nunca envia uma promoção fora da janela de validade.
-    if (supermarketDecision.reason === "supermarket_self_service_1") {
-      const offersQueue = queues.find((item) => Number(item.menuOption) === 1);
-      replySequence = offersQueue ? await formatPromotionResponse(organizationId, String(offersQueue.id)) : null;
+    if (supermarketDecision.reason === "supermarket_self_service_offers") {
+      // A fila vem da decisão: o encarte segue a fila de ofertas onde quer que
+      // o administrador a tenha posicionado no menu.
+      const offersQueueId =
+        supermarketDecision.queueId ||
+        (queues.find((item) => item.queueType === "offers_promotions")?.id ?? null);
+      replySequence = offersQueueId ? await formatPromotionResponse(organizationId, String(offersQueueId)) : null;
       if (replySequence?.length) { replyText = replySequence[0].text; replyMediaUrl = replySequence[0].mediaUrl || null; }
       else {
         const promotions = await listValidPromotions(organizationId);
@@ -780,9 +797,11 @@ export async function POST(request: Request) {
         }
       }
     }
-    if (supermarketDecision.reason === "supermarket_self_service_2") {
-      const hoursQueue = queues.find((item) => Number(item.menuOption) === 2);
-      replySequence = hoursQueue ? await formatBusinessHoursResponse(organizationId, String(hoursQueue.id)) : null;
+    if (supermarketDecision.reason === "supermarket_self_service_hours") {
+      const hoursQueueId =
+        supermarketDecision.queueId ||
+        (queues.find((item) => item.queueType === "business_hours_location")?.id ?? null);
+      replySequence = hoursQueueId ? await formatBusinessHoursResponse(organizationId, String(hoursQueueId)) : null;
       if (replySequence?.length) { replyText = replySequence[0].text; replyMediaUrl = replySequence[0].mediaUrl || null; }
     }
     if (

@@ -1,4 +1,4 @@
-import { getActivePromotions, getPublishedQueueConfiguration } from "@/lib/queue-automation";
+import { getActivePromotions, getPublishedQueueConfiguration, getRuntimeOffersConfiguration } from "@/lib/queue-automation";
 import type { BusinessHoursAutomationConfig, OffersAutomationConfig } from "@/lib/queue-automation-schemas";
 
 export type BotOutboundMessage = { text: string; mediaUrl?: string | null };
@@ -16,9 +16,10 @@ export async function deliverInOrder<T extends BotOutboundMessage>(messages: rea
   }
   return delivered;
 }
+/** O atalho humano é uma palavra, não um número: a posição 6 pode ser qualquer fila do tenant. */
 const footer = (config: { showReturnToMenu: boolean; allowHumanHandoff: boolean }) => {
-  const choices = [config.showReturnToMenu ? "Digite *0* para voltar ao menu" : null, config.allowHumanHandoff ? "Digite *6* para falar com a nossa equipe" : null].filter(Boolean);
-  return choices.length ? `\n\n${choices.join(" ou ")}.` : "";
+  const choices = [config.showReturnToMenu ? "digite *0* para voltar ao menu" : null, config.allowHumanHandoff ? "escreva *atendente* para falar com a nossa equipe" : null].filter(Boolean);
+  return choices.length ? `\n\nSe precisar, ${choices.join(" ou ")}.` : "";
 };
 const replace = (template: string, values: Record<string, string>) => template.replace(/\{(\w+)\}/g, (_, key) => values[key] || "");
 function zoned(date: Date, timezone: string) {
@@ -31,7 +32,7 @@ const minutes = (time: unknown) => { const [h, m] = String(time || "00:00").spli
 const timeText = (value: unknown) => String(value || "").slice(0, 5);
 
 export async function formatPromotionResponse(organizationId: string, queueId: string, now = new Date()): Promise<BotOutboundMessage[] | null> {
-  const configuration = await getPublishedQueueConfiguration(organizationId, queueId);
+  const configuration = await getRuntimeOffersConfiguration(organizationId, queueId);
   if (!configuration || configuration.queueType !== "offers_promotions" || !configuration.automationConfig.enabled) return null;
   const config = configuration.automationConfig as OffersAutomationConfig;
   const promotions = await getActivePromotions(organizationId, queueId, now);

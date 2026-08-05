@@ -14,7 +14,7 @@ import { createTenantPostgresSupabaseShim, type Row, type SupabaseLikeClient } f
 import { DEFAULT_ORGANIZATION_ID } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { enqueueSlaCheck } from "@/lib/queues";
-import { isProtectedSystemQueue, queueTypeForMenuOption, SUPERMARKET_QUEUE_PRESET } from "@/lib/supermarket-config";
+import { isProtectedSystemQueue, normalizeQueueType, queueTypeForMenuOption, SUPERMARKET_QUEUE_PRESET } from "@/lib/supermarket-config";
 import { randomUUID } from "node:crypto";
 import { queryTenantDatabase, withTenantTransaction } from "@/lib/db";
 
@@ -396,7 +396,7 @@ export async function listQueues(organizationId: string): Promise<FireQueue[]> {
     defaultSlaMins: Number(row.default_sla_mins ?? 30),
     isActive: row.is_active !== false,
     isSystem: isProtectedSystemQueue(Number(row.menu_option ?? 0)),
-    queueType: row.queue_type === "offers_promotions" || row.queue_type === "business_hours_location" ? row.queue_type : queueTypeForMenuOption(Number(row.menu_option ?? 0)),
+    queueType: normalizeQueueType(row.queue_type, Number(row.menu_option ?? 0)),
   }));
 }
 
@@ -413,7 +413,7 @@ export async function createQueue(organizationId: string, payload: Record<string
       color_hex: String(payload.colorHex ?? "#64748B"),
       default_sla_mins: Number(payload.defaultSlaMins ?? 30),
       is_active: (payload.isActive as boolean | undefined) ?? true,
-      queue_type: payload.queueType === "offers_promotions" || payload.queueType === "business_hours_location" ? payload.queueType : queueTypeForMenuOption(Number(payload.menuOption ?? 0)),
+      queue_type: normalizeQueueType(payload.queueType, Number(payload.menuOption ?? 0)),
     })
     .select("*")
     .maybeSingle();
@@ -427,7 +427,7 @@ export async function createQueue(organizationId: string, payload: Record<string
     defaultSlaMins: Number(data?.default_sla_mins ?? payload.defaultSlaMins ?? 30),
     isActive: (data?.is_active ?? payload.isActive) !== false,
     isSystem: isProtectedSystemQueue(Number(data?.menu_option ?? payload.menuOption ?? 0)),
-    queueType: data?.queue_type === "offers_promotions" || data?.queue_type === "business_hours_location" ? data.queue_type : queueTypeForMenuOption(Number(data?.menu_option ?? payload.menuOption ?? 0)),
+    queueType: normalizeQueueType(data?.queue_type, Number(data?.menu_option ?? payload.menuOption ?? 0)),
   };
 }
 
@@ -454,7 +454,7 @@ export async function updateQueue(
   if ("colorHex" in payload) updates.color_hex = String(payload.colorHex ?? "#64748B");
   if ("defaultSlaMins" in payload) updates.default_sla_mins = Number(payload.defaultSlaMins ?? 30);
   if ("isActive" in payload) updates.is_active = (payload.isActive as boolean | undefined) ?? true;
-  if ("queueType" in payload) updates.queue_type = payload.queueType === "offers_promotions" || payload.queueType === "business_hours_location" ? payload.queueType : queueTypeForMenuOption(currentMenuOption);
+  if ("queueType" in payload) updates.queue_type = normalizeQueueType(payload.queueType, currentMenuOption);
 
   const { data, error } = await supa(orgId)
     .from("queues")
@@ -474,7 +474,7 @@ export async function updateQueue(
     defaultSlaMins: Number(data.default_sla_mins ?? 30),
     isActive: data.is_active !== false,
     isSystem: isProtectedSystemQueue(Number(data.menu_option ?? currentMenuOption)),
-    queueType: data.queue_type === "offers_promotions" || data.queue_type === "business_hours_location" ? data.queue_type : queueTypeForMenuOption(Number(data.menu_option ?? currentMenuOption)),
+    queueType: normalizeQueueType(data.queue_type, Number(data.menu_option ?? currentMenuOption)),
   };
 }
 

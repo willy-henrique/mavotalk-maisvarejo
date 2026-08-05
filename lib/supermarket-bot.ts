@@ -1,4 +1,5 @@
-import { SUPERMARKET_QUEUE_PRESET, getSupermarketPresetByOption } from "./supermarket-config";
+import { SUPERMARKET_QUEUE_PRESET, getSupermarketPresetByOption, queueTypeForMenuOption } from "./supermarket-config";
+import { matchMenuEntry, renderMenuOptions, type BotMenuEntry } from "./bot-menu";
 
 export type SupermarketBotConfig = {
   enabled: boolean;
@@ -21,6 +22,9 @@ export type SupermarketBotDecision = {
   kind: "menu" | "self-service" | "collect-details" | "human-handoff" | "silent-human";
   replyText: string | null;
   queueMenuOption: number | null;
+  /** Fila escolhida. Preferir isto a `queueMenuOption`: a posição no menu é editável pelo tenant. */
+  queueId: string | null;
+  queueType: BotMenuEntry["queueType"] | null;
   clearQueue: boolean;
   triageCompleted: boolean;
   appendOutOfHours: boolean;
@@ -38,6 +42,12 @@ export type DecideSupermarketBotParams = {
   config?: SupermarketBotConfig;
   /** Opções do menu (1–6) atualmente ativas nas filas do tenant. Sem isto, assume-se o preset completo. */
   activeMenuOptions?: readonly number[];
+  /**
+   * Filas reais do tenant. Quando informadas, o menu passa a exibir o nome
+   * cadastrado no painel e o comportamento segue o `queueType` de cada fila.
+   * Sem elas, o decisor cai no preset de supermercado (tenants não migrados).
+   */
+  menuEntries?: readonly BotMenuEntry[];
 };
 
 function optionalEnv(name: string): string | null {
@@ -102,8 +112,35 @@ function greetingByBrasiliaTime(date = new Date()): string {
   return "Boa noite";
 }
 
-function navigationFooter() {
-  return "\n\nDigite *0* para voltar ao menu ou *6* para falar com a nossa equipe.";
+/**
+ * No preset legado a opção 6 é sempre "falar com um atendente". Com as filas do
+ * tenant esse número pode ser qualquer fila, então o atalho vira uma palavra.
+ */
+function navigationFooter(legacyMode = true) {
+  return legacyMode
+    ? "\n\nDigite *0* para voltar ao menu ou *6* para falar com a nossa equipe."
+    : "\n\nDigite *0* para voltar ao menu ou escreva *atendente* para falar com a nossa equipe.";
+}
+
+/** Opção do preset legado como entrada de menu, usada pelas intenções de supermercado. */
+function presetEntry(menuOption: number): BotMenuEntry {
+  return {
+    queueId: "",
+    menuOption,
+    name: getSupermarketPresetByOption(menuOption)?.name || "Atendimento",
+    queueType: queueTypeForMenuOption(menuOption),
+  };
+}
+
+/** Converte o preset de supermercado em opções de menu, para tenants sem filas informadas. */
+function presetMenuEntries(activeMenuOptions?: readonly number[]): BotMenuEntry[] {
+  const active = new Set(activeMenuOptions ?? SUPERMARKET_QUEUE_PRESET.map((item) => item.menuOption));
+  return SUPERMARKET_QUEUE_PRESET.filter((item) => active.has(item.menuOption)).map((item) => ({
+    queueId: "",
+    menuOption: item.menuOption,
+    name: item.name,
+    queueType: queueTypeForMenuOption(item.menuOption),
+  }));
 }
 
 /** Mantém a identidade configurada da loja visível em toda resposta do bot. */
@@ -116,13 +153,12 @@ export function buildSupermarketMenu(
   customerName?: string | null,
   businessOpen = true,
   activeMenuOptions?: readonly number[],
+  menuEntries?: readonly BotMenuEntry[],
 ): string {
   const name = firstName(customerName);
   const greeting = `${greetingByBrasiliaTime()}${name ? `, ${name}` : ""}! 👋`;
-  const activeOptions = new Set(activeMenuOptions ?? SUPERMARKET_QUEUE_PRESET.map((item) => item.menuOption));
-  const options = SUPERMARKET_QUEUE_PRESET.filter((item) => activeOptions.has(item.menuOption))
-    .map((item) => `${item.emoji} *${item.menuOption}* - ${item.name}`)
-    .join("\n");
+  const entries = menuEntries?.length ? menuEntries : presetMenuEntries(activeMenuOptions);
+  const options = renderMenuOptions(entries);
   const availability = businessOpen
     ? "🟢 _Nossa equipe está disponível agora._"
     : "🌙 _Sua mensagem será registrada e respondida no próximo atendimento._";
@@ -138,14 +174,14 @@ export function buildSupermarketMenu(
   );
 }
 
-function offersReply(config: SupermarketBotConfig): string {
+function offersReply(config: SupermarketBotConfig, legacyMode = true): string {
   const destination = config.offersText || (config.offersUrl
     ? `Veja as ofertas atualizadas aqui:\n${config.offersUrl}`
     : "As ofertas de hoje ainda não foram cadastradas. Nossa equipe pode enviar as promoções atuais para você.");
-  return `🏷️ *${responseTitle(config, "Ofertas e promoções")}*\n\n${destination}${navigationFooter()}`;
+  return `🏷️ *${responseTitle(config, "Ofertas e promoções")}*\n\n${destination}${navigationFooter(legacyMode)}`;
 }
 
-function locationReply(config: SupermarketBotConfig): string {
+function locationReply(config: SupermarketBotConfig, legacyMode = true): string {
   const hours = [config.weekdayHours, config.sundayHours].filter(Boolean).join("\n");
   const lines = [
     `📍 *${responseTitle(config, "Horários e localização")}*`,
@@ -155,10 +191,20 @@ function locationReply(config: SupermarketBotConfig): string {
     config.mapsUrl ? `\n*Como chegar:* ${config.mapsUrl}` : "",
     config.phone ? `\n*Telefone:* ${config.phone}` : "",
   ];
-  return `${lines.join("\n").trim()}${navigationFooter()}`;
+  return `${lines.join("\n").trim()}${navigationFooter(legacyMode)}`;
 }
 
-function collectDetailsReply(menuOption: number, config: SupermarketBotConfig): string {
+function collectDetailsReply(entry: BotMenuEntry, config: SupermarketBotConfig): string {
+  // Fila do tenant: nome livre, então o texto usa o que está cadastrado no painel
+  // em vez dos roteiros de supermercado presos às opções 3 a 5.
+  if (entry.queueId) {
+    return (
+      `📝 *${responseTitle(config, entry.name)}*\n\n` +
+      "Me conte em uma mensagem o que você precisa, com os detalhes que já tiver.\n\n" +
+      "Nossa equipe assume a conversa a partir daqui."
+    );
+  }
+  const menuOption = entry.menuOption;
   if (menuOption === 3) {
     return (
       `🛒 *${responseTitle(config, "Consulta de produto")}*\n\n` +
@@ -181,11 +227,16 @@ function collectDetailsReply(menuOption: number, config: SupermarketBotConfig): 
   );
 }
 
-function detailsReceivedReply(menuOption: number, message: string, config: SupermarketBotConfig): string {
+function detailsReceivedReply(
+  menuOption: number,
+  message: string,
+  config: SupermarketBotConfig,
+  queueName?: string | null,
+): string {
   const preset = getSupermarketPresetByOption(menuOption);
   const summary = message.trim().replace(/\s+/g, " ").slice(0, 220);
   return (
-    `✅ Obrigado! Registrei sua solicitação em *${preset?.name || "Atendimento"}* do *${config.storeName}*.\n\n` +
+    `✅ Obrigado! Registrei sua solicitação em *${queueName || preset?.name || "Atendimento"}* do *${config.storeName}*.\n\n` +
     `📝 _${summary}_\n\n` +
     "Nossa equipe recebeu o contexto e continuará o atendimento por aqui."
   );
@@ -214,12 +265,15 @@ function menuDecision(
   customerName: string | null | undefined,
   businessOpen: boolean,
   activeMenuOptions?: readonly number[],
+  menuEntries?: readonly BotMenuEntry[],
 ): SupermarketBotDecision {
   return {
     handled: true,
     kind: "menu",
-    replyText: buildSupermarketMenu(config, customerName, businessOpen, activeMenuOptions),
+    replyText: buildSupermarketMenu(config, customerName, businessOpen, activeMenuOptions, menuEntries),
     queueMenuOption: null,
+    queueId: null,
+    queueType: null,
     clearQueue: true,
     triageCompleted: false,
     appendOutOfHours: false,
@@ -227,67 +281,83 @@ function menuDecision(
   };
 }
 
-function optionDecision(
-  option: number,
+function humanHandoffDecision(
   config: SupermarketBotConfig,
+  context?: string,
+  entry?: BotMenuEntry,
 ): SupermarketBotDecision {
-  if (option === 1 || option === 2) {
-    const missingSelfServiceData =
-      (option === 1 && !config.offersUrl && !config.offersText && !config.offersImageUrl) ||
-      (option === 2 && !config.weekdayHours && !config.sundayHours && !config.address && !config.mapsUrl);
-    if (missingSelfServiceData) {
-      const context =
-        option === 1
-          ? "Quero receber as ofertas e promoções atuais."
-          : "Preciso confirmar o horário ou a localização da loja.";
-      return {
-        handled: true,
-        kind: "human-handoff",
-        replyText: humanHandoffReply(config, context),
-        queueMenuOption: option,
-        clearQueue: false,
-        triageCompleted: true,
-        appendOutOfHours: true,
-        reason: `supermarket_missing_self_service_config_${option}`,
-      };
-    }
-
-    const replyText = option === 1 ? offersReply(config) : locationReply(config);
-    return {
-      handled: true,
-      kind: "self-service",
-      replyText,
-      queueMenuOption: null,
-      clearQueue: true,
-      triageCompleted: false,
-      appendOutOfHours: false,
-      mediaUrl: option === 1 ? config.offersImageUrl : null,
-      reason: `supermarket_self_service_${option}`,
-    };
-  }
-
-  if (option >= 3 && option <= 5) {
-    return {
-      handled: true,
-      kind: "collect-details",
-      replyText: collectDetailsReply(option, config),
-      queueMenuOption: option,
-      clearQueue: false,
-      triageCompleted: false,
-      appendOutOfHours: false,
-      reason: `supermarket_collect_details_${option}`,
-    };
-  }
-
   return {
     handled: true,
     kind: "human-handoff",
-    replyText: humanHandoffReply(config),
-    queueMenuOption: 6,
+    replyText: humanHandoffReply(config, context),
+    queueMenuOption: entry?.menuOption ?? 6,
+    queueId: entry?.queueId || null,
+    queueType: entry?.queueType ?? null,
     clearQueue: false,
     triageCompleted: true,
     appendOutOfHours: true,
     reason: "supermarket_human_requested",
+  };
+}
+
+/**
+ * Decide a partir do tipo da fila escolhida, não da sua posição no menu. Mover
+ * "Ofertas" da opção 1 para a 5 no painel não muda o que o cliente recebe.
+ */
+function entryDecision(
+  entry: BotMenuEntry,
+  config: SupermarketBotConfig,
+  legacyMode: boolean,
+): SupermarketBotDecision {
+  const selfService = entry.queueType === "offers_promotions" || entry.queueType === "business_hours_location";
+
+  if (selfService) {
+    const isOffers = entry.queueType === "offers_promotions";
+    // Sem conteúdo legado e sem configuração publicada da fila não há o que
+    // responder sozinho; encaminhar é melhor que prometer uma oferta vazia.
+    const missingSelfServiceData = isOffers
+      ? !config.offersUrl && !config.offersText && !config.offersImageUrl
+      : !config.weekdayHours && !config.sundayHours && !config.address && !config.mapsUrl;
+
+    if (missingSelfServiceData) {
+      const context = isOffers
+        ? "Quero receber as ofertas e promoções atuais."
+        : "Preciso confirmar o horário ou a localização da loja.";
+      return {
+        ...humanHandoffDecision(config, context, entry),
+        reason: `supermarket_missing_self_service_config_${isOffers ? "offers" : "hours"}`,
+      };
+    }
+
+    return {
+      handled: true,
+      kind: "self-service",
+      replyText: isOffers ? offersReply(config, legacyMode) : locationReply(config, legacyMode),
+      queueMenuOption: null,
+      queueId: entry.queueId || null,
+      queueType: entry.queueType,
+      clearQueue: true,
+      triageCompleted: false,
+      appendOutOfHours: false,
+      mediaUrl: isOffers ? config.offersImageUrl : null,
+      reason: `supermarket_self_service_${isOffers ? "offers" : "hours"}`,
+    };
+  }
+
+  // No preset legado a opção 6 é o encaminhamento humano.
+  if (legacyMode && entry.menuOption === 6) return humanHandoffDecision(config, undefined, entry);
+
+  return {
+    handled: true,
+    kind: "collect-details",
+    replyText: collectDetailsReply(entry, config),
+    queueMenuOption: entry.menuOption,
+    queueId: entry.queueId || null,
+    queueType: entry.queueType,
+    clearQueue: false,
+    triageCompleted: false,
+    appendOutOfHours: false,
+    reason: `supermarket_collect_details_${entry.queueId || entry.menuOption}`,
   };
 }
 
@@ -299,14 +369,19 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
   const normalized = normalizeText(rawMessage);
   const option = selectedMenuOption(normalized);
   const activeMenuOptions = params.activeMenuOptions ?? SUPERMARKET_QUEUE_PRESET.map((item) => item.menuOption);
-  const activeOptions = new Set(activeMenuOptions);
+  // Sem filas do tenant o decisor opera no preset de supermercado, onde a opção
+  // 6 é sempre o atendimento humano. Com filas reais, nenhum número é reservado.
+  const legacyMode = !params.menuEntries?.length;
+  const entries = legacyMode ? presetMenuEntries(activeMenuOptions) : params.menuEntries!;
+  const showMenu = () =>
+    menuDecision(config, params.customerName, params.businessOpen, activeMenuOptions, entries);
 
   const isMenuCommand =
     option === 0 ||
     hasAny(normalized, ["voltar ao menu", "menu principal", "ver menu", "inicio", "comecar de novo"]) ||
     /^(oi|ola|bom dia|boa tarde|boa noite|menu)$/.test(normalized);
   if (isMenuCommand) {
-    return menuDecision(config, params.customerName, params.businessOpen, activeMenuOptions);
+    return showMenu();
   }
 
   const wantsHuman = hasAny(normalized, [
@@ -318,24 +393,33 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     "reclamacao",
     "gerente",
   ]);
-  if (wantsHuman || option === 6) {
-    return optionDecision(6, config);
+  if (wantsHuman || (legacyMode && option === 6)) {
+    return humanHandoffDecision(config);
   }
 
-  if (option !== null) {
-    // Opção existe no preset mas foi desativada pelo administrador: trata como não reconhecida.
-    if (!activeOptions.has(option)) {
-      return menuDecision(config, params.customerName, params.businessOpen, activeMenuOptions);
-    }
-    return optionDecision(option, config);
+  const selectedEntry = matchMenuEntry(rawMessage, entries);
+  if (selectedEntry) {
+    return entryDecision(selectedEntry, config, legacyMode);
   }
 
-  if (!params.triageCompleted && params.currentQueueMenuOption && [3, 4, 5].includes(params.currentQueueMenuOption)) {
+  // Número digitado que não corresponde a nenhuma fila ativa: reexibe o menu em
+  // vez de seguir para a interpretação por palavra-chave.
+  if (/^(?:opcao\s*)?\d{1,3}$/.test(normalized)) {
+    return showMenu();
+  }
+
+  const awaitingDetails = legacyMode
+    ? params.currentQueueMenuOption && [3, 4, 5].includes(params.currentQueueMenuOption)
+    : Boolean(params.currentQueueMenuOption);
+  if (!params.triageCompleted && awaitingDetails && params.currentQueueMenuOption) {
+    const currentEntry = entries.find((item) => item.menuOption === params.currentQueueMenuOption);
     return {
       handled: true,
       kind: "human-handoff",
-      replyText: detailsReceivedReply(params.currentQueueMenuOption, rawMessage, config),
+      replyText: detailsReceivedReply(params.currentQueueMenuOption, rawMessage, config, currentEntry?.name),
       queueMenuOption: params.currentQueueMenuOption,
+      queueId: currentEntry?.queueId || null,
+      queueType: currentEntry?.queueType ?? null,
       clearQueue: false,
       triageCompleted: true,
       appendOutOfHours: true,
@@ -343,12 +427,39 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     };
   }
 
+  /** Resolve uma intenção por palavra-chave para a fila do tipo correspondente. */
+  const entryByType = (queueType: BotMenuEntry["queueType"]) =>
+    entries.find((item) => item.queueType === queueType) || null;
+
   if (hasAny(normalized, ["oferta", "ofertas", "promocao", "promocoes", "encarte", "desconto"])) {
-    return optionDecision(1, config);
+    const offers = entryByType("offers_promotions");
+    if (offers) return entryDecision(offers, config, legacyMode);
   }
 
   if (hasAny(normalized, ["horario", "abre", "fecha", "funcionamento", "endereco", "localizacao", "como chegar"])) {
-    return optionDecision(2, config);
+    const hours = entryByType("business_hours_location");
+    if (hours) return entryDecision(hours, config, legacyMode);
+  }
+
+  // As intenções abaixo são roteiros do preset de supermercado. Com filas do
+  // tenant, os nomes das filas é que definem o encaminhamento.
+  if (!legacyMode) {
+    if (params.triageCompleted) {
+      return {
+        handled: true,
+        kind: "silent-human",
+        replyText: null,
+        queueMenuOption: params.currentQueueMenuOption || null,
+        queueId: null,
+        queueType: null,
+        clearQueue: false,
+        triageCompleted: true,
+        appendOutOfHours: false,
+        reason: "supermarket_message_waiting_for_human",
+      };
+    }
+    if (config.aiFallbackEnabled) return null;
+    return showMenu();
   }
 
   const freshDepartment = hasAny(normalized, [
@@ -365,8 +476,10 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     return {
       handled: true,
       kind: "collect-details",
-      replyText: collectDetailsReply(4, config),
+      replyText: collectDetailsReply(presetEntry(4), config),
       queueMenuOption: 4,
+      queueId: null,
+      queueType: queueTypeForMenuOption(4),
       clearQueue: false,
       triageCompleted: false,
       appendOutOfHours: false,
@@ -388,8 +501,10 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     return {
       handled: true,
       kind: "collect-details",
-      replyText: collectDetailsReply(5, config),
+      replyText: collectDetailsReply(presetEntry(5), config),
       queueMenuOption: 5,
+      queueId: null,
+      queueType: queueTypeForMenuOption(5),
       clearQueue: false,
       triageCompleted: false,
       appendOutOfHours: false,
@@ -412,8 +527,10 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     return {
       handled: true,
       kind: "collect-details",
-      replyText: collectDetailsReply(3, config),
+      replyText: collectDetailsReply(presetEntry(3), config),
       queueMenuOption: 3,
+      queueId: null,
+      queueType: queueTypeForMenuOption(3),
       clearQueue: false,
       triageCompleted: false,
       appendOutOfHours: false,
@@ -427,6 +544,8 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
       kind: "silent-human",
       replyText: null,
       queueMenuOption: params.currentQueueMenuOption || null,
+      queueId: null,
+      queueType: null,
       clearQueue: false,
       triageCompleted: true,
       appendOutOfHours: false,

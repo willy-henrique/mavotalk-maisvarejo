@@ -205,6 +205,18 @@ export async function saveBusinessHourException(organizationId: string, queueId:
 }
 
 function promotionMap(row: Row) { return { id: String(row.id), queueId: String(row.queue_id), title: String(row.title), description: row.description ? String(row.description) : null, caption: row.caption ? String(row.caption) : null, startsAt: String(row.starts_at), expiresAt: String(row.expires_at), active: row.active !== false, archived: row.archived === true, displayOrder: Number(row.display_order || 0), media: Array.isArray(row.media) ? row.media : [], createdAt: String(row.created_at), updatedAt: String(row.updated_at) }; }
+/**
+ * Configuração usada pelo bot em tempo de execução. A publicada tem prioridade;
+ * sem ela, a fila responde com os padrões do seu tipo. Vale só para ofertas, que
+ * leem a tabela `promotions` ao vivo — horários dependem do contentSnapshot, que
+ * só existe após publicar, e por isso continuam exigindo publicação.
+ */
+export async function getRuntimeOffersConfiguration(organizationId: string, queueId: string) {
+  const published = await getPublishedQueueConfiguration(organizationId, queueId);
+  if (published) return published;
+  return getQueueAutomation(organizationId, queueId, "draft");
+}
+
 export async function listQueuePromotions(organizationId: string, queueId: string) {
   const result = await queryTenantDatabase<Row>(organizationId, `SELECT p.*, COALESCE(json_agg(json_build_object('id',m.id,'url',m.media_url,'mimeType',m.mime_type,'position',m.position) ORDER BY m.position) FILTER (WHERE m.id IS NOT NULL),'[]') media FROM promotions p LEFT JOIN promotion_media m ON m.promotion_id=p.id AND m.organization_id=p.organization_id WHERE p.organization_id=$1 AND p.queue_id=$2 GROUP BY p.id ORDER BY p.display_order,p.starts_at DESC`, [organizationId, queueId]);
   return result.rows.map(promotionMap);
@@ -217,7 +229,7 @@ export async function createQueuePromotion(organizationId: string, queueId: stri
   const value = promotionInputSchema.parse(input);
   const result = await withTenantTransaction(organizationId, async (client) => {
     const queue = await client.query("SELECT id FROM queues WHERE organization_id=$1 AND id=$2", [organizationId, queueId]); if (!queue.rowCount) throw new Error("Fila não encontrada.");
-    const promotion = await client.query<Row>(`INSERT INTO promotions (organization_id,queue_id,title,description,caption,status,starts_at,expires_at,active,archived,display_order,created_by,updated_by) VALUES ($1,$2,$3,$4,$5,'active',$6,$7,$8,false,$9,$10,$10) RETURNING *`, [organizationId, queueId, value.title, value.description || null, value.caption || null, value.startsAt, value.expiresAt, value.active, value.displayOrder, userId]);
+    const promotion = await client.query<Row>(`INSERT INTO promotions (organization_id,queue_id,title,description,caption,status,starts_at,expires_at,active,archived,display_order,created_by,updated_by,published_at,published_active,published_archived) VALUES ($1,$2,$3,$4,$5,'active',$6,$7,$8,false,$9,$10,$10,now(),$8,false) RETURNING *`, [organizationId, queueId, value.title, value.description || null, value.caption || null, value.startsAt, value.expiresAt, value.active, value.displayOrder, userId]);
     await client.query("INSERT INTO promotion_media (organization_id,promotion_id,media_url,cloudinary_public_id,mime_type,bytes,position) VALUES ($1,$2,$3,$4,$5,$6,0)", [organizationId, String(promotion.rows[0].id), media.url, media.publicId, media.mimeType, media.bytes]);
     return promotion.rows[0];
   });
@@ -225,7 +237,7 @@ export async function createQueuePromotion(organizationId: string, queueId: stri
   return result;
 }
 export async function archiveQueuePromotion(organizationId: string, queueId: string, promotionId: string, userId: string) {
-  const result = await queryTenantDatabase<Row>(organizationId, "UPDATE promotions SET archived=true,archived_at=now(),active=false,updated_by=$4,updated_at=now() WHERE organization_id=$1 AND queue_id=$2 AND id=$3 AND archived=false RETURNING *", [organizationId, queueId, promotionId, userId]);
+  const result = await queryTenantDatabase<Row>(organizationId, "UPDATE promotions SET archived=true,archived_at=now(),active=false,published_archived=true,published_active=false,updated_by=$4,updated_at=now() WHERE organization_id=$1 AND queue_id=$2 AND id=$3 AND archived=false RETURNING *", [organizationId, queueId, promotionId, userId]);
   return result.rows[0] || null;
 }
 
@@ -241,6 +253,6 @@ export async function updateQueuePromotion(organizationId: string, queueId: stri
     expiresAt: input.expiresAt ?? new Date(String(row.expires_at)).toISOString(), active: input.active ?? (row.active !== false),
     displayOrder: input.displayOrder ?? Number(row.display_order || 0), handoffEnabled: input.handoffEnabled ?? true, afterSendMessage: input.afterSendMessage,
   });
-  const result = await queryTenantDatabase<Row>(organizationId, "UPDATE promotions SET title=$4,description=$5,caption=$6,starts_at=$7,expires_at=$8,active=$9,display_order=$10,updated_by=$11,updated_at=now() WHERE organization_id=$1 AND queue_id=$2 AND id=$3 RETURNING *", [organizationId, queueId, promotionId, value.title, value.description || null, value.caption || null, value.startsAt, value.expiresAt, value.active, value.displayOrder, userId]);
+  const result = await queryTenantDatabase<Row>(organizationId, "UPDATE promotions SET title=$4,description=$5,caption=$6,starts_at=$7,expires_at=$8,active=$9,display_order=$10,published_at=COALESCE(published_at,now()),published_active=$9,updated_by=$11,updated_at=now() WHERE organization_id=$1 AND queue_id=$2 AND id=$3 RETURNING *", [organizationId, queueId, promotionId, value.title, value.description || null, value.caption || null, value.startsAt, value.expiresAt, value.active, value.displayOrder, userId]);
   return result.rows[0] || null;
 }
