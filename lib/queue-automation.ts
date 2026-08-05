@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { addCloudinaryCleanupJob } from "@/lib/cloudinary-queue";
 import { queryTenantDatabase, withTenantTransaction } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import {
@@ -225,16 +226,63 @@ export async function getActivePromotions(organizationId: string, queueId: strin
   const result = await queryTenantDatabase<Row>(organizationId, `SELECT p.*, COALESCE(json_agg(json_build_object('id',m.id,'url',m.media_url,'mimeType',m.mime_type,'position',m.position) ORDER BY m.position) FILTER (WHERE m.id IS NOT NULL),'[]') media FROM promotions p LEFT JOIN promotion_media m ON m.promotion_id=p.id AND m.organization_id=p.organization_id WHERE p.organization_id=$1 AND p.queue_id=$2 AND p.published_at IS NOT NULL AND p.published_active=true AND p.published_archived=false AND p.starts_at <= $3 AND p.expires_at > $3 GROUP BY p.id ORDER BY p.display_order,p.starts_at DESC`, [organizationId, queueId, now.toISOString()]);
   return result.rows.map(promotionMap);
 }
-export async function createQueuePromotion(organizationId: string, queueId: string, userId: string, input: PromotionInput, media: { url: string; publicId: string; mimeType: string; bytes: number }) {
+export type PromotionMediaInput = { url: string; publicId: string; mimeType: string; bytes: number };
+
+/** Uma promoção pode ter vários flyers; `promotion_media.position` define a ordem de envio. */
+export async function createQueuePromotion(organizationId: string, queueId: string, userId: string, input: PromotionInput, media: PromotionMediaInput | readonly PromotionMediaInput[]) {
   const value = promotionInputSchema.parse(input);
+  const files = Array.isArray(media) ? media : [media as PromotionMediaInput];
+  if (!files.length) throw new Error("Envie ao menos um flyer para a promoção.");
   const result = await withTenantTransaction(organizationId, async (client) => {
     const queue = await client.query("SELECT id FROM queues WHERE organization_id=$1 AND id=$2", [organizationId, queueId]); if (!queue.rowCount) throw new Error("Fila não encontrada.");
     const promotion = await client.query<Row>(`INSERT INTO promotions (organization_id,queue_id,title,description,caption,status,starts_at,expires_at,active,archived,display_order,created_by,updated_by,published_at,published_active,published_archived) VALUES ($1,$2,$3,$4,$5,'active',$6,$7,$8,false,$9,$10,$10,now(),$8,false) RETURNING *`, [organizationId, queueId, value.title, value.description || null, value.caption || null, value.startsAt, value.expiresAt, value.active, value.displayOrder, userId]);
-    await client.query("INSERT INTO promotion_media (organization_id,promotion_id,media_url,cloudinary_public_id,mime_type,bytes,position) VALUES ($1,$2,$3,$4,$5,$6,0)", [organizationId, String(promotion.rows[0].id), media.url, media.publicId, media.mimeType, media.bytes]);
+    const promotionId = String(promotion.rows[0].id);
+    for (const [position, file] of files.entries()) {
+      await client.query("INSERT INTO promotion_media (organization_id,promotion_id,media_url,cloudinary_public_id,mime_type,bytes,position) VALUES ($1,$2,$3,$4,$5,$6,$7)", [organizationId, promotionId, file.url, file.publicId, file.mimeType, file.bytes, position]);
+    }
     return promotion.rows[0];
   });
-  logger.info({ organizationId, queueId, promotionId: result.id }, "queue_promotion_created");
+  logger.info({ organizationId, queueId, promotionId: result.id, flyers: files.length }, "queue_promotion_created");
   return result;
+}
+
+/** Acrescenta flyers a uma promoção existente, no fim da ordem atual. */
+export async function addQueuePromotionMedia(organizationId: string, queueId: string, promotionId: string, userId: string, media: readonly PromotionMediaInput[]) {
+  if (!media.length) throw new Error("Envie ao menos um flyer.");
+  return withTenantTransaction(organizationId, async (client) => {
+    const promotion = await client.query<Row>("SELECT id FROM promotions WHERE organization_id=$1 AND queue_id=$2 AND id=$3 AND archived=false LIMIT 1", [organizationId, queueId, promotionId]);
+    if (!promotion.rowCount) return null;
+    const last = await client.query<{ next: number }>("SELECT COALESCE(MAX(position)+1,0)::int AS next FROM promotion_media WHERE organization_id=$1 AND promotion_id=$2", [organizationId, promotionId]);
+    let position = Number(last.rows[0]?.next || 0);
+    for (const file of media) {
+      await client.query("INSERT INTO promotion_media (organization_id,promotion_id,media_url,cloudinary_public_id,mime_type,bytes,position) VALUES ($1,$2,$3,$4,$5,$6,$7)", [organizationId, promotionId, file.url, file.publicId, file.mimeType, file.bytes, position]);
+      position += 1;
+    }
+    await client.query("UPDATE promotions SET updated_by=$3,updated_at=now() WHERE organization_id=$1 AND id=$2", [organizationId, promotionId, userId]);
+    return promotion.rows[0];
+  });
+}
+
+/**
+ * Remoção definitiva. `promotion_media` cai por ON DELETE CASCADE; as imagens no
+ * Cloudinary saem por uma tarefa de limpeza, para que uma falha lá não impeça a
+ * exclusão no banco.
+ */
+export async function deleteQueuePromotion(organizationId: string, queueId: string, promotionId: string) {
+  const removed = await withTenantTransaction(organizationId, async (client) => {
+    const media = await client.query<{ cloudinary_public_id: string | null }>("SELECT cloudinary_public_id FROM promotion_media WHERE organization_id=$1 AND promotion_id=$2", [organizationId, promotionId]);
+    const promotion = await client.query<Row>("DELETE FROM promotions WHERE organization_id=$1 AND queue_id=$2 AND id=$3 RETURNING *", [organizationId, queueId, promotionId]);
+    if (!promotion.rowCount) return null;
+    return { promotion: promotion.rows[0], publicIds: media.rows.map((row) => row.cloudinary_public_id).filter((id): id is string => Boolean(id)) };
+  });
+  if (!removed) return null;
+  if (removed.publicIds.length) {
+    await addCloudinaryCleanupJob(removed.publicIds).catch((error) => {
+      logger.error({ organizationId, promotionId, err: error }, "queue_promotion_media_cleanup_failed");
+    });
+  }
+  logger.info({ organizationId, queueId, promotionId, flyers: removed.publicIds.length }, "queue_promotion_deleted");
+  return removed.promotion;
 }
 export async function archiveQueuePromotion(organizationId: string, queueId: string, promotionId: string, userId: string) {
   const result = await queryTenantDatabase<Row>(organizationId, "UPDATE promotions SET archived=true,archived_at=now(),active=false,published_archived=true,published_active=false,updated_by=$4,updated_at=now() WHERE organization_id=$1 AND queue_id=$2 AND id=$3 AND archived=false RETURNING *", [organizationId, queueId, promotionId, userId]);

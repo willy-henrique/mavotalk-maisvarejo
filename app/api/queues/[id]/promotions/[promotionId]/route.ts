@@ -1,7 +1,17 @@
 import { NextResponse } from "next/server";
 import { requireMenuPermission, requireSession } from "@/lib/api";
-import { archiveQueuePromotion, recordQueueContentHistory, updateQueuePromotion } from "@/lib/queue-automation";
+import { archiveQueuePromotion, deleteQueuePromotion, recordQueueContentHistory, updateQueuePromotion } from "@/lib/queue-automation";
 import { promotionPatchInputSchema } from "@/lib/queue-automation-schemas";
+
+export async function DELETE(_: Request, context: { params: Promise<{ id: string; promotionId: string }> }) {
+  const auth = await requireSession(); if (auth.error || !auth.session) return auth.error;
+  const denied = await requireMenuPermission(auth.session, "admin_types", "delete"); if (denied) return denied;
+  const { id, promotionId } = await context.params;
+  const promotion = await deleteQueuePromotion(auth.session.organizationId, id, promotionId);
+  if (!promotion) return NextResponse.json({ error: "Promoção não encontrada." }, { status: 404 });
+  await recordQueueContentHistory(auth.session.organizationId, id, auth.session.userId, "delete_promotion", { promotionId, title: promotion.title }, null);
+  return NextResponse.json({ deleted: true });
+}
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string; promotionId: string }> }) {
   const auth = await requireSession(); if (auth.error || !auth.session) return auth.error;

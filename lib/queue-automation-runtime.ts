@@ -37,14 +37,23 @@ export async function formatPromotionResponse(organizationId: string, queueId: s
   const config = configuration.automationConfig as OffersAutomationConfig;
   const promotions = await getActivePromotions(organizationId, queueId, now);
   if (!promotions.length) return [{ text: `${config.noContentMessage}${footer(config)}` }];
-  const ordered = config.deliveryMode === "latest" ? promotions.slice(-1) : promotions.slice(0, config.maxFlyers);
+  const ordered = config.deliveryMode === "latest" ? promotions.slice(-1) : promotions;
   const messages: BotOutboundMessage[] = [{ text: config.initialMessage }];
   if (config.beforeFlyerMessage) messages.push({ text: config.beforeFlyerMessage });
+  // `maxFlyers` limita imagens enviadas, não promoções: uma campanha pode ter
+  // vários flyers e o cliente não deve receber uma sequência sem fim.
+  let remainingFlyers = config.maxFlyers;
   for (const promotion of ordered) {
-    const image = (promotion.media as Array<{ url?: string }>)[0]?.url;
-    if (!image) continue;
+    if (remainingFlyers <= 0) break;
+    const images = (promotion.media as Array<{ url?: string }>).map((item) => item?.url).filter((url): url is string => Boolean(url));
+    if (!images.length) continue;
     const validity = config.showValidity ? `\nVálida até ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(promotion.expiresAt))}.` : "";
-    messages.push({ text: [promotion.caption || promotion.description || promotion.title, validity].filter(Boolean).join("\n"), mediaUrl: image });
+    // A legenda acompanha só o primeiro flyer; repeti-la em cada imagem polui a conversa.
+    const caption = [promotion.caption || promotion.description || promotion.title, validity].filter(Boolean).join("\n");
+    for (const [index, image] of images.slice(0, remainingFlyers).entries()) {
+      messages.push({ text: index === 0 ? caption : "", mediaUrl: image });
+    }
+    remainingFlyers -= Math.min(images.length, remainingFlyers);
   }
   if (config.afterFlyerMessage) messages.push({ text: config.afterFlyerMessage });
   const closing = `${config.closingMessage || ""}${footer(config)}`.trim(); if (closing) messages.push({ text: closing });
