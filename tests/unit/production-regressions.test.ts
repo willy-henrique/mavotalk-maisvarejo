@@ -161,6 +161,25 @@ test("codigo de pareamento nasce em socket novo, com a janela cheia", async () =
   assert.match(client, /WA_PAIRING_QR_TIMEOUT_MS =\s*Number\(process\.env\.WA_PAIRING_QR_TIMEOUT_MS\) \|\| 60_000/);
 });
 
+test("foco de dialogos nao e reaplicado a cada render", async () => {
+  const [dialog, drawer] = await Promise.all([
+    read("frontend/components/ui/Dialog.tsx"),
+    read("frontend/components/Admin/QueueAutomationDrawer.tsx"),
+  ]);
+
+  // onClose chega como arrow inline e muda de identidade a cada render do pai;
+  // hasUnsavedChanges vira true assim que o operador digita. Com qualquer um deles
+  // nas dependencias, o efeito refaz o setup a cada tecla e rouba o foco do campo.
+  const dialogEffect = dialog.slice(dialog.indexOf("const previousFocus"));
+  assert.match(dialogEffect, /\}, \[\]\);/);
+  assert.doesNotMatch(dialogEffect, /\}, \[onClose\]\);/);
+  assert.match(dialog, /onCloseRef\.current\(\)/);
+
+  const drawerEffect = drawer.slice(drawer.indexOf("closeButtonRef.current?.focus()"));
+  assert.match(drawerEffect, /\}, \[\]\);/);
+  assert.doesNotMatch(drawerEffect, /\}, \[hasUnsavedChanges, onClose\]\);/);
+});
+
 test("shutdown usa a API do Baileys", async () => {
   const server = await read("server.cjs");
   assert.match(server, /__waClient\.end\(undefined\)/);

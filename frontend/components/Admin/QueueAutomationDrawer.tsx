@@ -182,18 +182,29 @@ export function QueueAutomationDrawer({ queue, initialTab = 'Visão geral', onCl
   };
 
   useEffect(() => { void load(); }, [queue.id]);
+  // `hasUnsavedChanges` vira true assim que o operador digita, e `onClose` chega como
+  // arrow inline. Com ambos nas dependências, o efeito refazia o setup a cada tecla e
+  // roubava o foco do campo para o botão de fechar. Via ref, o foco é movido só na
+  // abertura e o Escape continua enxergando o estado atual.
+  const escapeStateRef = useRef({ hasUnsavedChanges, onClose });
+  useEffect(() => {
+    escapeStateRef.current = { hasUnsavedChanges, onClose };
+  });
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        if (!hasUnsavedChanges || window.confirm('Você tem alterações não salvas. Fechar mesmo assim?')) onClose();
+        const current = escapeStateRef.current;
+        if (!current.hasUnsavedChanges || window.confirm('Você tem alterações não salvas. Fechar mesmo assim?')) current.onClose();
       }
     };
     const previous = document.activeElement as HTMLElement | null;
     closeButtonRef.current?.focus();
     window.addEventListener('keydown', onKeyDown);
     return () => { window.removeEventListener('keydown', onKeyDown); previous?.focus(); };
-  }, [hasUnsavedChanges, onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const general = config.generalConfig;
   const automation = config.automationConfig;

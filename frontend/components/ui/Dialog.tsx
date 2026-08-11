@@ -14,6 +14,17 @@ export function Dialog({ children, description, onClose, title }: DialogProps) {
   const titleId = useId();
   const descriptionId = useId();
 
+  // `onClose` chega quase sempre como arrow function inline, então muda de
+  // identidade a cada render do pai. Mantê-lo nas dependências do efeito abaixo
+  // fazia todo o setup rodar de novo a cada tecla digitada: o cleanup devolvia o
+  // foco para fora do diálogo e o efeito o jogava no primeiro campo — o formulário
+  // "pulava para cima" enquanto o operador escrevia. Via ref, o efeito roda só na
+  // montagem e o Escape continua usando a função mais recente.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
     const firstFocusable = containerRef.current?.querySelector<HTMLElement>('[data-autofocus]')
@@ -23,7 +34,7 @@ export function Dialog({ children, description, onClose, title }: DialogProps) {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== 'Tab' || !containerRef.current) return;
@@ -43,7 +54,10 @@ export function Dialog({ children, description, onClose, title }: DialogProps) {
       window.removeEventListener('keydown', onKeyDown);
       previousFocus?.focus();
     };
-  }, [onClose]);
+    // Sem dependências: abrir o diálogo é o único momento em que faz sentido mover
+    // o foco. Reagir a mudanças de props aqui é exatamente o que quebrava a digitação.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="fixed inset-0 z-[var(--mavo-z-modal)] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" onMouseDown={onClose}>
