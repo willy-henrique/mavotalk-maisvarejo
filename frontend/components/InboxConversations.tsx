@@ -54,10 +54,13 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const [operationError, setOperationError] = useState('');
   const [socketStatus, setSocketStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'offline'>('connecting');
   const [tabAbertas, setTabAbertas] = useState<'abertas' | 'resolvidos'>('abertas');
-  /** Filtro por status dentro de "Abertas": null = todos, 'em_atendimento' | 'aguardando' */
-  const [statusFilter, setStatusFilter] = useState<'em_atendimento' | 'aguardando' | null>(null);
+  /** Filtro por status dentro de "Abertas": null = todos. */
+  const [statusFilter, setStatusFilter] = useState<'em_atendimento' | 'aguardando' | 'pendente_cliente' | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState('');
+  /** Assinatura deste envio. Começa no padrão da organização e o atendente pode
+   * inverter aqui sem alterar a configuração dos demais. */
+  const [signatureOn, setSignatureOn] = useState(true);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [assigning, setAssigning] = useState(false);
@@ -292,7 +295,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     setSendError('');
     setSending(true);
     try {
-      await apiPost(`/api/conversations/${selectedId}/messages`, { content: text });
+      await apiPost(`/api/conversations/${selectedId}/messages`, { content: text, withSignature: signatureOn });
     } catch (err) {
       setSendError(err instanceof Error ? err.message : 'Nao foi possivel enviar o link.');
       setConversations((prev) =>
@@ -358,9 +361,11 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     }
   };
 
-  // Em "Abertas", mostramos apenas tickets realmente em fila ou em atendimento.
-  // Conversas em triagem (status 'pendente_cliente') ficam escondidas até o cliente escolher a opção.
-  const openStatuses: ConversationStatus[] = ['aguardando', 'em_atendimento'];
+  // "Abertas" precisa conter todo ticket que não foi encerrado. 'pendente_cliente'
+  // era omitido aqui e também não entra em "Resolvidos" (só 'encerrado'), então essas
+  // conversas não apareciam em lugar nenhum: um cliente parado na triagem ficava
+  // invisível para a equipe inteira, sem ninguém saber que ele existia.
+  const openStatuses: ConversationStatus[] = ['aguardando', 'em_atendimento', 'pendente_cliente'];
   const lastMessage = (c: ApiConversation) => {
     const msgs = [...(c.messages || [])].sort(
       (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
@@ -384,6 +389,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const selected = conversations.find((c) => c.id === selectedId);
   const countAtendendo = conversations.filter((c) => c.status === 'em_atendimento').length;
   const countAguardando = conversations.filter((c) => c.status === 'aguardando').length;
+  const countTriagem = conversations.filter((c) => c.status === 'pendente_cliente').length;
 
   useEffect(() => {
     const conversationFromUrl = searchParams.get('conversation');
@@ -395,6 +401,23 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   useEffect(() => {
     setSendError('');
   }, [selectedId]);
+
+  // O padrão vem da configuração da loja; falha na leitura mantém o comportamento
+  // histórico (assinando), para não mudar o que sai no WhatsApp por causa de um erro.
+  useEffect(() => {
+    let active = true;
+    apiFetch('/api/settings/agent-signature')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { agentSignatureEnabled?: boolean } | null) => {
+        if (active && data && typeof data.agentSignatureEnabled === 'boolean') {
+          setSignatureOn(data.agentSignatureEnabled);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Na aba Abertas, não manter conversa encerrada selecionada — só em Resolvidos
   useEffect(() => {
@@ -530,7 +553,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     );
     setSending(true);
     try {
-      await apiPost(`/api/conversations/${selectedId}/messages`, { content: text });
+      await apiPost(`/api/conversations/${selectedId}/messages`, { content: text, withSignature: signatureOn });
     } catch (err) {
       setSendError(err instanceof Error ? err.message : 'Nao foi possivel enviar a mensagem.');
       setConversations((prev) =>
@@ -631,6 +654,20 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
               <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500/90 px-1.5 text-[10px] text-white">{countAguardando}</span>
               AGUARDANDO
             </button>
+            {/* Torna visível quem está parado na triagem, em vez de deixar o ticket sem lugar na tela. */}
+            <button
+              type="button"
+              onClick={() => setStatusFilter((prev) => (prev === 'pendente_cliente' ? null : 'pendente_cliente'))}
+              className={`flex items-center gap-2 text-xs font-bold rounded-lg px-3 py-2 transition-all ${
+                statusFilter === 'pendente_cliente'
+                  ? 'bg-amber-600 text-white shadow-md ring-2 ring-amber-400/50 dark:ring-amber-500/50'
+                  : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'
+              }`}
+              title={statusFilter === 'pendente_cliente' ? 'Mostrar todos' : 'Filtrar por triagem com o bot'}
+            >
+              <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500/90 px-1.5 text-[10px] text-white">{countTriagem}</span>
+              EM TRIAGEM
+            </button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto divide-y divide-slate-200 dark:divide-slate-700/80">
@@ -675,7 +712,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                         </span>
                       )}
                       <span className="text-[10px] font-medium text-slate-500 shrink-0">{getWaitTime(c.updatedAt)}</span>
-                      {c.status === 'aguardando' && (
+                      {(c.status === 'aguardando' || c.status === 'pendente_cliente') && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -689,7 +726,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                           Puxar
                         </button>
                       )}
-                      {(c.status === 'em_atendimento' || c.status === 'aguardando') && (
+                      {c.status !== 'encerrado' && (
                         <button
                           type="button"
                           onClick={(e) => {
@@ -812,7 +849,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                 </button>
               </div>
               <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                {selected.status === 'aguardando' && (
+                {(selected.status === 'aguardando' || selected.status === 'pendente_cliente') && (
                   <button
                     type="button"
                     onClick={handleAssign}
@@ -949,6 +986,26 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
                       <path d="M12.232 4.232a2.5 2.5 0 013.536 3.536l-1.225 1.224a.75.75 0 001.061 1.06l1.224-1.224a4 4 0 00-5.656-5.656l-3 3a4 4 0 00.225 5.865.75.75 0 00.977-1.138 2.5 2.5 0 01-.142-3.667l3-3z" />
                       <path d="M11.603 7.963a.75.75 0 00-.977 1.138 2.5 2.5 0 01.142 3.667l-3 3a2.5 2.5 0 01-3.536-3.536l1.225-1.224a.75.75 0 00-1.061-1.06l-1.224 1.224a4 4 0 105.656 5.656l3-3a4 4 0 00-.225-5.865z" />
+                    </svg>
+                  </button>
+                  {/* Liga/desliga o "Nome:" antes da mensagem. Vale só para os envios
+                      deste atendente; o padrão continua vindo das configurações da loja. */}
+                  <button
+                    type="button"
+                    onClick={() => setSignatureOn((value) => !value)}
+                    disabled={sending}
+                    role="switch"
+                    aria-checked={signatureOn}
+                    title={signatureOn ? 'Assinatura ligada: o cliente vê seu nome antes da mensagem' : 'Assinatura desligada: o cliente vê só o texto'}
+                    aria-label="Alternar assinatura com o nome do atendente"
+                    className={`shrink-0 flex items-center justify-center w-10 h-11 sm:w-12 sm:h-12 rounded-xl border disabled:opacity-50 ${
+                      signatureOn
+                        ? 'border-blue-500 bg-blue-600 text-white'
+                        : 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5">
+                      <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
                     </svg>
                   </button>
                   <div className="flex-1 relative">
