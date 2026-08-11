@@ -1088,6 +1088,26 @@ export async function initWhatsappClient() {
             Boolean(authState.creds?.pairingCode) &&
             !authState.creds?.registered;
 
+          // O WhatsApp recusa o pareamento com uma mensagem genérica no celular; o
+          // motivo real só aparece no statusCode desta queda. Sem isso o diagnóstico
+          // vira adivinhação.
+          logger.warn(
+            {
+              statusCode,
+              reason:
+                typeof statusCode === "number"
+                  ? DisconnectReason[statusCode] || "unknown"
+                  : "none",
+              pairingActive: pairingRequestedGeneration === generation,
+              pairingPhone: state.pairingPhone,
+              hadPairingCode: Boolean(authState.creds?.pairingCode),
+              registered: Boolean(authState.creds?.registered),
+              manualDisconnect: Boolean(global.__waManualDisconnect),
+              err: lastDisconnect?.error?.message,
+            },
+            "WhatsApp connection closed",
+          );
+
           state.status = "disconnected";
           state.lastError = lastDisconnect?.error ? String(lastDisconnect.error.message || lastDisconnect.error) : null;
           state.connectedPhone = null;
