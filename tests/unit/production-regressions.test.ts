@@ -85,6 +85,32 @@ test("desconectar desloga o aparelho e apaga a sessão antes de um novo QR", asy
   assert.match(route, /status:\s*500/);
 });
 
+test("pareamento por telefone cobre o aparelho sem camera utilizavel", async () => {
+  const [client, route, painel] = await Promise.all([
+    read("lib/whatsapp-client.ts"),
+    read("app/api/whatsapp/pairing-code/route.ts"),
+    read("frontend/components/Painel.tsx"),
+  ]);
+
+  const pairing = client.slice(client.indexOf("export async function requestWhatsappPairingCode"));
+  assert.match(pairing, /sock\.requestPairingCode\(digits\)/);
+
+  // O WhatsApp só emite código para credenciais ainda não registradas: pedir sobre
+  // uma sessão viva devolveria erro cru do Baileys em vez de instrução acionável.
+  assert.match(pairing, /status === "ready"/);
+  assert.match(pairing, /creds\?\.registered/);
+
+  // O código só pode ser pedido na janela em que o socket está no ar e aguardando
+  // registro, sinalizada pelo status "qr".
+  assert.match(pairing, /getState\(\)\.status === "qr"/);
+
+  // Exibir QR e código ao mesmo tempo confunde: pedir o código invalida o QR.
+  assert.match(pairing, /qrDataUrl = null/);
+
+  assert.match(route, /requireMenuPermission\(auth\.session, "painel", "update"\)/);
+  assert.match(painel, /\/api\/whatsapp\/pairing-code/);
+});
+
 test("shutdown usa a API do Baileys", async () => {
   const server = await read("server.cjs");
   assert.match(server, /__waClient\.end\(undefined\)/);

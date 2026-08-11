@@ -61,6 +61,10 @@ type WhatsappStatus = "idle" | "initializing" | "qr" | "ready" | "disconnected" 
 type WhatsappState = {
   status: WhatsappStatus;
   qrDataUrl: string | null;
+  /** Código de pareamento por telefone, alternativa ao QR quando não há câmera utilizável. */
+  pairingCode: string | null;
+  pairingPhone: string | null;
+  pairingCodeExpiresAt: string | null;
   lastError: string | null;
   connectedPhone: string | null;
   authStore: "database" | "filesystem";
@@ -134,6 +138,19 @@ async function clearWhatsappAuthState(): Promise<void> {
   }
 }
 
+function clearPairingCode(state: WhatsappState) {
+  state.pairingCode = null;
+  state.pairingPhone = null;
+  state.pairingCodeExpiresAt = null;
+}
+
+/** Janela aproximada em que o WhatsApp aceita o código digitado. Serve só para o painel
+ * parar de exibir um código provavelmente vencido — quem valida de fato é o WhatsApp. */
+const WA_PAIRING_CODE_TTL_MS = Number(process.env.WA_PAIRING_CODE_TTL_MS) || 180_000;
+
+/** Tempo máximo esperando o socket ficar apto a pedir o código (conectado e não registrado). */
+const WA_PAIRING_SOCKET_WAIT_MS = Number(process.env.WA_PAIRING_SOCKET_WAIT_MS) || 25_000;
+
 /** `logout()` fica pendente para sempre se o socket já caiu; sem teto o disconnect trava. */
 const WA_LOGOUT_TIMEOUT_MS = Number(process.env.WA_LOGOUT_TIMEOUT_MS) || 8_000;
 
@@ -157,6 +174,9 @@ function getState(): WhatsappState {
     global.__waState = {
       status: "idle",
       qrDataUrl: null,
+      pairingCode: null,
+      pairingPhone: null,
+      pairingCodeExpiresAt: null,
       lastError: null,
       connectedPhone: null,
       authStore: configuredWhatsappAuthStore(),
@@ -911,8 +931,9 @@ export async function initWhatsappClient() {
   const state = getState();
   state.status = "initializing";
   state.lastError = null;
-  // Nunca exibir o QR da tentativa anterior enquanto o novo não chega.
+  // Nunca exibir o QR nem o código da tentativa anterior enquanto o novo não chega.
   state.qrDataUrl = null;
+  clearPairingCode(state);
   state.initializationStage = "auth-store";
   state.diagnosticCode = null;
   if (state.authStore === "database") {
@@ -1009,6 +1030,7 @@ export async function initWhatsappClient() {
           global.__waManualDisconnect = false;
           state.status = "ready";
           state.qrDataUrl = null;
+          clearPairingCode(state);
           state.lastError = null;
           const rawId = sock.user?.id || "";
           const digits = rawId.split(":")[0]?.split("@")[0] || "";
@@ -1024,8 +1046,11 @@ export async function initWhatsappClient() {
           state.lastError = lastDisconnect?.error ? String(lastDisconnect.error.message || lastDisconnect.error) : null;
           state.connectedPhone = null;
           clientReadyAt = null;
-          // Sessão encerrada de vez: o QR na tela não vale mais nada.
-          if (loggedOut) state.qrDataUrl = null;
+          // Sessão encerrada de vez: o QR e o código na tela não valem mais nada.
+          if (loggedOut) {
+            state.qrDataUrl = null;
+            clearPairingCode(state);
+          }
           if (global.__waClient === sock) {
             global.__waClient = undefined;
           }
@@ -1158,6 +1183,7 @@ export async function destroyWhatsappClient(options?: { logout?: boolean }) {
     const state = getState();
     state.status = "disconnected";
     state.qrDataUrl = null;
+    clearPairingCode(state);
     state.connectedPhone = null;
     clientReadyAt = null;
 
@@ -1175,6 +1201,89 @@ export async function destroyWhatsappClient(options?: { logout?: boolean }) {
   } finally {
     global.__waDestroyPromise = undefined;
   }
+}
+
+/**
+ * Conecta pelo número de telefone em vez do QR Code.
+ *
+ * O WhatsApp aceita um código de 8 caracteres digitado em
+ * "Aparelhos conectados > Conectar aparelho > Conectar com número de telefone".
+ * É a única saída quando a câmera do aparelho não consegue ler o QR.
+ *
+ * Exige uma sessão nova: o WhatsApp só emite código para credenciais ainda não
+ * registradas, então uma sessão anterior precisa ser desconectada antes.
+ */
+export async function requestWhatsappPairingCode(phone: string): Promise<{
+  pairingCode: string;
+  phone: string;
+  expiresAt: string;
+}> {
+  const provider = process.env.WHATSAPP_PROVIDER || "twilio";
+  if (provider !== "unofficial") {
+    throw new Error(
+      "A conexão por código exige WHATSAPP_PROVIDER=unofficial (WhatsApp via QR/código).",
+    );
+  }
+
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 10 || digits.length > 15) {
+    throw new Error(
+      "Informe o número com DDI e DDD, somente dígitos. Ex.: 5562991234567.",
+    );
+  }
+
+  const state = getState();
+  if (state.status === "ready") {
+    throw new Error(
+      "Já existe um WhatsApp conectado. Clique em Desconectar antes de parear outro número.",
+    );
+  }
+
+  // Um socket ativo mas ainda não registrado (ex.: aguardando QR) já serve;
+  // caso contrário sobe um novo, que é o que produz uma sessão limpa.
+  if (!global.__waClient) {
+    await initWhatsappClient();
+  }
+
+  const deadline = Date.now() + WA_PAIRING_SOCKET_WAIT_MS;
+  while (Date.now() < deadline) {
+    const sock = global.__waClient;
+    // `status === "qr"` significa socket no ar e sessão aguardando registro,
+    // que é exatamente a janela em que o WhatsApp emite o código.
+    if (sock && getState().status === "qr") {
+      if (sock.authState?.creds?.registered) {
+        throw new Error(
+          "A sessão anterior ainda está registrada. Clique em Desconectar e tente novamente.",
+        );
+      }
+
+      const pairingCode = await sock.requestPairingCode(digits);
+      const expiresAt = new Date(Date.now() + WA_PAIRING_CODE_TTL_MS).toISOString();
+
+      const current = getState();
+      current.pairingCode = pairingCode;
+      current.pairingPhone = `+${digits}`;
+      current.pairingCodeExpiresAt = expiresAt;
+      // Pedir o código invalida o QR daquela sessão: exibir os dois confundiria.
+      current.qrDataUrl = null;
+      current.lastError = null;
+
+      logger.info({ phone: `+${digits}` }, "WhatsApp pairing code issued");
+      return { pairingCode, phone: `+${digits}`, expiresAt };
+    }
+
+    if (getState().status === "error") {
+      throw new Error(
+        getState().lastError || "Falha ao inicializar o WhatsApp para o pareamento.",
+      );
+    }
+
+    await new Promise((r) => setTimeout(r, 250));
+  }
+
+  throw new Error(
+    "O WhatsApp não ficou pronto para emitir o código a tempo. Tente novamente em instantes.",
+  );
 }
 
 /** Envia indicador de digitação para o contato no WhatsApp (apenas unofficial). */

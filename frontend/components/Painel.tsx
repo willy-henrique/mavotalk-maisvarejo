@@ -9,6 +9,9 @@ import { StatusBadge } from './ui/StatusBadge';
 type WhatsappState = {
   status: 'idle' | 'initializing' | 'qr' | 'ready' | 'disconnected' | 'error';
   qrDataUrl: string | null;
+  pairingCode: string | null;
+  pairingPhone: string | null;
+  pairingCodeExpiresAt: string | null;
   lastError: string | null;
   connectedPhone: string | null;
 };
@@ -39,6 +42,9 @@ const Painel: React.FC = () => {
   const [actionError, setActionError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [pairing, setPairing] = useState(false);
+  const [showPairing, setShowPairing] = useState(false);
+  const [pairingPhoneInput, setPairingPhoneInput] = useState('');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const canAccess = AuthService.canAccessPainel();
   const statusRequestRef = useRef(0);
@@ -66,6 +72,13 @@ const Painel: React.FC = () => {
       if (manual) setRefreshing(false);
     }
   }, []);
+
+  // Um código vencido não conecta mais nada: esconder evita o operador digitar em vão.
+  const activePairingCode =
+    waState?.pairingCode &&
+    (!waState.pairingCodeExpiresAt || new Date(waState.pairingCodeExpiresAt).getTime() > Date.now())
+      ? waState.pairingCode
+      : null;
 
   // Enquanto o QR está sendo gerado ou aguarda leitura, o estado muda em segundos:
   // revalidar de 10 em 10s faria o código aparecer tarde e expirar na tela.
@@ -99,6 +112,27 @@ const Painel: React.FC = () => {
       setActionError(e instanceof Error ? e.message : 'Erro ao conectar');
     } finally {
       setConnecting(false);
+    }
+  };
+
+  const handlePairingCode = async () => {
+    setActionError(null);
+    setPairing(true);
+    try {
+      const res = await apiFetch('/api/whatsapp/pairing-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: pairingPhoneInput }),
+      });
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      if (!res.ok) {
+        setActionError(data.error || 'Falha ao gerar o código de pareamento');
+      }
+      await fetchStatus(true);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Erro ao gerar o código');
+    } finally {
+      setPairing(false);
     }
   };
 
@@ -193,6 +227,23 @@ const Painel: React.FC = () => {
                     />
                   </div>
                 )}
+                {activePairingCode && (
+                  <div className="mb-6 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-950">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                      Código de pareamento{waState?.pairingPhone ? ` — ${waState.pairingPhone}` : ''}
+                    </p>
+                    <p className="mt-2 font-mono text-3xl font-black tracking-[0.2em] text-slate-800 dark:text-slate-100">
+                      {/* O WhatsApp mostra o código em dois blocos de 4; espelhar isso evita erro de digitação. */}
+                      {activePairingCode.length === 8
+                        ? `${activePairingCode.slice(0, 4)}-${activePairingCode.slice(4)}`
+                        : activePairingCode}
+                    </p>
+                    <p className="mt-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                      No celular: <strong>WhatsApp &gt; Aparelhos conectados &gt; Conectar aparelho &gt; Conectar com número de telefone</strong> e digite o código acima. Se ele expirar, gere outro.
+                    </p>
+                  </div>
+                )}
+
                 <div className="flex gap-3 flex-wrap">
                   <button
                     type="button"
@@ -204,6 +255,14 @@ const Painel: React.FC = () => {
                   </button>
                   <button
                     type="button"
+                    onClick={() => setShowPairing((open) => !open)}
+                    aria-expanded={showPairing}
+                    className="mavo-button-secondary"
+                  >
+                    Conectar por código
+                  </button>
+                  <button
+                    type="button"
                     onClick={handleDisconnect}
                     disabled={disconnecting}
                     className="mavo-button-secondary"
@@ -211,6 +270,36 @@ const Painel: React.FC = () => {
                     {disconnecting ? 'Desconectando...' : 'Desconectar'}
                   </button>
                 </div>
+
+                {showPairing && (
+                  <div className="mt-4 rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                    <label htmlFor="pairing-phone" className="block text-sm font-semibold text-slate-700 dark:text-slate-200">
+                      Número do WhatsApp que será conectado
+                    </label>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Use quando a câmera do aparelho não conseguir ler o QR. Informe com DDI e DDD, somente números.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      <input
+                        id="pairing-phone"
+                        type="tel"
+                        inputMode="numeric"
+                        value={pairingPhoneInput}
+                        onChange={(e) => setPairingPhoneInput(e.target.value)}
+                        placeholder="5562991234567"
+                        className="min-w-[220px] flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={handlePairingCode}
+                        disabled={pairing || pairingPhoneInput.replace(/\D/g, '').length < 10}
+                        className="mavo-button-primary"
+                      >
+                        {pairing ? 'Gerando...' : 'Gerar código'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
 
