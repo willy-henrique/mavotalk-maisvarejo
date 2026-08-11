@@ -13,6 +13,7 @@ type WhatsappState = {
   pairingPhone: string | null;
   pairingCodeIssuedAt: string | null;
   pairingCodeExpiresAt: string | null;
+  lastPairingFailure: string | null;
   lastError: string | null;
   connectedPhone: string | null;
 };
@@ -230,6 +231,13 @@ const Painel: React.FC = () => {
             )}
             {waState?.lastError && (
               <p role="alert" className="mb-4 text-sm text-rose-600 dark:text-rose-300">{waState.lastError}</p>
+            )}
+
+            {/* Sobrevive ao auto-reconnect, que zera lastError segundos depois da queda. */}
+            {waState?.lastPairingFailure && waState.lastPairingFailure !== waState.lastError && (
+              <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-200">
+                {waState.lastPairingFailure}
+              </p>
             )}
 
             {provider === 'unofficial' && (

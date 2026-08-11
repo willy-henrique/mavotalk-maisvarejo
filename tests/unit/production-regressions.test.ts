@@ -158,7 +158,7 @@ test("codigo de pareamento nasce em socket novo, com a janela cheia", async () =
 
   // Em pairingMode o QR nao e exibido, entao refs longos so esticam a janela.
   assert.match(client, /qrTimeout: pairingMode \? WA_PAIRING_QR_TIMEOUT_MS : WA_QR_TIMEOUT_MS/);
-  assert.match(client, /WA_PAIRING_QR_TIMEOUT_MS =\s*Number\(process\.env\.WA_PAIRING_QR_TIMEOUT_MS\) \|\| 180_000/);
+  assert.match(client, /WA_PAIRING_QR_TIMEOUT_MS =\s*Number\(process\.env\.WA_PAIRING_QR_TIMEOUT_MS\) \|\| 60_000/);
 });
 
 test("shutdown usa a API do Baileys", async () => {

@@ -66,6 +66,10 @@ type WhatsappState = {
   pairingPhone: string | null;
   pairingCodeIssuedAt: string | null;
   pairingCodeExpiresAt: string | null;
+  /** Diagnóstico da última falha de pareamento. Separado de `lastError` porque o
+   * auto-reconnect zera aquele campo poucos segundos depois, justamente enquanto o
+   * operador ainda está lendo a tela. */
+  lastPairingFailure: string | null;
   lastError: string | null;
   connectedPhone: string | null;
   authStore: "database" | "filesystem";
@@ -152,10 +156,14 @@ function clearPairingCode(state: WhatsappState) {
 const WA_QR_TIMEOUT_MS = Number(process.env.WA_QR_TIMEOUT_MS) || 60_000;
 
 /** No pareamento por número ninguém olha o QR: o ciclo de refs serve apenas para manter
- * o socket vivo. Refs longos esticam a janela sem prejudicar nada, porque o QR emitido
- * nesse modo não é exibido. */
+ * o socket vivo, e cada ref estica a janela.
+ *
+ * Fica em 60s porque é o valor que o próprio Baileys usa no primeiro ref — o único
+ * que dá para tratar como tolerado pelo servidor. Esticar mais era palpite meu, sem
+ * como validar se o WhatsApp aceita segurar um ref tanto tempo. Ajustável por env
+ * caso os logs mostrem que dá folga. */
 const WA_PAIRING_QR_TIMEOUT_MS =
-  Number(process.env.WA_PAIRING_QR_TIMEOUT_MS) || 180_000;
+  Number(process.env.WA_PAIRING_QR_TIMEOUT_MS) || 60_000;
 
 /** Rede de segurança para o código não ficar exibido eternamente se algo travar.
  * O sinal real de morte do código é o fechamento do socket que o emitiu — tratado
@@ -192,6 +200,7 @@ function getState(): WhatsappState {
       pairingPhone: null,
       pairingCodeIssuedAt: null,
       pairingCodeExpiresAt: null,
+      lastPairingFailure: null,
       lastError: null,
       connectedPhone: null,
       authStore: configuredWhatsappAuthStore(),
@@ -1076,6 +1085,7 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
           state.status = "ready";
           state.qrDataUrl = null;
           clearPairingCode(state);
+          state.lastPairingFailure = null;
           state.lastError = null;
           const rawId = sock.user?.id || "";
           const digits = rawId.split(":")[0]?.split("@")[0] || "";
@@ -1148,8 +1158,23 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
               );
             });
             if (abandonedPairing) {
-              state.lastError =
-                "O pareamento não foi concluído a tempo. Gere um novo código e digite-o no celular assim que ele aparecer.";
+              // O motivo vai para a tela junto da orientação: sem ele o operador só
+              // sabe que falhou, e o diagnóstico dependeria de abrir o log do Render.
+              const reasonLabel =
+                typeof statusCode === "number"
+                  ? `${DisconnectReason[statusCode] || "desconhecido"} (${statusCode})`
+                  : "sem código";
+              const issuedAgoMs = state.pairingCodeIssuedAt
+                ? Date.now() - new Date(state.pairingCodeIssuedAt).getTime()
+                : null;
+              const elapsedLabel =
+                issuedAgoMs !== null
+                  ? ` A conexão durou ${Math.round(issuedAgoMs / 1000)}s após o código ser gerado.`
+                  : "";
+              state.lastPairingFailure =
+                `A conexão caiu durante o pareamento — motivo: ${reasonLabel}.${elapsedLabel}` +
+                " Gere um novo código e digite-o no celular assim que ele aparecer.";
+              state.lastError = state.lastPairingFailure;
               logger.warn(
                 "Abandoned WhatsApp pairing attempt; session cleared so the next attempt starts from registration",
               );
@@ -1330,6 +1355,8 @@ export async function requestWhatsappPairingCode(phone: string): Promise<{
       "Já existe um WhatsApp conectado. Clique em Desconectar antes de parear outro número.",
     );
   }
+  // A falha anterior não deve poluir a leitura da tentativa que começa agora.
+  state.lastPairingFailure = null;
 
   // Sempre sobe um socket novo. O socket em execução — criado no boot pelo
   // WHATSAPP_AUTO_CONNECT e vivo desde então — pode já ter consumido quase toda a
