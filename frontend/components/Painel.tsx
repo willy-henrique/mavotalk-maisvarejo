@@ -279,6 +279,11 @@ const Painel: React.FC = () => {
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                       Use quando a câmera do aparelho não conseguir ler o QR. Informe com DDI e DDD, somente números.
                     </p>
+                    {/* O WhatsApp identifica muitos celulares brasileiros sem o nono dígito.
+                        Parear com o número no formato errado é recusado sem explicar o motivo. */}
+                    <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                      Celular brasileiro: o WhatsApp costuma identificar a conta <strong>sem o nono dígito</strong>. Se o pareamento for recusado, tente sem o 9 depois do DDD (ex.: <span className="font-mono">556284127954</span> em vez de <span className="font-mono">5562984127954</span>).
+                    </p>
                     <div className="mt-3 flex flex-wrap gap-3">
                       <input
                         id="pairing-phone"

@@ -142,6 +142,7 @@ function clearPairingCode(state: WhatsappState) {
   state.pairingCode = null;
   state.pairingPhone = null;
   state.pairingCodeExpiresAt = null;
+  pairingRequestedGeneration = null;
 }
 
 /** Tempo de vida de cada ref de QR. O padrão do Baileys (20s a partir do segundo ref)
@@ -309,6 +310,11 @@ let lastSendAt = 0;
 
 /** Ordena as renderizações assíncronas de QR para que a última emitida sempre vença. */
 let qrSequence = 0;
+
+/** Geração do socket que já emitiu um código de pareamento. O ciclo de refs de QR do
+ * Baileys continua rodando depois do pedido e reescreveria o QR na tela, oferecendo ao
+ * operador um caminho que não é o que está em andamento. */
+let pairingRequestedGeneration: number | null = null;
 
 /** Timestamp Unix (segundos) do momento em que o cliente ficou pronto.
  * Mensagens com timestamp anterior a este valor são mensagens offline enfileiradas
@@ -1029,6 +1035,12 @@ export async function initWhatsappClient() {
 
         if (qr) {
           state.status = "qr";
+          // Pareamento por código em andamento: o QR que continua rotacionando não é o
+          // caminho escolhido e, exibido junto, faz o operador achar que pode escanear.
+          if (pairingRequestedGeneration === generation) {
+            state.qrDataUrl = null;
+            return;
+          }
           const qrToken = ++qrSequence;
           void qrcode
             .toDataURL(qr)
@@ -1302,6 +1314,7 @@ export async function requestWhatsappPairingCode(phone: string): Promise<{
       }
 
       const pairingCode = await sock.requestPairingCode(digits);
+      pairingRequestedGeneration = currentWhatsappGeneration();
       const expiresAt = new Date(Date.now() + WA_PAIRING_CODE_TTL_MS).toISOString();
 
       const current = getState();
