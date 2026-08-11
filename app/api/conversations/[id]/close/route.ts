@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireMenuPermission, requireSession } from "@/lib/api";
-import { createAuditLog, getConversation } from "@/lib/repo";
+import { createAuditLog, getConversation, updateTicketByConversation } from "@/lib/repo";
 import { closeConversationSchema } from "@/lib/schemas";
 import { emitRealtime } from "@/lib/realtime";
 import { TicketService } from "@/lib/services";
@@ -54,6 +54,12 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       `De 1 a 5, qual nota você dá para o atendimento? Responda apenas com o número.`;
 
     if (provider === "unofficial") {
+      // Carimba antes de enviar: é esse marcador que faz a resposta numérica ser lida
+      // como nota em vez de cair na triagem e reabrir o bot. Se o envio falhar, o
+      // carimbo apenas expira sozinho pela janela.
+      await updateTicketByConversation(auth.session.organizationId, id, {
+        satisfactionSurveySentAt: new Date(),
+      });
       // Envio em background: não bloquear a finalização do chamado caso o WhatsApp esteja offline.
       // fromBot: true evita que processOutboundMessageFromDevice reabra a conversa encerrada.
       void sendWhatsappMessage(existing.contactPhone, surveyText, { skipRateLimit: true, fromBot: true }).catch((err) => {

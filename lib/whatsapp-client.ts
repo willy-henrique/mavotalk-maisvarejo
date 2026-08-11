@@ -24,6 +24,7 @@ import {
   updateConversationById,
   updateTicketByConversation,
   updateContactAvatar,
+  recordSatisfactionRatingByPhone,
 } from "@/lib/repo";
 import { logger } from "@/lib/logger";
 import { emitRealtime } from "@/lib/realtime";
@@ -561,6 +562,33 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
   if (!hasContent) {
     logger.debug({ from: remoteJid }, "Ignoring inbound with no body and no media");
     return;
+  }
+
+  // A resposta da pesquisa de satisfação precisa ser tratada antes de qualquer
+  // triagem: seguindo adiante, o "5" vira uma mensagem comum, o ticket-upsert abre
+  // um atendimento novo e o cliente recebe o menu de boas-vindas logo após avaliar.
+  const ratingPhone = await resolveMessagePhone(sock, msg);
+  if (ratingPhone && bodyRaw) {
+    let rated = false;
+    try {
+      rated = await recordSatisfactionRatingByPhone(
+        DEFAULT_ORGANIZATION_ID,
+        ratingPhone,
+        bodyRaw,
+      );
+    } catch (err) {
+      logger.warn({ err, phone: ratingPhone }, "Failed to record satisfaction rating");
+    }
+    if (rated) {
+      logger.info({ phone: ratingPhone, score: bodyRaw.trim() }, "Satisfaction rating recorded");
+      await rateLimitedSend(
+        sock,
+        remoteJid,
+        "Obrigado pela sua avaliação! Se precisar de algo, é só chamar.",
+        true,
+      );
+      return;
+    }
   }
 
   const n8nOnlyMode = String(process.env.WILLTALK_N8N_ONLY || "").toLowerCase() === "true";

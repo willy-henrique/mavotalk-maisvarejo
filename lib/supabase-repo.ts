@@ -1578,6 +1578,12 @@ export async function updateTicketByConversation(
   if ("firstResponseAt" in payload) updates.first_response_at = payload.firstResponseAt;
   if ("closeReason" in payload) updates.close_reason = payload.closeReason;
   if ("closedAt" in payload) updates.closed_at = payload.closedAt;
+  if ("satisfactionSurveySentAt" in payload) {
+    updates.satisfaction_survey_sent_at =
+      payload.satisfactionSurveySentAt instanceof Date
+        ? payload.satisfactionSurveySentAt.toISOString()
+        : payload.satisfactionSurveySentAt;
+  }
 
   await supa(orgId)
     .from("tickets")
@@ -1809,6 +1815,10 @@ export async function resolveDefaultOrganizationId(candidateOrgId: string): Prom
 // Satisfaction rating (1–5) by reply on WhatsApp
 // ---------------------------------------------------------------------------
 
+/** Janela em que uma resposta numérica ainda é lida como nota da pesquisa. */
+const SATISFACTION_REPLY_WINDOW_MS =
+  Number(process.env.SATISFACTION_REPLY_WINDOW_MS) || 24 * 60 * 60 * 1000;
+
 export async function recordSatisfactionRatingByPhone(
   organizationId: string,
   phoneNumber: string,
@@ -1843,7 +1853,7 @@ export async function recordSatisfactionRatingByPhone(
   // 3) Atualiza o ticket vinculado com a nota (sem sobrescrever se já existir)
   const { data: ticket } = await supa(orgId)
     .from("tickets")
-    .select("id, satisfaction_score")
+    .select("id, satisfaction_score, satisfaction_survey_sent_at")
     .eq("organization_id", orgId)
     .eq("conversation_id", conv.id)
     .limit(1)
@@ -1853,6 +1863,14 @@ export async function recordSatisfactionRatingByPhone(
     // Já tinha nota, não sobrescreve
     return false;
   }
+
+  // Sem pesquisa enviada, "1", "2" e "3" são opções do menu — engolir isso como nota
+  // deixaria o cliente sem resposta. A janela evita capturar uma mensagem que chega
+  // muito depois, quando o cliente já está começando um atendimento novo.
+  if (!ticket.satisfaction_survey_sent_at) return false;
+  const sentAt = new Date(String(ticket.satisfaction_survey_sent_at)).getTime();
+  if (Number.isNaN(sentAt)) return false;
+  if (Date.now() - sentAt > SATISFACTION_REPLY_WINDOW_MS) return false;
 
   const { error } = await supa(orgId)
     .from("tickets")
