@@ -62,12 +62,16 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
   const authorId = auth.session.userId;
   const authorName = auth.session.name || "Atendente";
-  // A assinatura do atendente é opcional por organização; quando desligada a mensagem
-  // sai exatamente como digitada, sem o prefixo com o nome.
+  // A organização define o padrão da assinatura; o atendente pode inverter isso no
+  // compositor para um envio específico, sem alterar a configuração de todo mundo.
   const { agentSignatureEnabled } = await getSupermarketSettings(
     auth.session.organizationId,
   );
-  const whatsappBody = agentSignatureEnabled
+  const useSignature =
+    typeof parsed.data.withSignature === "boolean"
+      ? parsed.data.withSignature
+      : agentSignatureEnabled;
+  const whatsappBody = useSignature
     ? `${authorName}:\n${resolvedContent}`
     : resolvedContent;
 

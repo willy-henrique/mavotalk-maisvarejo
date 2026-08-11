@@ -16,6 +16,8 @@ export const queueSchema = z.object({
 
 export const sendMessageSchema = z.object({
   content: z.string().trim().min(1).max(4_000),
+  /** Override da assinatura para este envio. Ausente usa o padrão da organização. */
+  withSignature: z.boolean().optional(),
 });
 
 export const closeConversationSchema = z.object({
