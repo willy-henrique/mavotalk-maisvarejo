@@ -144,9 +144,14 @@ function clearPairingCode(state: WhatsappState) {
   state.pairingCodeExpiresAt = null;
 }
 
-/** Janela aproximada em que o WhatsApp aceita o código digitado. Serve só para o painel
- * parar de exibir um código provavelmente vencido — quem valida de fato é o WhatsApp. */
-const WA_PAIRING_CODE_TTL_MS = Number(process.env.WA_PAIRING_CODE_TTL_MS) || 180_000;
+/** Tempo de vida de cada ref de QR. O padrão do Baileys (20s a partir do segundo ref)
+ * esgota a lista e derruba o socket em ~2min, curto demais para digitar o código. */
+const WA_QR_TIMEOUT_MS = Number(process.env.WA_QR_TIMEOUT_MS) || 60_000;
+
+/** Rede de segurança para o código não ficar exibido eternamente se algo travar.
+ * O sinal real de morte do código é o fechamento do socket que o emitiu — tratado
+ * em `connection.update`, já que o pareamento só vale enquanto aquele socket vive. */
+const WA_PAIRING_CODE_TTL_MS = Number(process.env.WA_PAIRING_CODE_TTL_MS) || 600_000;
 
 /** Tempo máximo esperando o socket ficar apto a pedir o código (conectado e não registrado). */
 const WA_PAIRING_SOCKET_WAIT_MS = Number(process.env.WA_PAIRING_SOCKET_WAIT_MS) || 25_000;
@@ -957,13 +962,20 @@ export async function initWhatsappClient() {
           }
         }
       }
-      const auth = await createWhatsappAuthState({
-        organizationId: DEFAULT_ORGANIZATION_ID,
-        sessionName:
-          process.env.WHATSAPP_SESSION_NAME || "mavo-talk-production",
-        authPath: process.env.WHATSAPP_AUTH_PATH,
-        diskPath: process.env.RENDER_DISK_PATH,
-      });
+      let auth = await createWhatsappAuthState(whatsappAuthStateOptions());
+
+      // Sessão persistida de um pareamento por código que nunca concluiu: mantê-la
+      // faria este socket entrar no ramo de login de um aparelho inexistente e
+      // falhar indefinidamente. Descartar aqui recupera sozinho uma instalação que
+      // já subiu com esse estado gravado, sem exigir um "Desconectar" manual.
+      if (auth.state.creds.pairingCode && !auth.state.creds.registered) {
+        logger.warn(
+          "Discarding stored WhatsApp session left by an incomplete pairing attempt",
+        );
+        await auth.clearSession();
+        auth = await createWhatsappAuthState(whatsappAuthStateOptions());
+      }
+
       const { state: authState, saveCreds } = auth;
       global.__waAuthHandle = auth;
       const generation = nextWhatsappGeneration();
@@ -981,6 +993,11 @@ export async function initWhatsappClient() {
         browser: Browsers.appropriate(process.env.WHATSAPP_SESSION_NAME || "Mavo Talk"),
         markOnlineOnConnect: false,
         syncFullHistory: false,
+        // O Baileys consome uma lista finita de refs de QR e derruba o socket quando
+        // ela acaba (Socket/socket.js: "QR refs attempts ended"). No padrão os refs
+        // seguintes duram só 20s, o que fecha a conexão em ~2min — tempo curto demais
+        // para alguém digitar o código de pareamento no celular.
+        qrTimeout: WA_QR_TIMEOUT_MS,
       });
 
       sock.ev.on("creds.update", () => {
@@ -1042,17 +1059,57 @@ export async function initWhatsappClient() {
           const statusCode = (lastDisconnect?.error as Boom | undefined)?.output?.statusCode;
           const loggedOut = statusCode === DisconnectReason.loggedOut;
 
+          // `requestPairingCode` grava creds.me antes de o pareamento concluir. Se o
+          // socket cair antes disso, sobra uma sessão com me preenchido e registered
+          // false — e o Baileys decide registro vs. login por `if (!creds.me)`. Nesse
+          // estado todo socket novo tenta LOGIN de um aparelho que nunca foi pareado,
+          // e o cliente recebe "Não foi possível conectar o dispositivo" para sempre.
+          //
+          // O discriminador é `creds.pairingCode`, gravado só por requestPairingCode:
+          // no fluxo por QR o pair-success também deixa me preenchido com registered
+          // ainda false (o servidor pede restart antes de concluir), e usar me aqui
+          // apagaria uma sessão recém-pareada com sucesso. O restart (515) fica fora
+          // por definição — ele significa "reconecte com o que você já tem".
+          const restartRequired = statusCode === DisconnectReason.restartRequired;
+          const abandonedPairing =
+            !restartRequired &&
+            Boolean(authState.creds?.pairingCode) &&
+            !authState.creds?.registered;
+
           state.status = "disconnected";
           state.lastError = lastDisconnect?.error ? String(lastDisconnect.error.message || lastDisconnect.error) : null;
           state.connectedPhone = null;
           clientReadyAt = null;
-          // Sessão encerrada de vez: o QR e o código na tela não valem mais nada.
+          // O código de pareamento só vale enquanto vive o socket que o emitiu.
+          clearPairingCode(state);
           if (loggedOut) {
             state.qrDataUrl = null;
-            clearPairingCode(state);
           }
           if (global.__waClient === sock) {
             global.__waClient = undefined;
+          }
+
+          if (loggedOut || abandonedPairing) {
+            const resetPromise = auth.clearSession();
+            global.__waAuthResetPromise = resetPromise;
+            void resetPromise.catch((error) => {
+              state.authPersistenceHealthy = false;
+              logger.error(
+                { err: error },
+                "Failed to clear WhatsApp auth state after connection close",
+              );
+            });
+            if (abandonedPairing) {
+              state.lastError =
+                "O pareamento não foi concluído a tempo. Gere um novo código e digite-o no celular assim que ele aparecer.";
+              logger.warn(
+                "Abandoned WhatsApp pairing attempt; session cleared so the next attempt starts from registration",
+              );
+            } else {
+              logger.warn(
+                "WhatsApp session logged out; stored state cleared and a new QR Code is required",
+              );
+            }
           }
 
           if (
@@ -1063,26 +1120,13 @@ export async function initWhatsappClient() {
           ) {
             global.__waReconnectTimer = setTimeout(() => {
               global.__waReconnectTimer = undefined;
+              // `initWhatsappClient` aguarda `__waAuthResetPromise`, então a limpeza
+              // acima sempre precede o socket novo.
               void initWhatsappClient().catch((err) => {
                 logger.error({ err }, "Failed to auto-reconnect WhatsApp client");
               });
             }, RECONNECT_DELAY_MS);
             global.__waReconnectTimer.unref();
-          } else {
-            if (loggedOut) {
-              const resetPromise = auth.clearSession();
-              global.__waAuthResetPromise = resetPromise;
-              void resetPromise.catch((error) => {
-                state.authPersistenceHealthy = false;
-                logger.error(
-                  { err: error },
-                  "Failed to clear logged-out WhatsApp auth state",
-                );
-              });
-              logger.warn(
-                "WhatsApp session logged out; stored state cleared and a new QR Code is required",
-              );
-            }
           }
         }
       });

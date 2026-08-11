@@ -111,6 +111,30 @@ test("pareamento por telefone cobre o aparelho sem camera utilizavel", async () 
   assert.match(painel, /\/api\/whatsapp\/pairing-code/);
 });
 
+test("pareamento abandonado nao deixa a sessao presa no ramo de login", async () => {
+  const client = await read("lib/whatsapp-client.ts");
+
+  // creds.me tambem e preenchido pelo pair-success do fluxo QR, antes do restart.
+  // Discriminar por creds.me apagaria uma sessao recem-pareada com sucesso, entao o
+  // gatilho e creds.pairingCode, gravado apenas por requestPairingCode.
+  assert.match(client, /Boolean\(authState\.creds\?\.pairingCode\) &&\s*!authState\.creds\?\.registered/);
+  assert.doesNotMatch(client, /const abandonedPairing =\s*\n?\s*Boolean\(authState\.creds\?\.me\)/);
+
+  // O restart (515) apos pareamento bem-sucedido nunca pode ser tratado como abandono.
+  assert.match(client, /restartRequired = statusCode === DisconnectReason\.restartRequired/);
+  assert.match(client, /!restartRequired &&/);
+
+  // Uma sessao ja gravada nesse estado precisa se recuperar sozinha no proximo init.
+  assert.match(
+    client,
+    /creds\.pairingCode && !auth\.state\.creds\.registered[\s\S]{0,320}clearSession\(\)/,
+  );
+
+  // Os refs de QR padrao esgotam em ~2min e derrubam o socket antes de dar tempo de
+  // digitar o codigo no celular.
+  assert.match(client, /qrTimeout: WA_QR_TIMEOUT_MS/);
+});
+
 test("shutdown usa a API do Baileys", async () => {
   const server = await read("server.cjs");
   assert.match(server, /__waClient\.end\(undefined\)/);
