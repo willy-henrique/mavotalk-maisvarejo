@@ -1,6 +1,7 @@
 export type SupermarketSettingsPatch = {
   enabled?: boolean;
   aiFallbackEnabled?: boolean;
+  agentSignatureEnabled?: boolean;
   botName?: string;
   storeName?: string;
   address?: string | null;
@@ -50,6 +51,7 @@ export function parseSupermarketSettingsPatch(body: Record<string, unknown>): Pa
   const data: SupermarketSettingsPatch = {};
   if (typeof body.enabled === "boolean") data.enabled = body.enabled;
   if (typeof body.aiFallbackEnabled === "boolean") data.aiFallbackEnabled = body.aiFallbackEnabled;
+  if (typeof body.agentSignatureEnabled === "boolean") data.agentSignatureEnabled = body.agentSignatureEnabled;
 
   const requiredIdentity = [
     ["botName", "Nome do assistente", 80],

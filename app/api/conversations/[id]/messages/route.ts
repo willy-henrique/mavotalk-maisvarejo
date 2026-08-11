@@ -14,6 +14,7 @@ import {
   replaceVariables,
 } from "@/lib/quick-reply-service";
 import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
+import { getSupermarketSettings } from "@/lib/supermarket-settings";
 import { logger } from "@/lib/logger";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -61,8 +62,14 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
 
   const authorId = auth.session.userId;
   const authorName = auth.session.name || "Atendente";
-  // Envia para o WhatsApp com a assinatura em linha separada
-  const whatsappBody = `${authorName}:\n${resolvedContent}`;
+  // A assinatura do atendente é opcional por organização; quando desligada a mensagem
+  // sai exatamente como digitada, sem o prefixo com o nome.
+  const { agentSignatureEnabled } = await getSupermarketSettings(
+    auth.session.organizationId,
+  );
+  const whatsappBody = agentSignatureEnabled
+    ? `${authorName}:\n${resolvedContent}`
+    : resolvedContent;
 
   try {
     if (provider === "unofficial") {
