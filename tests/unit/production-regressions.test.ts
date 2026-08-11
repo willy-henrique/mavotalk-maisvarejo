@@ -131,8 +131,8 @@ test("pareamento abandonado nao deixa a sessao presa no ramo de login", async ()
   );
 
   // Os refs de QR padrao esgotam em ~2min e derrubam o socket antes de dar tempo de
-  // digitar o codigo no celular.
-  assert.match(client, /qrTimeout: WA_QR_TIMEOUT_MS/);
+  // digitar o codigo no celular. A duracao por modo e coberta no teste da janela.
+  assert.match(client, /qrTimeout:/);
 });
 
 test("cliente se anuncia como navegador reconhecido pelo WhatsApp", async () => {
@@ -146,6 +146,19 @@ test("cliente se anuncia como navegador reconhecido pelo WhatsApp", async () => 
   // O nome da sessao e chave da sessao persistida, nao identidade de navegador.
   assert.doesNotMatch(client, /Browsers\.appropriate\(/);
   assert.doesNotMatch(client, /browser:[^\n]*WHATSAPP_SESSION_NAME/);
+});
+
+test("codigo de pareamento nasce em socket novo, com a janela cheia", async () => {
+  const client = await read("lib/whatsapp-client.ts");
+  const pairing = client.slice(client.indexOf("export async function requestWhatsappPairingCode"));
+
+  // O socket criado no boot por WHATSAPP_AUTO_CONNECT pode ter consumido quase todos
+  // os refs de QR. Reaproveita-lo faz o codigo herdar so o tempo restante.
+  assert.match(pairing, /destroyWhatsappClient\(\)[\s\S]{0,200}initWhatsappClient\(\{ pairingMode: true \}\)/);
+
+  // Em pairingMode o QR nao e exibido, entao refs longos so esticam a janela.
+  assert.match(client, /qrTimeout: pairingMode \? WA_PAIRING_QR_TIMEOUT_MS : WA_QR_TIMEOUT_MS/);
+  assert.match(client, /WA_PAIRING_QR_TIMEOUT_MS =\s*Number\(process\.env\.WA_PAIRING_QR_TIMEOUT_MS\) \|\| 180_000/);
 });
 
 test("shutdown usa a API do Baileys", async () => {

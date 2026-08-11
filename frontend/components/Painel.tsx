@@ -11,6 +11,7 @@ type WhatsappState = {
   qrDataUrl: string | null;
   pairingCode: string | null;
   pairingPhone: string | null;
+  pairingCodeIssuedAt: string | null;
   pairingCodeExpiresAt: string | null;
   lastError: string | null;
   connectedPhone: string | null;
@@ -256,6 +257,15 @@ const Painel: React.FC = () => {
                     <p className="mt-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
                       No celular: <strong>WhatsApp &gt; Aparelhos conectados &gt; Conectar aparelho &gt; Conectar com número de telefone</strong> e digite o código acima. Se ele expirar, gere outro.
                     </p>
+                    {waState?.pairingCodeIssuedAt && (
+                      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                        Gerado às{' '}
+                        <span className="font-mono">
+                          {new Date(waState.pairingCodeIssuedAt).toLocaleTimeString('pt-BR')}
+                        </span>
+                        . O código vale enquanto esta sessão de conexão estiver ativa — se demorar, gere outro antes de digitar.
+                      </p>
+                    )}
                   </div>
                 )}
 

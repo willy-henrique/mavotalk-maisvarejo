@@ -64,6 +64,7 @@ type WhatsappState = {
   /** Código de pareamento por telefone, alternativa ao QR quando não há câmera utilizável. */
   pairingCode: string | null;
   pairingPhone: string | null;
+  pairingCodeIssuedAt: string | null;
   pairingCodeExpiresAt: string | null;
   lastError: string | null;
   connectedPhone: string | null;
@@ -141,6 +142,7 @@ async function clearWhatsappAuthState(): Promise<void> {
 function clearPairingCode(state: WhatsappState) {
   state.pairingCode = null;
   state.pairingPhone = null;
+  state.pairingCodeIssuedAt = null;
   state.pairingCodeExpiresAt = null;
   pairingRequestedGeneration = null;
 }
@@ -148,6 +150,12 @@ function clearPairingCode(state: WhatsappState) {
 /** Tempo de vida de cada ref de QR. O padrão do Baileys (20s a partir do segundo ref)
  * esgota a lista e derruba o socket em ~2min, curto demais para digitar o código. */
 const WA_QR_TIMEOUT_MS = Number(process.env.WA_QR_TIMEOUT_MS) || 60_000;
+
+/** No pareamento por número ninguém olha o QR: o ciclo de refs serve apenas para manter
+ * o socket vivo. Refs longos esticam a janela sem prejudicar nada, porque o QR emitido
+ * nesse modo não é exibido. */
+const WA_PAIRING_QR_TIMEOUT_MS =
+  Number(process.env.WA_PAIRING_QR_TIMEOUT_MS) || 180_000;
 
 /** Rede de segurança para o código não ficar exibido eternamente se algo travar.
  * O sinal real de morte do código é o fechamento do socket que o emitiu — tratado
@@ -182,6 +190,7 @@ function getState(): WhatsappState {
       qrDataUrl: null,
       pairingCode: null,
       pairingPhone: null,
+      pairingCodeIssuedAt: null,
       pairingCodeExpiresAt: null,
       lastError: null,
       connectedPhone: null,
@@ -918,7 +927,8 @@ export async function waitForWhatsappReady(maxMs: number): Promise<boolean> {
 
 const RECONNECT_DELAY_MS = 3_000;
 
-export async function initWhatsappClient() {
+export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
+  const pairingMode = options?.pairingMode === true;
   ensureUnhandledRejectionGuard();
   const provider = process.env.WHATSAPP_PROVIDER || "twilio";
   if (provider !== "unofficial") {
@@ -1009,7 +1019,7 @@ export async function initWhatsappClient() {
         // ela acaba (Socket/socket.js: "QR refs attempts ended"). No padrão os refs
         // seguintes duram só 20s, o que fecha a conexão em ~2min — tempo curto demais
         // para alguém digitar o código de pareamento no celular.
-        qrTimeout: WA_QR_TIMEOUT_MS,
+        qrTimeout: pairingMode ? WA_PAIRING_QR_TIMEOUT_MS : WA_QR_TIMEOUT_MS,
       });
 
       sock.ev.on("creds.update", () => {
@@ -1321,11 +1331,12 @@ export async function requestWhatsappPairingCode(phone: string): Promise<{
     );
   }
 
-  // Um socket ativo mas ainda não registrado (ex.: aguardando QR) já serve;
-  // caso contrário sobe um novo, que é o que produz uma sessão limpa.
-  if (!global.__waClient) {
-    await initWhatsappClient();
-  }
+  // Sempre sobe um socket novo. O socket em execução — criado no boot pelo
+  // WHATSAPP_AUTO_CONNECT e vivo desde então — pode já ter consumido quase toda a
+  // lista de refs de QR, e o código emitido nele herdaria só o tempo restante, às
+  // vezes segundos. Recriar garante a janela cheia a cada pedido.
+  await destroyWhatsappClient();
+  await initWhatsappClient({ pairingMode: true });
 
   const deadline = Date.now() + WA_PAIRING_SOCKET_WAIT_MS;
   while (Date.now() < deadline) {
@@ -1346,6 +1357,7 @@ export async function requestWhatsappPairingCode(phone: string): Promise<{
       const current = getState();
       current.pairingCode = pairingCode;
       current.pairingPhone = `+${digits}`;
+      current.pairingCodeIssuedAt = new Date().toISOString();
       current.pairingCodeExpiresAt = expiresAt;
       // Pedir o código invalida o QR daquela sessão: exibir os dois confundiria.
       current.qrDataUrl = null;
