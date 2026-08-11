@@ -135,6 +135,19 @@ test("pareamento abandonado nao deixa a sessao presa no ramo de login", async ()
   assert.match(client, /qrTimeout: WA_QR_TIMEOUT_MS/);
 });
 
+test("cliente se anuncia como navegador reconhecido pelo WhatsApp", async () => {
+  const client = await read("lib/whatsapp-client.ts");
+
+  // getCompanionWebClientType (Utils/companion-reg-client-utils) so mapeia
+  // Chrome/Edge/Firefox/IE/Opera/Safari/Desktop; qualquer outro nome vira
+  // OTHER_WEB_CLIENT no link_code_companion_reg e o pareamento por numero e recusado.
+  assert.match(client, /browser: Browsers\.ubuntu\("Chrome"\)/);
+
+  // O nome da sessao e chave da sessao persistida, nao identidade de navegador.
+  assert.doesNotMatch(client, /Browsers\.appropriate\(/);
+  assert.doesNotMatch(client, /browser:[^\n]*WHATSAPP_SESSION_NAME/);
+});
+
 test("shutdown usa a API do Baileys", async () => {
   const server = await read("server.cjs");
   assert.match(server, /__waClient\.end\(undefined\)/);

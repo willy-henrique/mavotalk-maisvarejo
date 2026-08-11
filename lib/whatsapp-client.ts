@@ -996,7 +996,13 @@ export async function initWhatsappClient() {
         version,
         auth: authState,
         logger,
-        browser: Browsers.appropriate(process.env.WHATSAPP_SESSION_NAME || "Mavo Talk"),
+        // O WhatsApp só aceita pareamento por número de clientes web que reconhece:
+        // getCompanionWebClientType mapeia apenas Chrome/Edge/Firefox/IE/Opera/Safari/
+        // Desktop e joga todo o resto em OTHER_WEB_CLIENT. Passar WHATSAPP_SESSION_NAME
+        // aqui nos anunciava como cliente desconhecido no link_code_companion_reg —
+        // enquanto o nó de registro caía no fallback CHROME — e o código era recusado.
+        // O nome da sessão identifica a sessão persistida, não o navegador.
+        browser: Browsers.ubuntu("Chrome"),
         markOnlineOnConnect: false,
         syncFullHistory: false,
         // O Baileys consome uma lista finita de refs de QR e derruba o socket quando
