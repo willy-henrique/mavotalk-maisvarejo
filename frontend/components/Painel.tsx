@@ -67,14 +67,18 @@ const Painel: React.FC = () => {
     }
   }, []);
 
+  // Enquanto o QR está sendo gerado ou aguarda leitura, o estado muda em segundos:
+  // revalidar de 10 em 10s faria o código aparecer tarde e expirar na tela.
+  const pollIntervalMs = waState && ['initializing', 'qr'].includes(waState.status) ? 2000 : 10000;
+
   useEffect(() => {
     void fetchStatus();
-    const interval = window.setInterval(() => void fetchStatus(), 10000);
+    const interval = window.setInterval(() => void fetchStatus(), pollIntervalMs);
     return () => {
       window.clearInterval(interval);
       statusRequestRef.current += 1;
     };
-  }, [fetchStatus]);
+  }, [fetchStatus, pollIntervalMs]);
 
   const handleConnect = async () => {
     setActionError(null);

@@ -60,6 +60,31 @@ test("QR e diagnóstico do WhatsApp são restritos por permissão de painel no s
   assert.match(settings, /painel: \{ read: CAN_MANAGE/);
 });
 
+test("desconectar desloga o aparelho e apaga a sessão antes de um novo QR", async () => {
+  const [client, route] = await Promise.all([
+    read("lib/whatsapp-client.ts"),
+    read("app/api/whatsapp/disconnect/route.ts"),
+  ]);
+
+  // O painel precisa pedir o desligamento completo: só encerrar o socket mantém as
+  // credenciais registradas e o Baileys reconecta sozinho no número anterior.
+  assert.match(route, /destroyWhatsappClient\(\{\s*logout:\s*true\s*\}\)/);
+
+  const destroy = client.slice(client.indexOf("export async function destroyWhatsappClient"));
+  assert.match(destroy, /sock\.logout\(\)/);
+  assert.match(destroy, /clearWhatsappAuthState\(\)/);
+
+  // A limpeza da sessão persistida precisa acontecer depois do logout, senão o
+  // socket ainda vivo regrava as credenciais que acabaram de ser removidas.
+  assert.ok(destroy.indexOf("sock.logout()") < destroy.indexOf("clearWhatsappAuthState()"));
+
+  // Um `creds.update` atrasado do socket antigo ressuscitaria a sessão apagada.
+  assert.match(client, /if \(generation !== currentWhatsappGeneration\(\)\) return;\s*void saveCreds\(\)/);
+
+  // Falha ao limpar não pode ser reportada como sucesso: o QR seguinte reconectaria o número antigo.
+  assert.match(route, /status:\s*500/);
+});
+
 test("shutdown usa a API do Baileys", async () => {
   const server = await read("server.cjs");
   assert.match(server, /__waClient\.end\(undefined\)/);

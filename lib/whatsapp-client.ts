@@ -46,7 +46,10 @@ import {
   configuredWhatsappAuthStore,
   shouldAutoReconnectWhatsapp,
 } from "@/lib/whatsapp-auth-config";
-import { createWhatsappAuthState } from "@/lib/whatsapp-auth-state";
+import {
+  createWhatsappAuthState,
+  type WhatsappAuthStateHandle,
+} from "@/lib/whatsapp-auth-state";
 import {
   classifyWhatsappInitializationError,
   type WhatsappDiagnosticCode,
@@ -78,6 +81,75 @@ declare global {
   var __waManualDisconnect: boolean | undefined;
   var __waReconnectTimer: NodeJS.Timeout | undefined;
   var __waAuthResetPromise: Promise<void> | undefined;
+  var __waAuthHandle: WhatsappAuthStateHandle | undefined;
+  var __waGeneration: number | undefined;
+}
+
+/** Geração do socket ativo. Cada init cria uma nova geração e cada destroy a invalida,
+ * para que callbacks de um socket antigo (em especial `creds.update`) não voltem a
+ * gravar credenciais já removidas e ressuscitem a sessão anterior. */
+function currentWhatsappGeneration(): number {
+  if (typeof global.__waGeneration !== "number") global.__waGeneration = 0;
+  return global.__waGeneration;
+}
+
+function nextWhatsappGeneration(): number {
+  global.__waGeneration = currentWhatsappGeneration() + 1;
+  return global.__waGeneration;
+}
+
+function whatsappAuthStateOptions() {
+  return {
+    organizationId: DEFAULT_ORGANIZATION_ID,
+    sessionName: process.env.WHATSAPP_SESSION_NAME || "mavo-talk-production",
+    authPath: process.env.WHATSAPP_AUTH_PATH,
+    diskPath: process.env.RENDER_DISK_PATH,
+  };
+}
+
+/** Remove a sessão persistida (banco ou disco) para que o próximo init gere um QR novo.
+ * Sem isso, `initWhatsappClient` recarrega credenciais ainda registradas e o Baileys
+ * reconecta silenciosamente no mesmo número, sem nunca emitir o evento `qr`. */
+async function clearWhatsappAuthState(): Promise<void> {
+  const pending = global.__waAuthResetPromise;
+  const handle = global.__waAuthHandle;
+  global.__waAuthHandle = undefined;
+
+  const reset = (async () => {
+    if (pending) await pending.catch(() => undefined);
+    // Após um restart do processo o handle em memória não existe mais; recriá-lo
+    // garante que o disconnect continue limpando a sessão persistida.
+    const target = handle || (await createWhatsappAuthState(whatsappAuthStateOptions()));
+    await target.clearSession();
+  })();
+
+  global.__waAuthResetPromise = reset;
+  try {
+    await reset;
+    getState().authPersistenceHealthy = true;
+  } finally {
+    if (global.__waAuthResetPromise === reset) {
+      global.__waAuthResetPromise = undefined;
+    }
+  }
+}
+
+/** `logout()` fica pendente para sempre se o socket já caiu; sem teto o disconnect trava. */
+const WA_LOGOUT_TIMEOUT_MS = Number(process.env.WA_LOGOUT_TIMEOUT_MS) || 8_000;
+
+async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} excedeu ${ms}ms`)), ms);
+        timer.unref();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 function getState(): WhatsappState {
@@ -209,6 +281,9 @@ function ensureUnhandledRejectionGuard() {
 /** Intervalo mínimo entre envios (ms) para respeitar limites do WhatsApp e reduzir risco de ban. */
 const WA_MIN_SEND_INTERVAL_MS = Number(process.env.WA_MIN_SEND_INTERVAL_MS) || 1500;
 let lastSendAt = 0;
+
+/** Ordena as renderizações assíncronas de QR para que a última emitida sempre vença. */
+let qrSequence = 0;
 
 /** Timestamp Unix (segundos) do momento em que o cliente ficou pronto.
  * Mensagens com timestamp anterior a este valor são mensagens offline enfileiradas
@@ -820,7 +895,13 @@ export async function initWhatsappClient() {
   }
 
   if (global.__waClient) {
-    return getState();
+    const current = getState();
+    if (["ready", "qr", "initializing"].includes(current.status)) {
+      return current;
+    }
+    // Socket órfão: a referência sobreviveu a um close que não a limpou.
+    // Descarta antes de recriar, senão o init aborta e o painel trava no estado antigo.
+    await destroyWhatsappClient();
   }
 
   if (global.__waInitPromise) {
@@ -830,6 +911,8 @@ export async function initWhatsappClient() {
   const state = getState();
   state.status = "initializing";
   state.lastError = null;
+  // Nunca exibir o QR da tentativa anterior enquanto o novo não chega.
+  state.qrDataUrl = null;
   state.initializationStage = "auth-store";
   state.diagnosticCode = null;
   if (state.authStore === "database") {
@@ -861,6 +944,8 @@ export async function initWhatsappClient() {
         diskPath: process.env.RENDER_DISK_PATH,
       });
       const { state: authState, saveCreds } = auth;
+      global.__waAuthHandle = auth;
+      const generation = nextWhatsappGeneration();
       state.authStore = auth.store;
       state.sessionPersistent = auth.persistent;
       state.authPersistenceHealthy = true;
@@ -878,6 +963,9 @@ export async function initWhatsappClient() {
       });
 
       sock.ev.on("creds.update", () => {
+        // Um `creds.update` atrasado do socket anterior regravaria a sessão que o
+        // disconnect acabou de apagar, e o número antigo voltaria no próximo QR.
+        if (generation !== currentWhatsappGeneration()) return;
         void saveCreds()
           .then(() => {
             state.authPersistenceHealthy = true;
@@ -899,12 +987,22 @@ export async function initWhatsappClient() {
 
       sock.ev.on("connection.update", (update) => {
         const { connection, lastDisconnect, qr } = update;
+        if (generation !== currentWhatsappGeneration()) return;
 
         if (qr) {
           state.status = "qr";
-          void qrcode.toDataURL(qr).then((url) => {
-            state.qrDataUrl = url;
-          });
+          const qrToken = ++qrSequence;
+          void qrcode
+            .toDataURL(qr)
+            .then((url) => {
+              // Descarta renderizações fora de ordem: um QR antigo resolvendo depois
+              // do atual deixaria na tela um código já expirado.
+              if (generation !== currentWhatsappGeneration() || qrToken !== qrSequence) return;
+              state.qrDataUrl = url;
+            })
+            .catch((err) => {
+              logger.warn({ err }, "Failed to render WhatsApp QR Code");
+            });
         }
 
         if (connection === "open") {
@@ -926,6 +1024,8 @@ export async function initWhatsappClient() {
           state.lastError = lastDisconnect?.error ? String(lastDisconnect.error.message || lastDisconnect.error) : null;
           state.connectedPhone = null;
           clientReadyAt = null;
+          // Sessão encerrada de vez: o QR na tela não vale mais nada.
+          if (loggedOut) state.qrDataUrl = null;
           if (global.__waClient === sock) {
             global.__waClient = undefined;
           }
@@ -1005,7 +1105,17 @@ export async function initWhatsappClient() {
   return initPromise;
 }
 
-export async function destroyWhatsappClient() {
+/**
+ * Encerra o cliente WhatsApp.
+ *
+ * Com `logout: true` (botão "Desconectar" do painel) faz o desligamento completo:
+ * desparelha o aparelho no WhatsApp e apaga a sessão persistida. Só assim o
+ * "Gerar QR" seguinte produz um QR de verdade — encerrar apenas o socket mantém
+ * as credenciais registradas e o Baileys reconecta sozinho no mesmo número.
+ */
+export async function destroyWhatsappClient(options?: { logout?: boolean }) {
+  const fullLogout = options?.logout === true;
+
   if (global.__waDestroyPromise) {
     await global.__waDestroyPromise;
     return;
@@ -1013,31 +1123,49 @@ export async function destroyWhatsappClient() {
 
   const destroyPromise = (async () => {
     global.__waManualDisconnect = true;
+    // Invalida os callbacks do socket atual antes de qualquer await.
+    nextWhatsappGeneration();
     if (global.__waReconnectTimer) {
       clearTimeout(global.__waReconnectTimer);
       global.__waReconnectTimer = undefined;
     }
-    if (!global.__waClient) {
-      const state = getState();
-      state.status = "disconnected";
-      state.qrDataUrl = null;
-      state.connectedPhone = null;
-      return;
-    }
-    try {
-      global.__waClient.end(undefined);
-    } catch (error) {
-      if (!isKnownWhatsappNoiseError(error)) {
-        logger.error({ err: error }, "Failed to destroy WhatsApp client");
-      } else {
-        logger.warn({ err: error }, "Ignoring known WhatsApp destroy noise");
+
+    const sock = global.__waClient;
+    global.__waClient = undefined;
+
+    if (sock && fullLogout) {
+      try {
+        await withTimeout(sock.logout(), WA_LOGOUT_TIMEOUT_MS, "logout do WhatsApp");
+      } catch (error) {
+        // O aparelho pode já ter sido removido pelo celular ou o socket já ter caído.
+        // A limpeza local abaixo é o que garante o QR novo, então seguimos adiante.
+        logger.warn({ err: error }, "WhatsApp logout request failed; clearing local session anyway");
       }
-    } finally {
-      global.__waClient = undefined;
-      const state = getState();
-      state.status = "disconnected";
-      state.qrDataUrl = null;
-      state.connectedPhone = null;
+    }
+
+    if (sock) {
+      try {
+        sock.end(undefined);
+      } catch (error) {
+        if (!isKnownWhatsappNoiseError(error)) {
+          logger.error({ err: error }, "Failed to destroy WhatsApp client");
+        } else {
+          logger.warn({ err: error }, "Ignoring known WhatsApp destroy noise");
+        }
+      }
+    }
+
+    const state = getState();
+    state.status = "disconnected";
+    state.qrDataUrl = null;
+    state.connectedPhone = null;
+    clientReadyAt = null;
+
+    if (fullLogout) {
+      // Propaga a falha: sem limpar a sessão o próximo QR reconectaria o número
+      // antigo, e reportar sucesso aqui esconderia exatamente esse defeito.
+      await clearWhatsappAuthState();
+      state.lastError = null;
     }
   })();
 
