@@ -21,6 +21,17 @@ type StatusResponse = {
   state: WhatsappState;
 };
 
+/** A operação é brasileira: o DDI vem preenchido para o operador digitar só DDD e número. */
+const BRAZIL_DIAL_CODE = '55';
+
+const DIAL_CODES: Array<{ code: string; label: string }> = [
+  { code: '55', label: 'Brasil (+55)' },
+  { code: '351', label: 'Portugal (+351)' },
+  { code: '1', label: 'EUA / Canadá (+1)' },
+  { code: '54', label: 'Argentina (+54)' },
+  { code: '595', label: 'Paraguai (+595)' },
+];
+
 const whatsappStatusLabels: Record<WhatsappState['status'], string> = {
   idle: 'Aguardando conexão',
   initializing: 'Conectando',
@@ -45,6 +56,10 @@ const Painel: React.FC = () => {
   const [pairing, setPairing] = useState(false);
   const [showPairing, setShowPairing] = useState(false);
   const [pairingPhoneInput, setPairingPhoneInput] = useState('');
+  const [pairingCountry, setPairingCountry] = useState(BRAZIL_DIAL_CODE);
+
+  // Número completo em E.164 sem o "+": o operador digita só DDD e número.
+  const pairingFullNumber = `${pairingCountry}${pairingPhoneInput.replace(/\D/g, '')}`;
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const canAccess = AuthService.canAccessPainel();
   const statusRequestRef = useRef(0);
@@ -122,7 +137,7 @@ const Painel: React.FC = () => {
       const res = await apiFetch('/api/whatsapp/pairing-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: pairingPhoneInput }),
+        body: JSON.stringify({ phone: pairingFullNumber }),
       });
       const data = await res.json().catch(() => ({})) as { error?: string };
       if (!res.ok) {
@@ -277,32 +292,43 @@ const Painel: React.FC = () => {
                       Número do WhatsApp que será conectado
                     </label>
                     <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                      Use quando a câmera do aparelho não conseguir ler o QR. Informe com DDI e DDD, somente números.
-                    </p>
-                    {/* O WhatsApp identifica muitos celulares brasileiros sem o nono dígito.
-                        Parear com o número no formato errado é recusado sem explicar o motivo. */}
-                    <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                      Celular brasileiro: o WhatsApp costuma identificar a conta <strong>sem o nono dígito</strong>. Se o pareamento for recusado, tente sem o 9 depois do DDD (ex.: <span className="font-mono">556284127954</span> em vez de <span className="font-mono">5562984127954</span>).
+                      Use quando a câmera do aparelho não conseguir ler o QR. Digite DDD e número exatamente como aparecem no perfil do WhatsApp do aparelho.
                     </p>
                     <div className="mt-3 flex flex-wrap gap-3">
-                      <input
-                        id="pairing-phone"
-                        type="tel"
-                        inputMode="numeric"
-                        value={pairingPhoneInput}
-                        onChange={(e) => setPairingPhoneInput(e.target.value)}
-                        placeholder="5562991234567"
-                        className="min-w-[220px] flex-1 rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                      />
+                      <select
+                        aria-label="País"
+                        value={pairingCountry}
+                        onChange={(e) => setPairingCountry(e.target.value)}
+                        className="rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                      >
+                        {DIAL_CODES.map((item) => (
+                          <option key={item.code} value={item.code}>{item.label}</option>
+                        ))}
+                      </select>
+                      <div className="flex min-w-[220px] flex-1 items-center rounded-xl border border-slate-300 px-3 dark:border-slate-600 dark:bg-slate-900">
+                        <span className="mr-2 font-mono text-sm text-slate-500 dark:text-slate-400">+{pairingCountry}</span>
+                        <input
+                          id="pairing-phone"
+                          type="tel"
+                          inputMode="numeric"
+                          value={pairingPhoneInput}
+                          onChange={(e) => setPairingPhoneInput(e.target.value)}
+                          placeholder="62 98412-7954"
+                          className="w-full bg-transparent py-2 text-sm outline-none dark:text-slate-100"
+                        />
+                      </div>
                       <button
                         type="button"
                         onClick={handlePairingCode}
-                        disabled={pairing || pairingPhoneInput.replace(/\D/g, '').length < 10}
+                        disabled={pairing || pairingFullNumber.length < 10 || pairingFullNumber.length > 15}
                         className="mavo-button-primary"
                       >
                         {pairing ? 'Gerando...' : 'Gerar código'}
                       </button>
                     </div>
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                      Será pareado: <span className="font-mono font-semibold text-slate-700 dark:text-slate-200">+{pairingFullNumber}</span>
+                    </p>
                   </div>
                 )}
               </>
