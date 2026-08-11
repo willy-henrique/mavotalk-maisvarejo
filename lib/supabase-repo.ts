@@ -1812,6 +1812,64 @@ export async function resolveDefaultOrganizationId(candidateOrgId: string): Prom
 }
 
 // ---------------------------------------------------------------------------
+// Agenda do WhatsApp da loja (nomes de clientes recorrentes)
+// ---------------------------------------------------------------------------
+
+/**
+ * Grava os nomes da agenda do WhatsApp.
+ *
+ * Só alimenta a consulta: nenhum contato da plataforma é criado aqui, para a tela
+ * de Contatos continuar com quem realmente conversou, sem fornecedores e números
+ * pessoais da agenda da loja.
+ */
+export async function upsertWhatsappDirectoryEntries(
+  organizationId: string,
+  entries: Array<{ phoneNumber: string; displayName: string }>,
+): Promise<number> {
+  const orgId = requireOrganizationId(organizationId);
+  const rows = entries
+    .map((entry) => ({
+      phone_number: String(entry.phoneNumber || "").trim(),
+      display_name: String(entry.displayName || "").trim().slice(0, 200),
+    }))
+    .filter((row) => row.phone_number && row.display_name && !isPlaceholderName(row.display_name));
+  if (!rows.length) return 0;
+
+  // A sincronização inicial chega em lote; um INSERT por linha multiplicaria as idas
+  // ao banco. UNNEST resolve tudo em uma consulta, como no auth state do WhatsApp.
+  await queryTenantDatabase(
+    orgId,
+    `INSERT INTO whatsapp_directory (organization_id, phone_number, display_name, updated_at)
+     SELECT $1, entry.phone_number, entry.display_name, now()
+       FROM UNNEST($2::text[], $3::text[]) AS entry(phone_number, display_name)
+     ON CONFLICT (organization_id, phone_number)
+     DO UPDATE SET display_name = EXCLUDED.display_name, updated_at = now()`,
+    [orgId, rows.map((row) => row.phone_number), rows.map((row) => row.display_name)],
+  );
+  return rows.length;
+}
+
+/** Nome salvo na agenda da loja, quando houver. */
+export async function findWhatsappDirectoryName(
+  organizationId: string,
+  phoneNumber: string,
+): Promise<string | null> {
+  const orgId = requireOrganizationId(organizationId);
+  const { data, error } = await supa(orgId)
+    .from("whatsapp_directory")
+    .select("display_name")
+    .eq("organization_id", orgId)
+    .eq("phone_number", phoneNumber)
+    .maybeSingle();
+  if (error) {
+    logger.warn({ err: error, organizationId }, "Failed to read WhatsApp directory");
+    return null;
+  }
+  const name = String(data?.display_name || "").trim();
+  return name || null;
+}
+
+// ---------------------------------------------------------------------------
 // Satisfaction rating (1–5) by reply on WhatsApp
 // ---------------------------------------------------------------------------
 

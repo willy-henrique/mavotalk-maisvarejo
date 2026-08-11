@@ -80,4 +80,6 @@ export {
   resolveOrganizationByChannel,
   resolveDefaultOrganizationId,
   recordSatisfactionRatingByPhone,
+  upsertWhatsappDirectoryEntries,
+  findWhatsappDirectoryName,
 } from "@/lib/supabase-repo";

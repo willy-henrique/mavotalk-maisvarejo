@@ -25,6 +25,8 @@ import {
   updateTicketByConversation,
   updateContactAvatar,
   recordSatisfactionRatingByPhone,
+  upsertWhatsappDirectoryEntries,
+  findWhatsappDirectoryName,
 } from "@/lib/repo";
 import { logger } from "@/lib/logger";
 import { emitRealtime } from "@/lib/realtime";
@@ -436,7 +438,13 @@ async function handleInboundViaBotTriagem(
     );
     return;
   }
-  const contactName = msg.pushName || "Cliente";
+  // O nome salvo pela loja vale mais que o pushName: é ele que identifica o cliente
+  // recorrente para quem atende.
+  const directoryName = await findWhatsappDirectoryName(
+    DEFAULT_ORGANIZATION_ID,
+    fromPhone,
+  ).catch(() => null);
+  const contactName = directoryName || msg.pushName || "Cliente";
 
   let inboundText = extractMessageText(msg.message);
   let mediaUrl: string | undefined;
@@ -618,7 +626,8 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
     return;
   }
   const body = bodyRaw;
-  const profileName = (msg.pushName || "").trim() || "Cliente";
+  const savedName = await findWhatsappDirectoryName(organizationId, fromPhone).catch(() => null);
+  const profileName = savedName || (msg.pushName || "").trim() || "Cliente";
 
   let avatarUrl: string | null = null;
   try {
@@ -1230,6 +1239,42 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
             global.__waReconnectTimer.unref();
           }
         }
+      });
+
+      // Agenda da loja: o pushName é o nome que o próprio cliente escolheu no perfil,
+      // enquanto estes eventos trazem o nome que a loja salvou — o que identifica um
+      // cliente recorrente no atendimento.
+      const syncDirectory = (contacts: Array<{ id?: string | null; name?: string | null; notify?: string | null; verifiedName?: string | null }>) => {
+        const entries = contacts
+          .map((contact) => {
+            const phone = whatsappPhoneFromJid(String(contact.id || ""));
+            // `name` é o nome da agenda; notify/verifiedName vêm do perfil do cliente
+            // e já são cobertos pelo pushName, então não entram aqui.
+            const displayName = String(contact.name || "").trim();
+            return phone && displayName ? { phoneNumber: phone, displayName } : null;
+          })
+          .filter((entry): entry is { phoneNumber: string; displayName: string } => entry !== null);
+        if (!entries.length) return;
+        void upsertWhatsappDirectoryEntries(DEFAULT_ORGANIZATION_ID, entries)
+          .then((saved) => {
+            if (saved) logger.info({ saved }, "Synced WhatsApp directory entries");
+          })
+          .catch((err) => {
+            logger.warn({ err }, "Failed to sync WhatsApp directory entries");
+          });
+      };
+
+      sock.ev.on("messaging-history.set", ({ contacts }) => {
+        if (generation !== currentWhatsappGeneration()) return;
+        syncDirectory(contacts || []);
+      });
+      sock.ev.on("contacts.upsert", (contacts) => {
+        if (generation !== currentWhatsappGeneration()) return;
+        syncDirectory(contacts || []);
+      });
+      sock.ev.on("contacts.update", (contacts) => {
+        if (generation !== currentWhatsappGeneration()) return;
+        syncDirectory(contacts || []);
       });
 
       sock.ev.on("messages.upsert", ({ messages, type }) => {
