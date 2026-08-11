@@ -89,5 +89,8 @@ export async function POST(request: Request) {
     },
     "Login succeeded",
   );
-  return NextResponse.json({ ok: true, requestId });
+  // O token acompanha a resposta porque o cookie de sessão é third-party (painel e
+  // API em subdomínios distintos de onrender.com) e o Safari do iPhone o descarta.
+  // O cookie continua sendo usado quando o navegador o aceita.
+  return NextResponse.json({ ok: true, requestId, token });
 }

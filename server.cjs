@@ -113,7 +113,12 @@ app
       try {
         const cookieName =
           process.env.SESSION_COOKIE_NAME || "willtalk_session";
-        const token = parseCookies(socket.request.headers.cookie)[cookieName];
+        // O cookie de sessão é third-party (painel e API em subdomínios distintos de
+        // onrender.com) e o Safari do iPhone o descarta. Sem o token do handshake o
+        // tempo real ficaria permanentemente indisponível no celular.
+        const token =
+          parseCookies(socket.request.headers.cookie)[cookieName] ||
+          String((socket.handshake.auth && socket.handshake.auth.token) || "").trim();
         if (!token) return nextSocket(new Error("unauthorized"));
         const verified = await jwtVerify(token, jwtSecret, {
           issuer: "mavo-talk",
@@ -132,6 +137,9 @@ app
           {
             headers: {
               cookie: socket.request.headers.cookie || "",
+              // Sem isto a revalidação falharia justamente quando o token veio pelo
+              // handshake, que é o caso do celular sem cookie.
+              authorization: `Bearer ${token}`,
             },
             signal: AbortSignal.timeout(5_000),
           },

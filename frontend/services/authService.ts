@@ -1,4 +1,4 @@
-import { apiFetch, apiGet, apiPost } from './api';
+import { apiFetch, apiGet, apiPost, setAccessToken } from './api';
 import { User, UserRole, UserStatus, AuthState } from '../types';
 
 const AUTH_STORAGE_KEY = 'willtalk_auth_session';
@@ -28,7 +28,13 @@ export class AuthService {
   };
 
   static async login(email: string, password: string): Promise<AuthState> {
-    await apiPost('/api/auth/login', { email, password });
+    // Descarta qualquer resquício antes de autenticar: uma sessão antiga no
+    // navegador faz a interface se achar logada enquanto a API responde 401.
+    this.clearStoredSession();
+    const { token } = await apiPost<{ token?: string }>('/api/auth/login', { email, password });
+    // Precisa valer já na chamada seguinte: sem o cookie (bloqueado no celular),
+    // é o cabeçalho Authorization que autentica o /api/me logo abaixo.
+    setAccessToken(token || null);
     const { user: payload } = await apiGet<{ user: { userId: string; name: string; email: string; role: BackendRole } }>('/api/me');
     if (!payload) throw new Error('Sessão não retornada.');
 
@@ -56,9 +62,15 @@ export class AuthService {
     try {
       await apiFetch('/api/auth/logout', { method: 'POST' });
     } finally {
-      this.state = { user: null, accessToken: null, isAuthenticated: false };
-      localStorage.removeItem(AUTH_STORAGE_KEY);
+      this.clearStoredSession();
     }
+  }
+
+  /** Zera tudo que representa sessão no navegador — estado, localStorage e token. */
+  static clearStoredSession(): void {
+    this.state = { user: null, accessToken: null, isAuthenticated: false };
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    setAccessToken(null);
   }
 
   private static saveSession(data: AuthState) {
@@ -82,15 +94,13 @@ export class AuthService {
   static async refreshSession(): Promise<AuthState | null> {
     const res = await apiFetch('/api/me', { method: 'GET' });
     if (!res.ok) {
-      this.state = { user: null, accessToken: null, isAuthenticated: false };
-      localStorage.removeItem(AUTH_STORAGE_KEY);
+      this.clearStoredSession();
       return null;
     }
     const data = (await res.json()) as { user?: { userId: string; name: string; email: string; role: BackendRole } };
     const payload = data.user;
     if (!payload) {
-      this.state = { user: null, accessToken: null, isAuthenticated: false };
-      localStorage.removeItem(AUTH_STORAGE_KEY);
+      this.clearStoredSession();
       return null;
     }
 

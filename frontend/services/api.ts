@@ -25,16 +25,40 @@ export const getApiUrl = (path: string): string => {
   return `${getApiBaseUrl()}${normalizedPath}`;
 };
 
+/**
+ * Token de sessão para quando o cookie não sobrevive.
+ *
+ * Painel e API ficam em subdomínios distintos de onrender.com, que está na Public
+ * Suffix List — o navegador os trata como sites diferentes e o cookie de sessão é
+ * third-party. O Safari do iPhone bloqueia esses cookies por padrão, então no
+ * celular o login respondia 200 e todo pedido seguinte voltava 401. O cabeçalho
+ * Authorization não depende de cookie de terceiros.
+ */
+const TOKEN_STORAGE_KEY = 'willtalk_access_token';
+
+export function setAccessToken(token: string | null): void {
+  if (typeof window === 'undefined') return;
+  if (token) localStorage.setItem(TOKEN_STORAGE_KEY, token);
+  else localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
+
+export function getAccessToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem(TOKEN_STORAGE_KEY);
+}
+
 export async function apiFetch(
   path: string,
   options: RequestInit = {}
 ): Promise<Response> {
   const url = getApiUrl(path);
+  const token = getAccessToken();
   const response = await fetch(url, {
     ...options,
     credentials: 'include',
     headers: {
       ...(options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
   });

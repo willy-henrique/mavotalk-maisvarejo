@@ -1,5 +1,5 @@
 import { SignJWT, jwtVerify } from "jose";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 const issuer = "mavo-talk";
 const audience = "mavo-talk-web";
@@ -47,12 +47,30 @@ export async function verifySessionToken(token: string): Promise<SessionPayload 
   }
 }
 
+/**
+ * Sessão do pedido atual.
+ *
+ * O cookie continua sendo o caminho preferencial, mas painel e API ficam em
+ * subdomínios distintos de onrender.com — que está na Public Suffix List, então o
+ * navegador os trata como sites diferentes e o cookie de sessão é third-party.
+ * Safari no iPhone bloqueia esses cookies por padrão: o login respondia 200, o
+ * cookie era descartado e todo pedido seguinte voltava 401. O cabeçalho
+ * Authorization é o caminho que não depende de cookie de terceiros.
+ */
 export async function getSession() {
   const store = await cookies();
-  const token = store.get(sessionCookieName())?.value;
+  const token = store.get(sessionCookieName())?.value ?? (await bearerToken());
 
   if (!token) return null;
   return verifySessionToken(token);
+}
+
+async function bearerToken(): Promise<string | null> {
+  const header = (await headers()).get("authorization");
+  if (!header) return null;
+  const [scheme, value] = header.split(" ");
+  if (!value || scheme.toLowerCase() !== "bearer") return null;
+  return value.trim() || null;
 }
 
 export async function setSessionCookie(token: string) {

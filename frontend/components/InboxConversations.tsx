@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { User } from '../types';
-import { apiFetch, apiPatch, apiPost, getApiBaseUrl, getApiUrl, getSocketUrl } from '../services/api';
+import { apiFetch, apiPatch, apiPost, getAccessToken, getApiBaseUrl, getApiUrl, getSocketUrl } from '../services/api';
 import { Dialog } from './ui/Dialog';
 
 type ConversationStatus = 'aguardando' | 'em_atendimento' | 'pendente_cliente' | 'encerrado';
@@ -447,6 +447,9 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     const socket = io(getSocketUrl(), {
       path: '/socket.io',
       withCredentials: true,
+      // O cookie é third-party e o celular o descarta; sem o token aqui o tempo real
+      // ficaria indisponível justamente onde o atendimento acontece na rua.
+      auth: { token: getAccessToken() || undefined },
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 500,
