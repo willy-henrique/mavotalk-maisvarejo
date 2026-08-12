@@ -1505,6 +1505,32 @@ export async function requestWhatsappPairingCode(phone: string): Promise<{
   );
 }
 
+/**
+ * Confirma se o número tem WhatsApp antes de a operação iniciar uma conversa.
+ *
+ * Retorna `null` quando não há como verificar (provedor diferente, sessão não
+ * conectada) — nesse caso quem chama decide seguir, em vez de bloquear o envio por
+ * falta de informação.
+ */
+export async function whatsappNumberExists(phone: string): Promise<boolean | null> {
+  const provider = process.env.WHATSAPP_PROVIDER || "twilio";
+  if (provider !== "unofficial") return null;
+  const sock = global.__waClient;
+  if (!sock || getState().status !== "ready") return null;
+
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 10 || digits.length > 15) return false;
+
+  try {
+    const result = await sock.onWhatsApp(digits);
+    const match = result?.[0];
+    return match ? Boolean(match.exists) : false;
+  } catch (err) {
+    logger.warn({ err, phone: digits }, "Failed to verify WhatsApp number");
+    return null;
+  }
+}
+
 /** Envia indicador de digitação para o contato no WhatsApp (apenas unofficial). */
 export async function sendTypingIndicator(contactPhone: string): Promise<void> {
   const sock = global.__waClient;

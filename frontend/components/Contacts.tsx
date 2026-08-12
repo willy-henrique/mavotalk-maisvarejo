@@ -2,6 +2,7 @@ import React, { useCallback, useDeferredValue, useEffect, useRef, useState } fro
 import { useNavigate } from 'react-router-dom';
 import { apiFetch, apiPatch, apiPost } from '../services/api';
 import { Dialog } from './ui/Dialog';
+import StartConversationDialog from './StartConversationDialog';
 import { EmptyState, ErrorState } from './ui/PageState';
 import { Pagination } from './ui/Pagination';
 import { StatusBadge } from './ui/StatusBadge';
@@ -35,6 +36,7 @@ const Contacts: React.FC = () => {
   const [noteValue, setNoteValue] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   const [startingId, setStartingId] = useState<string | null>(null);
+  const [startChatOpen, setStartChatOpen] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [blockingId, setBlockingId] = useState<string | null>(null);
@@ -119,8 +121,19 @@ const Contacts: React.FC = () => {
     <main className="mavo-page"><div className="mavo-page-content">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <p className="text-sm text-slate-500 dark:text-slate-400">{total} contato{total === 1 ? '' : 's'} com histórico no Mavo.</p>
-        <button type="button" onClick={() => void fetchContacts()} disabled={loading} className="mavo-button-secondary">{loading ? 'Atualizando...' : 'Atualizar lista'}</button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* A lista só mostra quem já escreveu; é aqui que a operação percebe a falta
+              de um número novo e precisa do caminho para iniciar o contato. */}
+          <button type="button" onClick={() => setStartChatOpen(true)} className="mavo-button-primary">+ Nova conversa</button>
+          <button type="button" onClick={() => void fetchContacts()} disabled={loading} className="mavo-button-secondary">{loading ? 'Atualizando...' : 'Atualizar lista'}</button>
+        </div>
       </div>
+      {startChatOpen && (
+        <StartConversationDialog
+          onClose={() => setStartChatOpen(false)}
+          onStarted={(conversationId) => navigate(`/inbox?conversation=${conversationId}`)}
+        />
+      )}
       {error && <ErrorState className="mb-5" description={error} action={<button type="button" onClick={() => void fetchContacts()} disabled={loading} className="mavo-button-secondary min-h-0 px-3 py-2 text-xs">Tentar novamente</button>} />}
       {notice && <div role="status" className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200">{notice}</div>}
       <div className="mb-6 flex max-w-2xl flex-wrap gap-3"><label className="min-w-[min(100%,20rem)] flex-1"><span className="sr-only">Buscar contatos</span><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar por nome ou telefone" className="mavo-field" /></label><label className="min-w-44"><span className="sr-only">Estado do contato</span><select aria-label="Estado do contato" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="mavo-field"><option value="">Todos os contatos</option><option value="unblocked">Disponíveis para atendimento</option><option value="blocked">Bloqueados</option></select></label></div>

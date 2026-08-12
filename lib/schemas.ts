@@ -20,6 +20,13 @@ export const sendMessageSchema = z.object({
   withSignature: z.boolean().optional(),
 });
 
+export const startConversationSchema = z.object({
+  /** DDI + DDD + número, apenas dígitos. */
+  phone: z.string().trim().regex(/^\d{10,15}$/, "Informe o número com DDI e DDD, somente dígitos."),
+  message: z.string().trim().min(1).max(4_000),
+  contactName: z.string().trim().max(200).optional(),
+});
+
 export const closeConversationSchema = z.object({
   reason: z.string().trim().min(3).max(500),
   sendSurvey: z.boolean().optional(),

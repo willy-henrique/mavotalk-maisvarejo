@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import { User } from '../types';
 import { apiFetch, apiPatch, apiPost, getAccessToken, getApiBaseUrl, getApiUrl, getSocketUrl } from '../services/api';
 import { Dialog } from './ui/Dialog';
+import StartConversationDialog from './StartConversationDialog';
 
 type ConversationStatus = 'aguardando' | 'em_atendimento' | 'pendente_cliente' | 'encerrado';
 
@@ -61,6 +62,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   /** Assinatura deste envio. Começa no padrão da organização e o atendente pode
    * inverter aqui sem alterar a configuração dos demais. */
   const [signatureOn, setSignatureOn] = useState(true);
+  const [newChatOpen, setNewChatOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [assigning, setAssigning] = useState(false);
@@ -574,6 +576,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
         <div className="p-4 border-b border-slate-200 dark:border-slate-700">
           <div className="flex items-start justify-between gap-3 mb-4">
             <div><p className="text-[10px] font-black uppercase tracking-[.18em] text-blue-600 dark:text-blue-400">Operação</p><h1 className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">Caixa de entrada</h1><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Acompanhe e distribua os atendimentos.</p></div>
+            <button type="button" onClick={() => setNewChatOpen(true)} className="shrink-0 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700" title="Iniciar conversa com um número novo">+ Nova conversa</button>
             <button type="button" onClick={() => void fetchConversations(false)} className="shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800" title="Atualizar conversas" aria-label="Atualizar conversas"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path fillRule="evenodd" d="M15.312 5.312a8 8 0 1 0 1.883 8.237.75.75 0 0 0-1.436-.433A6.5 6.5 0 1 1 14.25 7.25V5.5a.75.75 0 0 0-1.5 0V9a.75.75 0 0 0 .75.75H17a.75.75 0 0 0 0-1.5h-1.688V5.312Z" clipRule="evenodd" /></svg></button>
           </div>
           <label className="relative block mb-4"><span className="sr-only">Pesquisar conversas</span><input value={listSearch} onChange={(event) => setListSearch(event.target.value)} placeholder="Buscar por nome, telefone ou mensagem" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 py-2.5 pl-9 pr-3 text-xs text-slate-800 dark:text-white outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400"><path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.447 9.785l2.634 2.634a.75.75 0 1 0 1.06-1.06l-2.633-2.634A5.5 5.5 0 0 0 9 3.5ZM5 9a4 4 0 1 1 8 0 4 4 0 0 1-8 0Z" clipRule="evenodd" /></svg></label>
@@ -1049,6 +1052,13 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
               </div>
             )}
           </>
+        )}
+
+        {newChatOpen && (
+          <StartConversationDialog
+            onClose={() => setNewChatOpen(false)}
+            onStarted={(conversationId) => { void fetchConversations(true); setSelectedId(conversationId); }}
+          />
         )}
 
         {linkModalOpen && (
