@@ -726,6 +726,9 @@ export async function POST(request: Request) {
         customerName: contact.name || payload.cliente.nome,
         isNewConversation: Boolean(conversation.isNew),
         triageCompleted: Boolean(conversation.triageCompleted),
+        // Status em_atendimento significa que alguém puxou o chamado. O bot precisa
+        // sair de cena, senão reenvia o menu a cada mensagem por cima do atendente.
+        humanHandled: conversation.status === "em_atendimento",
         currentQueueMenuOption: currentQueue ? Number(currentQueue.menuOption) : null,
         businessOpen,
         config: botDecisionConfig,

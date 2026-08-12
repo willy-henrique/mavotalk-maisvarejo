@@ -37,6 +37,8 @@ export type DecideSupermarketBotParams = {
   customerName?: string | null;
   isNewConversation: boolean;
   triageCompleted: boolean;
+  /** Atendimento já sob responsabilidade de uma pessoa (puxado ou iniciado pela loja). */
+  humanHandled?: boolean;
   currentQueueMenuOption?: number | null;
   businessOpen: boolean;
   config?: SupermarketBotConfig;
@@ -375,6 +377,24 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
   const entries = legacyMode ? presetMenuEntries(activeMenuOptions) : params.menuEntries!;
   const showMenu = () =>
     menuDecision(config, params.customerName, params.businessOpen, activeMenuOptions, entries);
+
+  // Com uma pessoa no atendimento o bot não fala mais nada. Fica antes de qualquer
+  // outra regra de propósito: um "bom dia" ou um número digitado no meio da conversa
+  // reabriria o menu por cima do atendente.
+  if (params.humanHandled) {
+    return {
+      handled: true,
+      kind: "silent-human",
+      replyText: null,
+      queueMenuOption: params.currentQueueMenuOption || null,
+      queueId: null,
+      queueType: null,
+      clearQueue: false,
+      triageCompleted: true,
+      appendOutOfHours: false,
+      reason: "human_already_handling_conversation",
+    };
+  }
 
   const isMenuCommand =
     option === 0 ||

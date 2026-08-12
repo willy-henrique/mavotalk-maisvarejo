@@ -872,7 +872,10 @@ export async function assignConversation(organizationId: string, conversationId:
   const now = new Date().toISOString();
   await supa(orgId)
     .from("conversations")
-    .update({ status: "em_atendimento", updated_at: now })
+    // Encerrar a triagem aqui é o que faz o bot se calar: com triage_completed
+    // falso, o decisor reexibia o menu a cada nova mensagem do cliente mesmo com o
+    // atendimento já puxado por uma pessoa.
+    .update({ status: "em_atendimento", triage_completed: true, updated_at: now })
     .eq("id", conversationId)
     .eq("organization_id", orgId);
 

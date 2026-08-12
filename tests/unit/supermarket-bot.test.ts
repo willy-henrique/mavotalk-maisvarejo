@@ -212,3 +212,33 @@ test("pedir atendente por escrito continua encaminhando para uma pessoa", () => 
 
   assert.equal(decision?.kind, "human-handoff");
 });
+
+test("com atendimento puxado por uma pessoa, o bot nao responde nada", () => {
+  // Sem esta regra o menu voltava a cada mensagem do cliente, por cima do atendente,
+  // porque a triagem seguia aberta depois do "puxar atendimento".
+  const decision = decide({
+    message: "ainda preciso de ajuda",
+    menuEntries: filasDoTenant,
+    humanHandled: true,
+  });
+
+  assert.equal(decision?.kind, "silent-human");
+  assert.equal(decision?.replyText, null);
+  assert.equal(decision?.triageCompleted, true);
+});
+
+test("saudacao e numero nao reabrem o menu enquanto uma pessoa atende", () => {
+  // "bom dia" e um numero digitado sao atalhos de menu; precisam ceder ao atendente,
+  // senao o cliente recebe o menu no meio de uma conversa humana.
+  for (const message of ["bom dia", "0", "2", "menu"]) {
+    const decision = decide({ message, menuEntries: filasDoTenant, humanHandled: true });
+    assert.equal(decision?.kind, "silent-human", `"${message}" nao deveria reabrir o menu`);
+  }
+});
+
+test("sem atendimento humano o menu continua funcionando", () => {
+  // Guarda contra silenciar o bot por engano: humanHandled ausente nao muda nada.
+  const decision = decide({ message: "bom dia", menuEntries: filasDoTenant });
+
+  assert.equal(decision?.kind, "menu");
+});

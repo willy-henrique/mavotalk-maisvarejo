@@ -386,6 +386,20 @@ async function processOutboundMessageFromDevice(
 
   const body = extractMessageText(msg.message) || "[mídia]";
 
+  // Conversa aberta pela loja não tem o que triar: quem escreveu primeiro foi uma
+  // pessoa. Sem isso, a resposta do cliente entrava na triagem e ele recebia o menu
+  // de boas-vindas no meio de um contato que a própria loja iniciou.
+  if (conversation.isNew && !fromBot) {
+    await updateConversationById(organizationId, String(conversation.id), {
+      triageCompleted: true,
+    }).catch((err) => {
+      logger.warn(
+        { err, conversationId: conversation.id },
+        "Failed to mark store-initiated conversation as triaged",
+      );
+    });
+  }
+
   // Nunca alterar status de conversa encerrada para em_atendimento (ex: mensagem de pesquisa de satisfação).
   // Só muda status para em_atendimento se for mensagem real do atendente (não bot, não nova, não encerrada).
   const conversationEncerrada = conversation.status === "encerrado";
@@ -735,7 +749,12 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
     return `${header} Para te ajudar com mais precisão, me envie por favor: 1) print/foto da tela, 2) mensagem de erro exata e 3) se o impacto está total ou parcial.${outOfHoursSuffix}`;
   };
 
-  if (!conversation.triageCompleted) {
+  // Conversas antigas podem estar em_atendimento com a triagem ainda aberta, de antes
+  // de o "puxar atendimento" encerrá-la. Checar o status evita reenviar o menu nelas
+  // sem precisar corrigir dados existentes.
+  const humanHandling = conversation.status === "em_atendimento";
+
+  if (!conversation.triageCompleted && !humanHandling) {
     if (conversation.queueId) {
       const currentQueue = queues.find((item) => String(item.id) === String(conversation.queueId));
       const attempts = Number(conversation.menuAttempts || 0);
