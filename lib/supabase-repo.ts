@@ -1915,6 +1915,17 @@ export async function deleteImportedWhatsappContacts(
   return result.rows.length;
 }
 
+/** Quantos números a agenda sincronizada tem hoje, para dar retorno ao operador. */
+export async function countWhatsappDirectory(organizationId: string): Promise<number> {
+  const orgId = requireOrganizationId(organizationId);
+  const result = await queryTenantDatabase<{ total: string }>(
+    orgId,
+    "SELECT COUNT(*)::text AS total FROM whatsapp_directory WHERE organization_id = $1",
+    [orgId],
+  );
+  return Number(result.rows[0]?.total || 0);
+}
+
 /** Esvazia a agenda sincronizada; usada junto da desconexão. */
 export async function clearWhatsappDirectory(organizationId: string): Promise<void> {
   const orgId = requireOrganizationId(organizationId);

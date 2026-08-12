@@ -85,4 +85,5 @@ export {
   importWhatsappContacts,
   deleteImportedWhatsappContacts,
   clearWhatsappDirectory,
+  countWhatsappDirectory,
 } from "@/lib/supabase-repo";

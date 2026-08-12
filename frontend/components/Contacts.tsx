@@ -45,6 +45,7 @@ const Contacts: React.FC = () => {
   const [savingNote, setSavingNote] = useState(false);
   const [startingId, setStartingId] = useState<string | null>(null);
   const [startChatOpen, setStartChatOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [blockingId, setBlockingId] = useState<string | null>(null);
@@ -94,6 +95,29 @@ const Contacts: React.FC = () => {
     }
   };
 
+  const syncWhatsappContacts = async () => {
+    setSyncing(true);
+    setNotice('');
+    setError('');
+    try {
+      const result = await apiPost<{ synced: number; added: number; pending: boolean }>(
+        '/api/contacts/sync-whatsapp',
+      );
+      await fetchContacts();
+      // O aparelho pode continuar enviando dados depois da resposta; prometer um
+      // total definitivo faria o operador achar que faltou contato.
+      setNotice(
+        result.pending
+          ? 'Sincronização solicitada. Os contatos aparecem à medida que o celular envia — atualize a lista em instantes.'
+          : `Agenda sincronizada: ${result.synced} número${result.synced === 1 ? '' : 's'} do celular${result.added ? `, ${result.added} novo${result.added === 1 ? '' : 's'}` : ''}.`,
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível sincronizar os contatos.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const toggleBlock = async (contact: ApiContact) => {
     setBlockingId(contact.id);
     setNotice('');
@@ -135,6 +159,9 @@ const Contacts: React.FC = () => {
           {/* A lista só mostra quem já escreveu; é aqui que a operação percebe a falta
               de um número novo e precisa do caminho para iniciar o contato. */}
           <button type="button" onClick={() => setStartChatOpen(true)} className="mavo-button-primary">+ Nova conversa</button>
+          <button type="button" onClick={() => void syncWhatsappContacts()} disabled={syncing} className="mavo-button-secondary">
+            {syncing ? 'Sincronizando...' : 'Sincronizar contatos do celular'}
+          </button>
           <button type="button" onClick={() => void fetchContacts()} disabled={loading} className="mavo-button-secondary">{loading ? 'Atualizando...' : 'Atualizar lista'}</button>
         </div>
       </div>

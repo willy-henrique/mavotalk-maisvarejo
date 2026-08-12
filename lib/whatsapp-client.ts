@@ -1534,6 +1534,40 @@ export async function requestWhatsappPairingCode(phone: string): Promise<{
 }
 
 /**
+ * Força a resincronização da agenda do aparelho conectado.
+ *
+ * Os contatos chegam pelo app state, que normalmente só é buscado ao conectar. Sem
+ * isto, a operação teria de desconectar e reconectar para ver a agenda atualizada.
+ *
+ * O resync entrega os contatos pelos eventos `contacts.upsert` e
+ * `messaging-history.set`, que já gravam a agenda e criam os contatos — então esta
+ * função dispara e aguarda o assentamento, sem duplicar a lógica de importação.
+ */
+export async function resyncWhatsappContacts(): Promise<void> {
+  const provider = process.env.WHATSAPP_PROVIDER || "twilio";
+  if (provider !== "unofficial") {
+    throw new Error(
+      "A sincronização de contatos exige o WhatsApp conectado por QR ou código.",
+    );
+  }
+
+  const sock = global.__waClient;
+  if (!sock || getState().status !== "ready") {
+    throw new Error(
+      "Conecte o WhatsApp antes de sincronizar os contatos do celular.",
+    );
+  }
+
+  // Todas as coleções: as ações de contato vivem em critical_unblock_low, mas a
+  // agenda também aparece em outras, e pedir só uma deixaria nomes de fora.
+  // `isInitialSync: true` refaz a busca do zero em vez de pegar só o que mudou.
+  await sock.resyncAppState(
+    ["critical_block", "critical_unblock_low", "regular_high", "regular_low", "regular"],
+    true,
+  );
+}
+
+/**
  * Confirma se o número tem WhatsApp antes de a operação iniciar uma conversa.
  *
  * Retorna `null` quando não há como verificar (provedor diferente, sessão não
