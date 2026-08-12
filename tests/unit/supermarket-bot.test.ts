@@ -243,6 +243,34 @@ test("menu pedido de propósito nao leva aviso de opcao invalida", () => {
   }
 });
 
+test("agradecimento nao e tratado como opcao invalida", () => {
+  // O cliente dizia "Obrigada" e recebia "Nao encontrei essa opcao" com o menu inteiro.
+  for (const message of ["Obrigada", "obrigado", "valeu", "ok", "beleza"]) {
+    const decision = decide({ message, menuEntries: filasDoTenant });
+    assert.equal(decision?.reason, "supermarket_courtesy_closing", `"${message}" nao e opcao invalida`);
+    assert.doesNotMatch(String(decision?.replyText), /Não encontrei essa opção/);
+    assert.equal(decision?.triageCompleted, true);
+  }
+});
+
+test("em conversa nova a cortesia nao substitui a apresentacao", () => {
+  const decision = decide({ message: "ok", menuEntries: filasDoTenant, isNewConversation: true });
+
+  assert.notEqual(decision?.reason, "supermarket_courtesy_closing");
+});
+
+test("o menu para de ser reexibido depois do teto de tentativas", () => {
+  // Sem teto, qualquer texto fora do menu reabria o menu indefinidamente.
+  const primeira = decide({ message: "7", menuEntries: filasDoTenant, menuAttempts: 0 });
+  assert.equal(primeira?.reason, "supermarket_invalid_option");
+
+  const seguinte = decide({ message: "7", menuEntries: filasDoTenant, menuAttempts: 1 });
+  assert.equal(seguinte?.reason, "supermarket_menu_attempts_exhausted");
+  assert.equal(seguinte?.kind, "human-handoff");
+  assert.equal(seguinte?.triageCompleted, true);
+  assert.doesNotMatch(String(seguinte?.replyText), /Ofertas Anunciadas/);
+});
+
 test("com atendimento puxado por uma pessoa, o bot nao responde nada", () => {
   // Sem esta regra o menu voltava a cada mensagem do cliente, por cima do atendente,
   // porque a triagem seguia aberta depois do "puxar atendimento".

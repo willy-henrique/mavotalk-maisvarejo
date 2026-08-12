@@ -730,6 +730,9 @@ export async function POST(request: Request) {
         // Status em_atendimento significa que alguém puxou o chamado. O bot precisa
         // sair de cena, senão reenvia o menu a cada mensagem por cima do atendente.
         humanHandled: conversation.status === "em_atendimento",
+        // Alimenta o teto de reexibições: sem isso o menu voltava a cada mensagem que
+        // não casasse com uma opção, sem fim.
+        menuAttempts: Number(conversation.menuAttempts || 0),
         currentQueueMenuOption: currentQueue ? Number(currentQueue.menuOption) : null,
         businessOpen,
         config: botDecisionConfig,
@@ -760,7 +763,13 @@ export async function POST(request: Request) {
         ? String(targetQueue.id)
         : previousQueueId;
     triageCompleted = supermarketDecision.triageCompleted;
-    menuAttempts = supermarketDecision.kind === "collect-details" ? 0 : menuAttempts;
+    if (supermarketDecision.kind === "collect-details") {
+      menuAttempts = 0;
+    } else if (supermarketDecision.reason === "supermarket_invalid_option") {
+      // Precisa ser persistido: é a contagem que faz a próxima tentativa parar de
+      // reexibir o menu e entregar para a equipe.
+      menuAttempts += 1;
+    }
     decisionReason = supermarketDecision.reason;
 
     if (queueId !== previousQueueId) {

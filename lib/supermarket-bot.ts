@@ -41,6 +41,8 @@ export type DecideSupermarketBotParams = {
   triageCompleted: boolean;
   /** Atendimento já sob responsabilidade de uma pessoa (puxado ou iniciado pela loja). */
   humanHandled?: boolean;
+  /** Quantas vezes o menu já foi reexibido sem escolha válida nesta conversa. */
+  menuAttempts?: number;
   currentQueueMenuOption?: number | null;
   businessOpen: boolean;
   config?: SupermarketBotConfig;
@@ -268,6 +270,41 @@ function selectedMenuOption(normalized: string): number | null {
 export const DEFAULT_INVALID_OPTION_MESSAGE =
   "Não encontrei essa opção. Escolha um dos números da lista abaixo:";
 
+/**
+ * Depois desta quantidade de tentativas sem escolha válida o bot para de reexibir o
+ * menu e entrega para a equipe.
+ *
+ * Sem um teto, qualquer mensagem que não case com o menu reabre o menu, e o cliente
+ * que responde em linguagem natural recebe a mesma resposta indefinidamente.
+ */
+export const MENU_ATTEMPT_LIMIT = 2;
+
+/** Agradecimentos e despedidas: não são escolha de menu nem pedido de atendimento. */
+const COURTESY_TERMS = [
+  "obrigado",
+  "obrigada",
+  "obg",
+  "vlw",
+  "valeu",
+  "agradeco",
+  "agradecido",
+  "tudo bem entao",
+  "tchau",
+  "ate mais",
+  "ate logo",
+  "boa noite",
+  "so isso",
+  "era so isso",
+  "nada mais",
+  "ok",
+  "okay",
+  "blz",
+  "beleza",
+  "certo",
+  "entendi",
+  "perfeito",
+];
+
 function menuDecision(
   config: SupermarketBotConfig,
   customerName: string | null | undefined,
@@ -391,8 +428,33 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
   const entries = legacyMode ? presetMenuEntries(activeMenuOptions) : params.menuEntries!;
   const showMenu = () =>
     menuDecision(config, params.customerName, params.businessOpen, activeMenuOptions, entries);
-  const showInvalidOption = () =>
-    menuDecision(config, params.customerName, params.businessOpen, activeMenuOptions, entries, true);
+  /**
+   * Reexibe o menu avisando da escolha inválida — ou encerra a insistência.
+   *
+   * Passado o teto de tentativas, repetir o menu deixou de ajudar: quem chegou aqui
+   * não está escolhendo por número, e a resposta certa é entregar para a equipe em vez
+   * de responder a mesma coisa outra vez.
+   */
+  const showInvalidOption = (): SupermarketBotDecision => {
+    const attempts = Number(params.menuAttempts || 0);
+    if (attempts + 1 >= MENU_ATTEMPT_LIMIT) {
+      return {
+        handled: true,
+        kind: "human-handoff",
+        replyText:
+          `Vou chamar alguém da equipe do *${config.storeName}* para te ajudar por aqui.` +
+          "\n\nAguarde um instante que já respondemos.",
+        queueMenuOption: params.currentQueueMenuOption || null,
+        queueId: null,
+        queueType: null,
+        clearQueue: false,
+        triageCompleted: true,
+        appendOutOfHours: true,
+        reason: "supermarket_menu_attempts_exhausted",
+      };
+    }
+    return menuDecision(config, params.customerName, params.businessOpen, activeMenuOptions, entries, true);
+  };
 
   // Com uma pessoa no atendimento o bot não fala mais nada. Fica antes de qualquer
   // outra regra de propósito: um "bom dia" ou um número digitado no meio da conversa
@@ -409,6 +471,25 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
       triageCompleted: true,
       appendOutOfHours: false,
       reason: "human_already_handling_conversation",
+    };
+  }
+
+  // Agradecimento e despedida não são escolha de menu. Tratar como opção inválida fazia
+  // o bot acusar de erro quem apenas disse "obrigada", e reenviar o menu inteiro.
+  // Só vale depois do menu já ter sido mostrado: em conversa nova, um "ok" isolado
+  // continua caindo na apresentação normal.
+  if (!params.isNewConversation && COURTESY_TERMS.includes(normalized)) {
+    return {
+      handled: true,
+      kind: "silent-human",
+      replyText: "Por nada! Se precisar de mais alguma coisa, é só chamar. 🙂",
+      queueMenuOption: params.currentQueueMenuOption || null,
+      queueId: null,
+      queueType: null,
+      clearQueue: false,
+      triageCompleted: true,
+      appendOutOfHours: false,
+      reason: "supermarket_courtesy_closing",
     };
   }
 
