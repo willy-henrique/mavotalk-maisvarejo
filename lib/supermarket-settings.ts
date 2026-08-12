@@ -18,6 +18,8 @@ export type SupermarketSettings = {
   aiFallbackEnabled: boolean;
   /** Prefixa as mensagens do painel com "Nome do atendente:". */
   agentSignatureEnabled: boolean;
+  /** Texto do bot quando a opção escolhida não existe no menu. */
+  invalidOptionMessage: string | null;
 };
 
 export type ConfiguredHour = {
@@ -32,7 +34,8 @@ const columns = `
   bot_enabled, bot_name, store_name, bot_address, bot_maps_url,
   bot_weekday_hours, bot_sunday_hours, bot_offers_url, bot_offers_text,
   bot_offers_image_url, bot_offers_image_public_id, bot_phone,
-  bot_ai_fallback_enabled, agent_signature_enabled
+  bot_ai_fallback_enabled, agent_signature_enabled,
+  bot_invalid_option_message
 `;
 
 const upsertBusinessHoursSql = `
@@ -78,6 +81,8 @@ export function mapSettings(row: Record<string, unknown>, fallback = getSupermar
     agentSignatureEnabled: typeof row.agent_signature_enabled === "boolean"
       ? row.agent_signature_enabled
       : true,
+    // Vazio significa "usar o padrão do bot", não "não avisar nada".
+    invalidOptionMessage: nullable(row.bot_invalid_option_message),
   };
 }
 
@@ -141,6 +146,7 @@ export async function updateSupermarketSettings(
       bot_phone = $13,
       bot_ai_fallback_enabled = $14,
       agent_signature_enabled = $15,
+      bot_invalid_option_message = $16,
       updated_at = now()
      WHERE id = $1`,
     [
@@ -159,6 +165,7 @@ export async function updateSupermarketSettings(
       next.phone,
       next.aiFallbackEnabled,
       next.agentSignatureEnabled,
+      next.invalidOptionMessage,
     ],
   );
   return next;
@@ -170,7 +177,7 @@ function settingsValues(organizationId: string, settings: SupermarketSettings) {
     settings.address, settings.mapsUrl, settings.weekdayHours, settings.sundayHours,
     settings.offersUrl, settings.offersText, settings.offersImageUrl,
     settings.offersImagePublicId, settings.phone, settings.aiFallbackEnabled,
-    settings.agentSignatureEnabled,
+    settings.agentSignatureEnabled, settings.invalidOptionMessage,
   ];
 }
 
@@ -182,7 +189,7 @@ async function updateSettingsWithClient(client: PoolClient, organizationId: stri
       bot_offers_url = $9, bot_offers_text = $10, bot_offers_image_url = $11,
       bot_offers_image_public_id = $12, bot_phone = $13,
       bot_ai_fallback_enabled = $14, agent_signature_enabled = $15,
-      updated_at = now()
+      bot_invalid_option_message = $16, updated_at = now()
      WHERE id = $1`,
     settingsValues(organizationId, settings),
   );

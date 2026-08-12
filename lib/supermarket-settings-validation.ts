@@ -2,6 +2,7 @@ export type SupermarketSettingsPatch = {
   enabled?: boolean;
   aiFallbackEnabled?: boolean;
   agentSignatureEnabled?: boolean;
+  invalidOptionMessage?: string | null;
   botName?: string;
   storeName?: string;
   address?: string | null;
@@ -52,6 +53,14 @@ export function parseSupermarketSettingsPatch(body: Record<string, unknown>): Pa
   if (typeof body.enabled === "boolean") data.enabled = body.enabled;
   if (typeof body.aiFallbackEnabled === "boolean") data.aiFallbackEnabled = body.aiFallbackEnabled;
   if (typeof body.agentSignatureEnabled === "boolean") data.agentSignatureEnabled = body.agentSignatureEnabled;
+  if ("invalidOptionMessage" in body) {
+    const text = String(body.invalidOptionMessage ?? "").trim();
+    if (text.length > 500) {
+      return { data, error: "A mensagem de opção inválida deve ter no máximo 500 caracteres." };
+    }
+    // Vazio volta ao padrão do bot em vez de silenciar o aviso.
+    data.invalidOptionMessage = text || null;
+  }
 
   const requiredIdentity = [
     ["botName", "Nome do assistente", 80],

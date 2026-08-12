@@ -213,6 +213,36 @@ test("pedir atendente por escrito continua encaminhando para uma pessoa", () => 
   assert.equal(decision?.kind, "human-handoff");
 });
 
+test("numero fora do menu avisa que a opcao nao existe", () => {
+  // Reenviar so o menu, com a saudacao, parecia recomeco de conversa e nao dizia que
+  // a escolha era invalida - o cliente tendia a repetir o mesmo numero.
+  const decision = decide({ message: "5", menuEntries: filasDoTenant });
+
+  assert.equal(decision?.kind, "menu");
+  assert.equal(decision?.reason, "supermarket_invalid_option");
+  assert.match(String(decision?.replyText), /Nao encontrei essa opcao|Não encontrei essa opção/);
+});
+
+test("mensagem de opcao invalida configurada substitui o texto padrao", () => {
+  const decision = decide(
+    // 7 não existe no fixture; 9 é a fila de nota fiscal e seria escolha válida.
+    { message: "7", menuEntries: filasDoTenant },
+    { ...completeConfig, invalidOptionMessage: "Opa, essa opcao nao existe por aqui." },
+  );
+
+  assert.match(String(decision?.replyText), /Opa, essa opcao nao existe por aqui\./);
+  assert.doesNotMatch(String(decision?.replyText), /Não encontrei essa opção/);
+});
+
+test("menu pedido de propósito nao leva aviso de opcao invalida", () => {
+  // Guarda contra acusar erro de quem so quis rever as opcoes.
+  for (const message of ["0", "menu", "bom dia"]) {
+    const decision = decide({ message, menuEntries: filasDoTenant });
+    assert.equal(decision?.reason, "supermarket_main_menu", `"${message}" nao e opcao invalida`);
+    assert.doesNotMatch(String(decision?.replyText), /Não encontrei essa opção/);
+  }
+});
+
 test("com atendimento puxado por uma pessoa, o bot nao responde nada", () => {
   // Sem esta regra o menu voltava a cada mensagem do cliente, por cima do atendente,
   // porque a triagem seguia aberta depois do "puxar atendimento".

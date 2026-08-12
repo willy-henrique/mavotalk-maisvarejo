@@ -21,6 +21,7 @@ type StoreSettings = {
   enabled: boolean;
   aiFallbackEnabled: boolean;
   agentSignatureEnabled: boolean;
+  invalidOptionMessage: string | null;
   botName: string;
   storeName: string;
   address: string | null;
@@ -80,6 +81,7 @@ const TicketTypeManagement: React.FC = () => {
   const [identityEnabled, setIdentityEnabled] = useState(true);
   const [identityAiFallback, setIdentityAiFallback] = useState(false);
   const [identitySignature, setIdentitySignature] = useState(true);
+  const [identityInvalidOption, setIdentityInvalidOption] = useState('');
   const [identitySaving, setIdentitySaving] = useState(false);
   const [identityError, setIdentityError] = useState('');
   const [identityNotice, setIdentityNotice] = useState('');
@@ -121,6 +123,7 @@ const TicketTypeManagement: React.FC = () => {
       setIdentityEnabled(data.settings.enabled);
       setIdentityAiFallback(data.settings.aiFallbackEnabled);
       setIdentitySignature(data.settings.agentSignatureEnabled !== false);
+      setIdentityInvalidOption(data.settings.invalidOptionMessage || '');
     } catch (error) {
       setStoreError(error instanceof Error ? error.message : 'Não foi possível carregar as configurações da loja.');
     } finally {
@@ -151,6 +154,7 @@ const TicketTypeManagement: React.FC = () => {
         enabled: identityEnabled,
         aiFallbackEnabled: identityAiFallback,
         agentSignatureEnabled: identitySignature,
+        invalidOptionMessage: identityInvalidOption.trim() || null,
       });
       setStoreSettings(result.settings);
       setStoreNameConfigured(true);
@@ -332,6 +336,23 @@ const TicketTypeManagement: React.FC = () => {
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{identitySignature ? 'O cliente recebe "Atendente:" antes do texto.' : 'O cliente recebe apenas o texto digitado.'}</p>
                 </div>
                 <button type="button" role="switch" aria-checked={identitySignature} aria-label="Alternar assinatura do atendente" onClick={() => setIdentitySignature((v) => !v)} className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${identitySignature ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'}`}><span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition ${identitySignature ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+              </div>
+              <div className="min-w-56 flex-1 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                <label htmlFor="invalid-option-message" className="block text-sm font-bold text-slate-800 dark:text-slate-100">
+                  Mensagem quando a opção não existe
+                </label>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Enviada antes do menu quando o cliente digita algo fora da lista. Em branco usa o texto padrão.
+                </p>
+                <textarea
+                  id="invalid-option-message"
+                  rows={2}
+                  maxLength={500}
+                  value={identityInvalidOption}
+                  onChange={(event) => setIdentityInvalidOption(event.target.value)}
+                  placeholder="Não encontrei essa opção. Escolha um dos números da lista abaixo:"
+                  className="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                />
               </div>
             </div>
             {identityError && <p className="text-sm text-rose-600">{identityError}</p>}

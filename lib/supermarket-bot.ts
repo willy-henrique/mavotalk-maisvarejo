@@ -15,6 +15,8 @@ export type SupermarketBotConfig = {
   offersImagePublicId: string | null;
   phone: string | null;
   aiFallbackEnabled: boolean;
+  /** Texto antes do menu quando a escolha do cliente não existe. Vazio usa o padrão. */
+  invalidOptionMessage?: string | null;
 };
 
 export type SupermarketBotDecision = {
@@ -262,24 +264,36 @@ function selectedMenuOption(normalized: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
+/** Texto padrão quando nada foi configurado no painel. */
+export const DEFAULT_INVALID_OPTION_MESSAGE =
+  "Não encontrei essa opção. Escolha um dos números da lista abaixo:";
+
 function menuDecision(
   config: SupermarketBotConfig,
   customerName: string | null | undefined,
   businessOpen: boolean,
   activeMenuOptions?: readonly number[],
   menuEntries?: readonly BotMenuEntry[],
+  /** Reexibição causada por algo que o cliente digitou e não existe no menu. */
+  invalidOption = false,
 ): SupermarketBotDecision {
+  const menu = buildSupermarketMenu(config, customerName, businessOpen, activeMenuOptions, menuEntries);
+  // Repetir só o menu, com a saudação, faz parecer que a conversa recomeçou e não
+  // avisa que a escolha não existe — o cliente tende a repetir o mesmo número.
+  const prefix = invalidOption
+    ? `${(config.invalidOptionMessage || DEFAULT_INVALID_OPTION_MESSAGE).trim()}\n\n`
+    : "";
   return {
     handled: true,
     kind: "menu",
-    replyText: buildSupermarketMenu(config, customerName, businessOpen, activeMenuOptions, menuEntries),
+    replyText: `${prefix}${menu}`,
     queueMenuOption: null,
     queueId: null,
     queueType: null,
     clearQueue: true,
     triageCompleted: false,
     appendOutOfHours: false,
-    reason: "supermarket_main_menu",
+    reason: invalidOption ? "supermarket_invalid_option" : "supermarket_main_menu",
   };
 }
 
@@ -377,6 +391,8 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
   const entries = legacyMode ? presetMenuEntries(activeMenuOptions) : params.menuEntries!;
   const showMenu = () =>
     menuDecision(config, params.customerName, params.businessOpen, activeMenuOptions, entries);
+  const showInvalidOption = () =>
+    menuDecision(config, params.customerName, params.businessOpen, activeMenuOptions, entries, true);
 
   // Com uma pessoa no atendimento o bot não fala mais nada. Fica antes de qualquer
   // outra regra de propósito: um "bom dia" ou um número digitado no meio da conversa
@@ -422,10 +438,10 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
     return entryDecision(selectedEntry, config, legacyMode);
   }
 
-  // Número digitado que não corresponde a nenhuma fila ativa: reexibe o menu em
-  // vez de seguir para a interpretação por palavra-chave.
+  // Número digitado que não corresponde a nenhuma fila ativa: é uma escolha inválida
+  // explícita, e o cliente precisa saber disso em vez de receber o menu outra vez.
   if (/^(?:opcao\s*)?\d{1,3}$/.test(normalized)) {
-    return showMenu();
+    return showInvalidOption();
   }
 
   const awaitingDetails = legacyMode
@@ -479,7 +495,8 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
       };
     }
     if (config.aiFallbackEnabled) return null;
-    return showMenu();
+    // Texto que não casou com nenhuma fila nem intenção: também é escolha inválida.
+    return showInvalidOption();
   }
 
   const freshDepartment = hasAny(normalized, [
