@@ -205,6 +205,28 @@ test("envio automatico desiste se um atendente assumiu no meio do caminho", asyn
   assert.ok(send.indexOf("humanTookOver") < send.indexOf("deliverInOrder"));
 });
 
+test("limpeza da agenda importada preserva quem tem historico", async () => {
+  const repository = await read("lib/supabase-repo.ts");
+  const remove = repository.slice(
+    repository.indexOf("export async function deleteImportedWhatsappContacts"),
+    repository.indexOf("export async function clearWhatsappDirectory"),
+  );
+
+  // Sem o filtro de origem a limpeza apagaria clientes reais; sem o NOT EXISTS
+  // apagaria contatos com conversa, levando o historico e quebrando a referencia.
+  assert.match(remove, /origin = \$2/);
+  assert.match(remove, /NOT EXISTS/);
+  assert.match(remove, /FROM conversations/);
+
+  // A importacao nao pode sobrescrever contato existente nem remarca-lo como
+  // importado, o que o exporia a limpeza.
+  const importer = repository.slice(
+    repository.indexOf("export async function importWhatsappContacts"),
+    repository.indexOf("export async function deleteImportedWhatsappContacts"),
+  );
+  assert.match(importer, /ON CONFLICT \(organization_id, phone_number\) DO NOTHING/);
+});
+
 test("shutdown usa a API do Baileys", async () => {
   const server = await read("server.cjs");
   assert.match(server, /__waClient\.end\(undefined\)/);

@@ -1854,6 +1854,77 @@ export async function upsertWhatsappDirectoryEntries(
   return rows.length;
 }
 
+/** Origem gravada nos contatos criados a partir da agenda do WhatsApp. */
+export const WHATSAPP_IMPORT_ORIGIN = "whatsapp_import";
+
+/**
+ * Cria contatos na plataforma a partir da agenda do WhatsApp.
+ *
+ * Não toca em contato existente: um cliente que já conversou pode ter nome editado
+ * no painel e não deve ser sobrescrito nem remarcado como importado — o que também
+ * o protegeria da limpeza feita ao desconectar.
+ */
+export async function importWhatsappContacts(
+  organizationId: string,
+  entries: Array<{ phoneNumber: string; displayName: string }>,
+): Promise<number> {
+  const orgId = requireOrganizationId(organizationId);
+  const rows = entries
+    .map((entry) => ({
+      phone: String(entry.phoneNumber || "").trim(),
+      name: String(entry.displayName || "").trim().slice(0, 200),
+    }))
+    .filter((row) => row.phone && row.name && !isPlaceholderName(row.name));
+  if (!rows.length) return 0;
+
+  const result = await queryTenantDatabase<{ id: string }>(
+    orgId,
+    `INSERT INTO contacts (id, organization_id, phone_number, name, origin)
+     SELECT gen_random_uuid()::text, $1, entry.phone, entry.name, $4
+       FROM UNNEST($2::text[], $3::text[]) AS entry(phone, name)
+     ON CONFLICT (organization_id, phone_number) DO NOTHING
+     RETURNING id`,
+    [orgId, rows.map((row) => row.phone), rows.map((row) => row.name), WHATSAPP_IMPORT_ORIGIN],
+  );
+  return result.rows.length;
+}
+
+/**
+ * Remove os contatos importados da agenda ao desconectar o WhatsApp.
+ *
+ * Preserva quem tem conversa registrada, mesmo tendo vindo da importação: apagar
+ * apagaria o histórico de atendimento junto e quebraria a referência das conversas.
+ */
+export async function deleteImportedWhatsappContacts(
+  organizationId: string,
+): Promise<number> {
+  const orgId = requireOrganizationId(organizationId);
+  const result = await queryTenantDatabase<{ id: string }>(
+    orgId,
+    `DELETE FROM contacts
+      WHERE organization_id = $1
+        AND origin = $2
+        AND NOT EXISTS (
+          SELECT 1 FROM conversations
+           WHERE conversations.organization_id = contacts.organization_id
+             AND conversations.contact_id = contacts.id
+        )
+      RETURNING id`,
+    [orgId, WHATSAPP_IMPORT_ORIGIN],
+  );
+  return result.rows.length;
+}
+
+/** Esvazia a agenda sincronizada; usada junto da desconexão. */
+export async function clearWhatsappDirectory(organizationId: string): Promise<void> {
+  const orgId = requireOrganizationId(organizationId);
+  await queryTenantDatabase(
+    orgId,
+    "DELETE FROM whatsapp_directory WHERE organization_id = $1",
+    [orgId],
+  );
+}
+
 /** Nome salvo na agenda da loja, quando houver. */
 export async function findWhatsappDirectoryName(
   organizationId: string,

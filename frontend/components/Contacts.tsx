@@ -18,11 +18,19 @@ type ApiContact = {
   lastConversationId: string | null;
 };
 
-const ContactStatusBadge: React.FC<{ contact: ApiContact; className?: string }> = ({ contact, className = '' }) => (
-  <StatusBadge tone={contact.blocked ? 'error' : contact.status === 'ativo' ? 'success' : 'neutral'} className={`uppercase tracking-wide ${className}`}>
-    {contact.blocked ? 'Bloqueado' : contact.status}
-  </StatusBadge>
-);
+const ContactStatusBadge: React.FC<{ contact: ApiContact; className?: string }> = ({ contact, className = '' }) => {
+  // Contato vindo da agenda do WhatsApp nunca conversou. Exibi-lo como "encerrado"
+  // sugeriria um atendimento que não existiu.
+  const neverTalked = !contact.blocked && !contact.lastInteraction;
+  return (
+    <StatusBadge
+      tone={contact.blocked ? 'error' : contact.status === 'ativo' ? 'success' : 'neutral'}
+      className={`uppercase tracking-wide ${className}`}
+    >
+      {contact.blocked ? 'Bloqueado' : neverTalked ? 'Sem conversa' : contact.status}
+    </StatusBadge>
+  );
+};
 
 const Contacts: React.FC = () => {
   const navigate = useNavigate();
@@ -120,7 +128,9 @@ const Contacts: React.FC = () => {
   return (
     <main className="mavo-page"><div className="mavo-page-content">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <p className="text-sm text-slate-500 dark:text-slate-400">{total} contato{total === 1 ? '' : 's'} com histórico no Mavo.</p>
+        {/* A lista deixou de ser só de quem conversou: a agenda do WhatsApp conectado
+            também entra, então o rótulo antigo passou a ser falso. */}
+        <p className="text-sm text-slate-500 dark:text-slate-400">{total} contato{total === 1 ? '' : 's'} no Mavo, incluindo a agenda do WhatsApp conectado.</p>
         <div className="flex flex-wrap items-center gap-2">
           {/* A lista só mostra quem já escreveu; é aqui que a operação percebe a falta
               de um número novo e precisa do caminho para iniciar o contato. */}

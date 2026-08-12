@@ -27,6 +27,9 @@ import {
   recordSatisfactionRatingByPhone,
   upsertWhatsappDirectoryEntries,
   findWhatsappDirectoryName,
+  importWhatsappContacts,
+  deleteImportedWhatsappContacts,
+  clearWhatsappDirectory,
 } from "@/lib/repo";
 import { logger } from "@/lib/logger";
 import { emitRealtime } from "@/lib/realtime";
@@ -1286,6 +1289,15 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
           .catch((err) => {
             logger.warn({ err }, "Failed to sync WhatsApp directory entries");
           });
+        // A agenda também vira contato na plataforma, para a loja encontrar o número
+        // sem depender de a pessoa ter escrito antes.
+        void importWhatsappContacts(DEFAULT_ORGANIZATION_ID, entries)
+          .then((created) => {
+            if (created) logger.info({ created }, "Imported WhatsApp contacts");
+          })
+          .catch((err) => {
+            logger.warn({ err }, "Failed to import WhatsApp contacts");
+          });
       };
 
       sock.ev.on("messaging-history.set", ({ contacts }) => {
@@ -1402,6 +1414,22 @@ export async function destroyWhatsappClient(options?: { logout?: boolean }) {
     clientReadyAt = null;
 
     if (fullLogout) {
+      // A agenda importada pertence ao número que está saindo: mantê-la deixaria
+      // contatos de outra conta no painel depois de conectar um número diferente.
+      // Quem já tem conversa é preservado — apagar levaria o histórico junto.
+      await Promise.all([
+        deleteImportedWhatsappContacts(DEFAULT_ORGANIZATION_ID)
+          .then((removed) => {
+            if (removed) logger.info({ removed }, "Removed imported WhatsApp contacts on disconnect");
+          })
+          .catch((err) => {
+            logger.warn({ err }, "Failed to remove imported WhatsApp contacts");
+          }),
+        clearWhatsappDirectory(DEFAULT_ORGANIZATION_ID).catch((err) => {
+          logger.warn({ err }, "Failed to clear WhatsApp directory");
+        }),
+      ]);
+
       // Propaga a falha: sem limpar a sessão o próximo QR reconectaria o número
       // antigo, e reportar sucesso aqui esconderia exatamente esse defeito.
       await clearWhatsappAuthState();

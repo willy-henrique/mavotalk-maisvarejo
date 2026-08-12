@@ -82,4 +82,7 @@ export {
   recordSatisfactionRatingByPhone,
   upsertWhatsappDirectoryEntries,
   findWhatsappDirectoryName,
+  importWhatsappContacts,
+  deleteImportedWhatsappContacts,
+  clearWhatsappDirectory,
 } from "@/lib/supabase-repo";
