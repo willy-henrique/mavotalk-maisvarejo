@@ -157,6 +157,10 @@ function clearPairingCode(state: WhatsappState) {
   pairingRequestedGeneration = null;
 }
 
+/** Sincronização completa de histórico. Desligada por padrão pelo custo de memória. */
+const WA_SYNC_FULL_HISTORY =
+  String(process.env.WHATSAPP_SYNC_FULL_HISTORY || "false").toLowerCase() === "true";
+
 /** Tempo de vida de cada ref de QR. O padrão do Baileys (20s a partir do segundo ref)
  * esgota a lista e derruba o socket em ~2min, curto demais para digitar o código. */
 const WA_QR_TIMEOUT_MS = Number(process.env.WA_QR_TIMEOUT_MS) || 60_000;
@@ -1087,7 +1091,11 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
         // O nome da sessão identifica a sessão persistida, não o navegador.
         browser: Browsers.ubuntu("Chrome"),
         markOnlineOnConnect: false,
-        syncFullHistory: false,
+        // A agenda do aparelho chega pelo app state, e há indício de que a carga
+        // completa só vem com o history sync ligado. Fica ajustável por env para
+        // testar em produção sem novo deploy: ligado consome bem mais memória, o que
+        // é sensível na instância gratuita do Render.
+        syncFullHistory: WA_SYNC_FULL_HISTORY,
         // O Baileys consome uma lista finita de refs de QR e derruba o socket quando
         // ela acaba (Socket/socket.js: "QR refs attempts ended"). No padrão os refs
         // seguintes duram só 20s, o que fecha a conexão em ~2min — tempo curto demais
@@ -1271,16 +1279,57 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
       // Agenda da loja: o pushName é o nome que o próprio cliente escolheu no perfil,
       // enquanto estes eventos trazem o nome que a loja salvou — o que identifica um
       // cliente recorrente no atendimento.
-      const syncDirectory = (contacts: Array<{ id?: string | null; name?: string | null; notify?: string | null; verifiedName?: string | null }>) => {
+      const syncDirectory = (
+        source: string,
+        contacts: Array<{ id?: string | null; name?: string | null; notify?: string | null; verifiedName?: string | null }>,
+      ) => {
+        let withoutPhone = 0;
+        let withoutName = 0;
+        let withName = 0;
+        let withVerifiedName = 0;
+        let withNotify = 0;
+
         const entries = contacts
           .map((contact) => {
             const phone = whatsappPhoneFromJid(String(contact.id || ""));
-            // `name` é o nome da agenda; notify/verifiedName vêm do perfil do cliente
-            // e já são cobertos pelo pushName, então não entram aqui.
-            const displayName = String(contact.name || "").trim();
-            return phone && displayName ? { phoneNumber: phone, displayName } : null;
+            if (!phone) {
+              withoutPhone += 1;
+              return null;
+            }
+            const agendaName = String(contact.name || "").trim();
+            const verifiedName = String(contact.verifiedName || "").trim();
+            const notify = String(contact.notify || "").trim();
+            if (agendaName) withName += 1;
+            if (verifiedName) withVerifiedName += 1;
+            if (notify) withNotify += 1;
+
+            // `name` é o nome salvo pela loja e tem precedência. Aceitar também
+            // verifiedName e notify era necessário: exigir só `name` descartava toda
+            // a carga quando o WhatsApp entrega o contato sem o nome da agenda.
+            const displayName = agendaName || verifiedName || notify;
+            if (!displayName) {
+              withoutName += 1;
+              return null;
+            }
+            return { phoneNumber: phone, displayName };
           })
           .filter((entry): entry is { phoneNumber: string; displayName: string } => entry !== null);
+
+        // Sem isto não há como saber se a sincronização não trouxe nada ou se trouxe e
+        // foi descartada aqui — foi exatamente essa dúvida que travou o diagnóstico.
+        logger.info(
+          {
+            source,
+            received: contacts.length,
+            usable: entries.length,
+            withName,
+            withVerifiedName,
+            withNotify,
+            withoutName,
+            withoutPhone,
+          },
+          "WhatsApp contact event received",
+        );
         if (!entries.length) return;
         void upsertWhatsappDirectoryEntries(DEFAULT_ORGANIZATION_ID, entries)
           .then((saved) => {
@@ -1302,15 +1351,15 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
 
       sock.ev.on("messaging-history.set", ({ contacts }) => {
         if (generation !== currentWhatsappGeneration()) return;
-        syncDirectory(contacts || []);
+        syncDirectory("messaging-history.set", contacts || []);
       });
       sock.ev.on("contacts.upsert", (contacts) => {
         if (generation !== currentWhatsappGeneration()) return;
-        syncDirectory(contacts || []);
+        syncDirectory("contacts.upsert", contacts || []);
       });
       sock.ev.on("contacts.update", (contacts) => {
         if (generation !== currentWhatsappGeneration()) return;
-        syncDirectory(contacts || []);
+        syncDirectory("contacts.update", contacts || []);
       });
 
       sock.ev.on("messages.upsert", ({ messages, type }) => {
