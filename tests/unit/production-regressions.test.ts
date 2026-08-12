@@ -180,6 +180,31 @@ test("foco de dialogos nao e reaplicado a cada render", async () => {
   assert.doesNotMatch(drawerEffect, /\}, \[hasUnsavedChanges, onClose\]\);/);
 });
 
+test("resposta humana pelo proprio WhatsApp desliga o bot", async () => {
+  const client = await read("lib/whatsapp-client.ts");
+  const outbound = client.slice(
+    client.indexOf("async function processOutboundMessageFromDevice"),
+    client.indexOf("async function handleInboundViaBotTriagem"),
+  );
+
+  // A regra vale para qualquer resposta escrita por uma pessoa, nao so quando a loja
+  // abre a conversa: o atendente que responde pelo aplicativo tambem encerra a triagem.
+  assert.match(outbound, /if \(!fromBot && conversation\.status !== "encerrado"\)/);
+  assert.match(outbound, /triageCompleted: true/);
+  assert.doesNotMatch(outbound, /if \(conversation\.isNew && !fromBot\) \{/);
+});
+
+test("envio automatico desiste se um atendente assumiu no meio do caminho", async () => {
+  const route = await read("app/api/webhooks/n8n/ticket-upsert/route.ts");
+  const send = route.slice(route.indexOf("SEND REPLY VIA WHATSAPP"));
+
+  // A decisao e tomada no inicio do pedido e o envio ocorre no fim; sem reler o estado
+  // aqui, o bot ainda dispara uma vez por cima da conversa humana.
+  assert.match(send, /getConversation\(organizationId, String\(conversation\.id\)\)/);
+  assert.match(send, /humanTookOver/);
+  assert.ok(send.indexOf("humanTookOver") < send.indexOf("deliverInOrder"));
+});
+
 test("shutdown usa a API do Baileys", async () => {
   const server = await read("server.cjs");
   assert.match(server, /__waClient\.end\(undefined\)/);

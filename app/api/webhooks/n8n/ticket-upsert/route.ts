@@ -6,6 +6,7 @@ import {
   addOutboundMessage,
   createAuditLog,
   findMessageByExternalId,
+  getConversation,
   getOrCreateContactAndOpenConversation,
   isContactBlocked,
   listConversations,
@@ -949,8 +950,28 @@ export async function POST(request: Request) {
   // ── SEND REPLY VIA WHATSAPP ────────────────────────────────────────
   const replyPhone = String(conversation.contactPhone || normalizedPhone);
   if (shouldReply && replyText) {
-    const messages = replySequence?.length ? replySequence : [{ text: replyText, mediaUrl: replyMediaUrl }];
-    replyDelivered = await deliverInOrder(messages, (message) => sendReplyToWhatsApp(replyPhone, message.text, organizationId, String(conversation.id), message.mediaUrl));
+    // A decisão foi tomada no início deste pedido, mas o envio acontece agora. Nesse
+    // intervalo um atendente pode ter respondido — pelo painel ou pelo próprio
+    // WhatsApp — e a mensagem automática cairia por cima da conversa humana. Reler o
+    // estado aqui é o que fecha essa janela; sem isso o bot ainda dispara uma vez.
+    const latest = await getConversation(organizationId, String(conversation.id));
+    const humanTookOver =
+      Boolean(latest) &&
+      (latest!.status === "em_atendimento" ||
+        (Boolean(latest!.triageCompleted) && !conversation.triageCompleted));
+
+    if (humanTookOver) {
+      shouldReply = false;
+      replyDelivered = null;
+      decisionReason = "atendente_assumiu_antes_do_envio_automatico";
+      logger.info(
+        { conversationId: conversation.id, status: latest!.status },
+        "Skipped automatic reply: a human took over the conversation",
+      );
+    } else {
+      const messages = replySequence?.length ? replySequence : [{ text: replyText, mediaUrl: replyMediaUrl }];
+      replyDelivered = await deliverInOrder(messages, (message) => sendReplyToWhatsApp(replyPhone, message.text, organizationId, String(conversation.id), message.mediaUrl));
+    }
   }
 
   // ── OUTBOUND WEBHOOKS ──────────────────────────────────────────────

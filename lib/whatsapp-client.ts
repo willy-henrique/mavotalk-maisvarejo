@@ -386,16 +386,21 @@ async function processOutboundMessageFromDevice(
 
   const body = extractMessageText(msg.message) || "[mídia]";
 
-  // Conversa aberta pela loja não tem o que triar: quem escreveu primeiro foi uma
-  // pessoa. Sem isso, a resposta do cliente entrava na triagem e ele recebia o menu
-  // de boas-vindas no meio de um contato que a própria loja iniciou.
-  if (conversation.isNew && !fromBot) {
+  // Qualquer resposta escrita por uma pessoa encerra a triagem, inclusive quando vem
+  // do próprio WhatsApp em vez do painel. Antes só cobríamos a conversa aberta pela
+  // loja, então o atendente que respondia pelo aplicativo não desligava o bot — e o
+  // cliente recebia o menu de boas-vindas por cima de uma conversa humana já em curso.
+  //
+  // É gravado antes de persistir a mensagem: o bot ainda pode estar processando a
+  // mensagem anterior do cliente, e é este registro que faz a checagem dele desistir.
+  if (!fromBot && conversation.status !== "encerrado") {
     await updateConversationById(organizationId, String(conversation.id), {
       triageCompleted: true,
+      ...(conversation.isNew ? {} : { status: "em_atendimento" }),
     }).catch((err) => {
       logger.warn(
         { err, conversationId: conversation.id },
-        "Failed to mark store-initiated conversation as triaged",
+        "Failed to end triage after a human reply",
       );
     });
   }
