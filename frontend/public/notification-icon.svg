@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192" role="img" aria-label="Mavo Talk">
+  <rect width="192" height="192" rx="42" fill="#2563eb"/>
+  <path fill="#ffffff" d="M46 62c0-6.6 5.4-12 12-12h76c6.6 0 12 5.4 12 12v46c0 6.6-5.4 12-12 12H92l-24 22v-22h-10c-6.6 0-12-5.4-12-12V62z"/>
+  <circle cx="76" cy="85" r="7" fill="#2563eb"/>
+  <circle cx="96" cy="85" r="7" fill="#2563eb"/>
+  <circle cx="116" cy="85" r="7" fill="#2563eb"/>
+</svg>

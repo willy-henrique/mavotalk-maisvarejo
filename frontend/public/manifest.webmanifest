@@ -1,0 +1,19 @@
+{
+  "name": "Mavo Talk",
+  "short_name": "Mavo Talk",
+  "description": "Central de atendimento Mavo Talk.",
+  "start_url": "/inbox",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#2563eb",
+  "lang": "pt-BR",
+  "icons": [
+    {
+      "src": "/notification-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

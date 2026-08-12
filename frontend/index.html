@@ -8,6 +8,12 @@
       content="default-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https: wss:"
     />
     <meta name="theme-color" content="#2563eb" />
+    <!-- No iOS, a API de notificação só existe quando o site é adicionado à tela de
+         início; sem o manifest o painel não é instalável e o iPhone nunca notifica. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/notification-icon.svg" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Mavo Talk" />
     <title>Mavo Talk</title>
   </head>
   <body class="overflow-hidden">

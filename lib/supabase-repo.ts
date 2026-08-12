@@ -1038,7 +1038,9 @@ export async function addInboundMessage(payload: {
       "supa addInboundMessage: failed to bump conversation updated_at",
     );
   }
-  return { id, ...payload };
+  // `direction` explícito: o alerta de nova mensagem no painel distingue recebida de
+  // enviada por este campo, e antes ele só existia no retorno de saída.
+  return { id, direction: "inbound" as const, ...payload };
 }
 
 export async function findMessageByExternalId(

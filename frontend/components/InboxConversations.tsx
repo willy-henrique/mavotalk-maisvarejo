@@ -430,11 +430,8 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [selectedId, selected?.messages?.length]);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
-    }
-  }, []);
+  // A permissão é pedida por SystemNotifications, a partir de um clique. Pedir aqui no
+  // carregamento fazia o navegador descartar o pedido sem mostrar nada ao usuário.
 
   // Se o usuário trocar de conversa enquanto estiver "Finalizando...",
   // garantimos que o estado de loading de fechamento não fique preso.
@@ -461,17 +458,11 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     setSocketStatus('connecting');
     socket.on('conversation.created', () => fetchConversations(false));
     socket.on('conversation.updated', () => fetchConversations(false));
-    socket.on('message.created', (payload: { conversationId?: string }) => {
+    // O alerta de nova mensagem vive em SystemNotifications, que roda em toda tela do
+    // painel. Aqui só recarregamos a lista: notificar nos dois lugares duplicaria o
+    // aviso, e o antigo só disparava com a aba oculta.
+    socket.on('message.created', () => {
       fetchConversations(false);
-      if (payload?.conversationId && payload.conversationId !== selectedIdRef.current && document.hidden) {
-        try {
-          if (Notification.permission === 'granted') {
-            new Notification('Mavo Talk – Nova mensagem', { body: 'Você recebeu uma nova mensagem no chat.' });
-          }
-        } catch {
-          // ignore
-        }
-      }
     });
     socket.on('typing', (payload: { conversationId: string; userName: string; isTyping: boolean }) => {
       if (payload.conversationId !== selectedIdRef.current) return;
