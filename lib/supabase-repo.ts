@@ -1974,6 +1974,17 @@ export async function recordSatisfactionRatingByPhone(
   if (!/^[1-5]$/.test(body)) return false;
   const score = Number(body);
 
+  // Cada recusa abaixo tem um motivo diferente e todas resultavam no mesmo silêncio:
+  // a nota caía na triagem e o cliente recebia o menu. Sem registrar o motivo não há
+  // como saber qual condição falhou numa ocorrência real.
+  const decline = (reason: string, extra?: Record<string, unknown>) => {
+    logger.info(
+      { organizationId, phoneNumber, score, reason, ...extra },
+      "Satisfaction rating not recorded",
+    );
+    return false;
+  };
+
   // 1) Localiza contato pelo telefone
   const { data: contact } = await supa(orgId)
     .from("contacts")
@@ -1981,7 +1992,7 @@ export async function recordSatisfactionRatingByPhone(
     .eq("organization_id", orgId)
     .eq("phone_number", phoneNumber)
     .maybeSingle();
-  if (!contact) return false;
+  if (!contact) return decline("contact_not_found");
 
   // 2) Pega a última conversa encerrada desse contato
   const { data: conv } = await supa(orgId)
@@ -1993,7 +2004,18 @@ export async function recordSatisfactionRatingByPhone(
     .order("updated_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!conv) return false;
+  if (!conv) {
+    // Provável causa: a conversa foi reaberta antes da resposta chegar.
+    const { data: current } = await supa(orgId)
+      .from("conversations")
+      .select("id, status")
+      .eq("organization_id", orgId)
+      .eq("contact_id", contact.id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    return decline("no_closed_conversation", { currentStatus: current?.status ?? null });
+  }
 
   // 3) Atualiza o ticket vinculado com a nota (sem sobrescrever se já existir)
   const { data: ticket } = await supa(orgId)
@@ -2003,10 +2025,10 @@ export async function recordSatisfactionRatingByPhone(
     .eq("conversation_id", conv.id)
     .limit(1)
     .maybeSingle();
-  if (!ticket) return false;
+  if (!ticket) return decline("ticket_not_found", { conversationId: conv.id });
   if (typeof ticket.satisfaction_score === "number") {
     // Já tinha nota, não sobrescreve
-    return false;
+    return decline("already_rated", { conversationId: conv.id });
   }
 
   // O carimbo da pesquisa é o sinal preferido, mas ele só passou a ser gravado
@@ -2015,12 +2037,20 @@ export async function recordSatisfactionRatingByPhone(
   // O fechamento recente cobre esse caso — logo após encerrar não há menu ativo, então
   // um número isolado é resposta da pesquisa, não escolha de opção.
   const referenceAt = ticket.satisfaction_survey_sent_at || conv.closed_at;
-  if (!referenceAt) return false;
+  if (!referenceAt) return decline("no_survey_reference", { conversationId: conv.id });
   const referenceTime = new Date(String(referenceAt)).getTime();
-  if (Number.isNaN(referenceTime)) return false;
+  if (Number.isNaN(referenceTime)) {
+    return decline("invalid_survey_reference", { conversationId: conv.id, referenceAt });
+  }
   // A janela evita capturar uma mensagem que chega muito depois, quando o cliente já
   // está começando um atendimento novo e "1", "2" e "3" voltam a ser opções do menu.
-  if (Date.now() - referenceTime > SATISFACTION_REPLY_WINDOW_MS) return false;
+  const elapsedMs = Date.now() - referenceTime;
+  if (elapsedMs > SATISFACTION_REPLY_WINDOW_MS) {
+    return decline("outside_reply_window", {
+      conversationId: conv.id,
+      elapsedMinutes: Math.round(elapsedMs / 60_000),
+    });
+  }
 
   const { error } = await supa(orgId)
     .from("tickets")
