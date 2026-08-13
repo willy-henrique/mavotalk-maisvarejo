@@ -1986,7 +1986,7 @@ export async function recordSatisfactionRatingByPhone(
   // 2) Pega a última conversa encerrada desse contato
   const { data: conv } = await supa(orgId)
     .from("conversations")
-    .select("id")
+    .select("id, closed_at")
     .eq("organization_id", orgId)
     .eq("contact_id", contact.id)
     .eq("status", "encerrado")
@@ -2009,13 +2009,18 @@ export async function recordSatisfactionRatingByPhone(
     return false;
   }
 
-  // Sem pesquisa enviada, "1", "2" e "3" são opções do menu — engolir isso como nota
-  // deixaria o cliente sem resposta. A janela evita capturar uma mensagem que chega
-  // muito depois, quando o cliente já está começando um atendimento novo.
-  if (!ticket.satisfaction_survey_sent_at) return false;
-  const sentAt = new Date(String(ticket.satisfaction_survey_sent_at)).getTime();
-  if (Number.isNaN(sentAt)) return false;
-  if (Date.now() - sentAt > SATISFACTION_REPLY_WINDOW_MS) return false;
+  // O carimbo da pesquisa é o sinal preferido, mas ele só passou a ser gravado
+  // recentemente: conversas encerradas antes disso não o têm, e sem alternativa a nota
+  // seria persistida como mensagem comum e ficaria visível ao atendente no chat.
+  // O fechamento recente cobre esse caso — logo após encerrar não há menu ativo, então
+  // um número isolado é resposta da pesquisa, não escolha de opção.
+  const referenceAt = ticket.satisfaction_survey_sent_at || conv.closed_at;
+  if (!referenceAt) return false;
+  const referenceTime = new Date(String(referenceAt)).getTime();
+  if (Number.isNaN(referenceTime)) return false;
+  // A janela evita capturar uma mensagem que chega muito depois, quando o cliente já
+  // está começando um atendimento novo e "1", "2" e "3" voltam a ser opções do menu.
+  if (Date.now() - referenceTime > SATISFACTION_REPLY_WINDOW_MS) return false;
 
   const { error } = await supa(orgId)
     .from("tickets")
