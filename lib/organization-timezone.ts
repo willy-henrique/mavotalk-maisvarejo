@@ -18,7 +18,7 @@ export async function getOrganizationTimeZone(organizationId: string, queueId?: 
          UNION ALL
          SELECT timezone, 3 FROM business_hours WHERE organization_id = $1
        ) sources
-       WHERE timezone IS NOT NULL AND btrim(timezone) <> ''
+       WHERE timezone IS NOT NULL AND trim(timezone) <> ''
        ORDER BY priority
        LIMIT 1`,
       [organizationId, queueId || null],
