@@ -48,6 +48,21 @@ const App: React.FC = () => {
   const [whatsappProvider, setWhatsappProvider] = useState('');
 
   useEffect(() => { AuthService.refreshSession().then(setSession).catch(() => setSession(null)).finally(() => setAuthChecked(true)); }, []);
+
+  // O token vale 12h e não era renovado: quem passa o dia com o painel aberto perdia
+  // a sessão e só descobria ao tentar enviar uma mensagem. Renova periodicamente e ao
+  // voltar para a aba, porque o celular suspende timers em segundo plano.
+  useEffect(() => {
+    if (!session?.isAuthenticated) return;
+    void AuthService.renewToken();
+    const interval = window.setInterval(() => { void AuthService.renewToken(); }, 30 * 60 * 1000);
+    const onVisible = () => { if (!document.hidden) void AuthService.renewToken(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [session?.isAuthenticated]);
   useEffect(() => { const handleExpired = () => { void AuthService.logout(); setSession(null); navigate('/', { replace: true }); }; window.addEventListener('mavo:session-expired', handleExpired); return () => window.removeEventListener('mavo:session-expired', handleExpired); }, [navigate]);
   useEffect(() => {
     if (!sidebarOpen) return;

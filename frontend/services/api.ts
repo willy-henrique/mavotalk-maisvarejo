@@ -63,6 +63,8 @@ export async function apiFetch(
     },
   });
   if (response.status === 401 && typeof window !== 'undefined') {
+    // O token expirou ou foi recusado. Avisar aqui é o que leva o operador de volta
+    // ao login em vez de deixá-lo tentando enviar e recebendo "Não autenticado".
     window.dispatchEvent(new Event('mavo:session-expired'));
   }
   return response;

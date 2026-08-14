@@ -6,8 +6,13 @@ import { hasMenuPermission, type MenuPermissionAction } from "@/lib/menu-setting
 export async function requireSession() {
   const session = await getSession();
   if (!session) {
+    // "Não autenticado" aparecia no chat sem dizer o que fazer. Na prática o caso
+    // comum é a sessão ter expirado com o painel aberto.
     return {
-      error: NextResponse.json({ error: "Não autenticado" }, { status: 401 }),
+      error: NextResponse.json(
+        { error: "Sua sessão expirou. Entre novamente para continuar." },
+        { status: 401 },
+      ),
       session: null,
     };
   }

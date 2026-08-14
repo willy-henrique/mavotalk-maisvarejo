@@ -91,6 +91,24 @@ export class AuthService {
     return null;
   }
 
+  /**
+   * Renova o token enquanto a sessão ainda vale.
+   *
+   * Sem isto a sessão morre em 12h e a operação descobre ao tentar enviar uma
+   * mensagem. Falha em silêncio: se a renovação não passar, a sessão atual continua
+   * valendo até expirar de fato e o 401 trata o resto.
+   */
+  static async renewToken(): Promise<void> {
+    try {
+      const res = await apiFetch('/api/auth/refresh', { method: 'POST' });
+      if (!res.ok) return;
+      const data = (await res.json()) as { token?: string };
+      if (data.token) setAccessToken(data.token);
+    } catch {
+      // Rede instável no celular não deve derrubar a sessão em uso.
+    }
+  }
+
   static async refreshSession(): Promise<AuthState | null> {
     const res = await apiFetch('/api/me', { method: 'GET' });
     if (!res.ok) {
