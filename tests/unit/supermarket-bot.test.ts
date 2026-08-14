@@ -243,6 +243,25 @@ test("menu pedido de propósito nao leva aviso de opcao invalida", () => {
   }
 });
 
+test("foto sem legenda nao e tratada como opcao invalida", () => {
+  // A imagem chegava ao decisor como o texto "[imagem]" e o cliente recebia
+  // "Nao encontrei essa opcao" logo depois de mandar a foto do produto.
+  for (const message of ['[imagem]', '[midia]', 'Imagem ou arquivo enviado', '']) {
+    const decision = decide({ message, menuEntries: filasDoTenant, hasMedia: true });
+    assert.equal(decision?.reason, "supermarket_media_received", `"${message}" nao e opcao invalida`);
+    assert.equal(decision?.triageCompleted, true);
+    assert.doesNotMatch(String(decision?.replyText), /Não encontrei essa opção/);
+  }
+});
+
+test("legenda com opcao valida continua valendo sobre a midia", () => {
+  // Guarda contra engolir a escolha de quem manda a foto junto com o numero.
+  const decision = decide({ message: "2", menuEntries: filasDoTenant, hasMedia: true });
+
+  assert.notEqual(decision?.reason, "supermarket_media_received");
+  assert.equal(decision?.queueId, "q-ofertas");
+});
+
 test("agradecimento nao e tratado como opcao invalida", () => {
   // O cliente dizia "Obrigada" e recebia "Nao encontrei essa opcao" com o menu inteiro.
   for (const message of ["Obrigada", "obrigado", "valeu", "ok", "beleza"]) {

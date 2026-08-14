@@ -508,12 +508,23 @@ async function handleInboundViaBotTriagem(
       try {
         const uploaded = await uploadBase64ToCloudinary(downloaded.base64, mimeType || null);
         mediaUrl = uploaded?.secure_url || undefined;
+        if (!uploaded) {
+          logger.error(
+            { from: remoteJid, id: msg.key?.id, kind },
+            "Cloudinary não configurado: a mídia recebida não pôde ser armazenada",
+          );
+        }
       } catch (err) {
         logger.warn(
           { err, from: remoteJid, id: msg.key?.id },
           "Failed to process inbound media for ticket-upsert",
         );
       }
+    } else {
+      logger.warn(
+        { from: remoteJid, id: msg.key?.id, kind },
+        "Inbound media detected but download returned nothing",
+      );
     }
     if (!inboundText) {
       inboundText = kind === "image" ? "[imagem]" : "[midia]";
@@ -732,6 +743,14 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
         const upload = await uploadBase64ToCloudinary(downloaded.base64, mimeType);
         mediaUrl = upload?.secure_url || null;
         cloudinaryPublicId = upload?.public_id || null;
+        if (!upload) {
+          // O upload devolve null, sem lançar, quando falta credencial do Cloudinary.
+          // Era o caminho que transformava toda imagem em "[midia]" sem rastro algum.
+          logger.error(
+            { conversationId: conversation.id, mediaKind },
+            "Cloudinary não configurado: a mídia recebida não pôde ser armazenada",
+          );
+        }
       } catch (err) {
         // Falha silenciosa aqui fazia a imagem do cliente sumir sem rastro: a mensagem
         // era gravada como "[midia]" e ninguém sabia que o upload tinha quebrado.

@@ -733,6 +733,10 @@ export async function POST(request: Request) {
         // Alimenta o teto de reexibições: sem isso o menu voltava a cada mensagem que
         // não casasse com uma opção, sem fim.
         menuAttempts: Number(conversation.menuAttempts || 0),
+        // Uma foto sem legenda chegava aqui como o texto "[imagem]" e era tratada como
+        // escolha inválida do menu. O mimeType cobre a mídia que falhou no upload e
+        // por isso não tem URL.
+        hasMedia: Boolean(mediaUrl || payload.mimeType),
         currentQueueMenuOption: currentQueue ? Number(currentQueue.menuOption) : null,
         businessOpen,
         config: botDecisionConfig,

@@ -44,6 +44,8 @@ export type DecideSupermarketBotParams = {
   humanHandled?: boolean;
   /** Quantas vezes o menu já foi reexibido sem escolha válida nesta conversa. */
   menuAttempts?: number;
+  /** A mensagem traz foto, áudio ou arquivo. */
+  hasMedia?: boolean;
   currentQueueMenuOption?: number | null;
   businessOpen: boolean;
   config?: SupermarketBotConfig;
@@ -275,6 +277,17 @@ export const DEFAULT_INVALID_OPTION_MESSAGE =
  */
 export const MENU_ATTEMPT_LIMIT = 2;
 
+/** Textos que substituem a mídia quando ela chega sem legenda. */
+const MEDIA_PLACEHOLDERS = [
+  "imagem",
+  "midia",
+  "audio",
+  "arquivo",
+  "foto",
+  "imagem ou arquivo enviado",
+  "sem texto",
+];
+
 /** Agradecimentos e despedidas: não são escolha de menu nem pedido de atendimento. */
 const COURTESY_TERMS = [
   "obrigado",
@@ -467,6 +480,29 @@ export function decideSupermarketBot(params: DecideSupermarketBotParams): Superm
       triageCompleted: true,
       appendOutOfHours: false,
       reason: "human_already_handling_conversation",
+    };
+  }
+
+  // Foto, áudio ou arquivo não são escolha de menu. Sem esta regra, uma imagem chegava
+  // ao decisor como o texto "[imagem]", não casava com nada e o cliente recebia
+  // "Não encontrei essa opção" logo após mandar a foto do produto.
+  const mediaOnly =
+    params.hasMedia &&
+    (!normalized || MEDIA_PLACEHOLDERS.includes(normalized));
+  if (mediaOnly) {
+    return {
+      handled: true,
+      kind: "human-handoff",
+      replyText:
+        `Recebi seu arquivo! Já encaminhei para a equipe do *${config.storeName}*.` +
+        "\n\nAguarde um instante que já respondemos por aqui.",
+      queueMenuOption: params.currentQueueMenuOption || null,
+      queueId: null,
+      queueType: null,
+      clearQueue: false,
+      triageCompleted: true,
+      appendOutOfHours: true,
+      reason: "supermarket_media_received",
     };
   }
 
