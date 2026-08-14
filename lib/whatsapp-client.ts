@@ -4,6 +4,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   downloadMediaMessage,
   getContentType,
+  normalizeMessageContent,
   DisconnectReason,
   Browsers,
   type WASocket,
@@ -257,18 +258,32 @@ const WA_IGNORE_CONTENT_TYPES = new Set([
   "call",
 ]);
 
+/**
+ * Conteúdo real da mensagem.
+ *
+ * O WhatsApp encapsula o conteúdo em `ephemeralMessage` (mensagens temporárias),
+ * `viewOnceMessage` e `documentWithCaptionMessage`. Lendo `message.imageMessage`
+ * direto, uma foto enviada nesses formatos não era reconhecida como mídia nem como
+ * texto: a mensagem ficava sem conteúdo e era descartada em silêncio.
+ */
+function messageContent(message: proto.IMessage | null | undefined) {
+  if (!message) return null;
+  return normalizeMessageContent(message) || message;
+}
+
 /** Evita processar status, broadcast, notificações de sistema e ruído que não é conversa 1:1 real. */
 function shouldIgnoreInboundWhatsApp(msg: WAMessage): boolean {
   if (msg.broadcast) return true;
   const jid = String(msg.key?.remoteJid || "");
   if (jid === "status@broadcast" || /@broadcast$/i.test(jid)) return true;
   if (msg.messageStubType) return true;
-  const contentType = getContentType(msg.message || undefined);
+  const contentType = getContentType(messageContent(msg.message) || undefined);
   if (!contentType || WA_IGNORE_CONTENT_TYPES.has(contentType)) return true;
   return false;
 }
 
-function extractMessageText(message: proto.IMessage | null | undefined): string {
+function extractMessageText(raw: proto.IMessage | null | undefined): string {
+  const message = messageContent(raw);
   if (!message) return "";
   const text =
     message.conversation ||
@@ -282,10 +297,11 @@ function extractMessageText(message: proto.IMessage | null | undefined): string 
 
 type InboundMediaKind = "image" | "audio" | "document" | null;
 
-function detectInboundMedia(message: proto.IMessage | null | undefined): {
+function detectInboundMedia(raw: proto.IMessage | null | undefined): {
   kind: InboundMediaKind;
   mimeType?: string;
 } {
+  const message = messageContent(raw);
   if (!message) return { kind: null };
   if (message.imageMessage) return { kind: "image", mimeType: message.imageMessage.mimetype || undefined };
   if (message.stickerMessage) return { kind: "image", mimeType: message.stickerMessage.mimetype || undefined };
@@ -297,9 +313,18 @@ function detectInboundMedia(message: proto.IMessage | null | undefined): {
 
 async function downloadInboundMedia(
   msg: WAMessage,
+  sock?: WASocket,
 ): Promise<{ base64: string; mimeType?: string } | null> {
   try {
-    const buffer = await downloadMediaMessage(msg, "buffer", {});
+    // `reuploadRequest` permite pedir ao WhatsApp que reenvie a mídia quando o link
+    // original já expirou. Sem esse contexto o download falhava de vez, o que é
+    // provável na instância gratuita: ela hiberna e o processamento atrasa.
+    const buffer = await downloadMediaMessage(
+      msg,
+      "buffer",
+      {},
+      sock ? { reuploadRequest: sock.updateMediaMessage, logger } : undefined,
+    );
     if (buffer.byteLength > 16 * 1024 * 1024) {
       logger.warn(
         { id: msg.key?.id, sizeBytes: buffer.byteLength },
@@ -477,7 +502,7 @@ async function handleInboundViaBotTriagem(
   let mimeType: string | undefined;
   const { kind } = detectInboundMedia(msg.message);
   if (kind) {
-    const downloaded = await downloadInboundMedia(msg);
+    const downloaded = await downloadInboundMedia(msg, sock);
     if (downloaded) {
       mimeType = downloaded.mimeType;
       try {
@@ -699,7 +724,7 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
   let type: "text" | "image" | "document" | "audio" = "text";
 
   if (mediaKind) {
-    const downloaded = await downloadInboundMedia(msg);
+    const downloaded = await downloadInboundMedia(msg, sock);
     if (downloaded) {
       mimeType = downloaded.mimeType || null;
       type = mediaKind;
@@ -707,9 +732,20 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
         const upload = await uploadBase64ToCloudinary(downloaded.base64, mimeType);
         mediaUrl = upload?.secure_url || null;
         cloudinaryPublicId = upload?.public_id || null;
-      } catch {
+      } catch (err) {
+        // Falha silenciosa aqui fazia a imagem do cliente sumir sem rastro: a mensagem
+        // era gravada como "[midia]" e ninguém sabia que o upload tinha quebrado.
+        logger.error(
+          { err, conversationId: conversation.id, mediaKind, mimeType },
+          "Failed to upload inbound media to Cloudinary",
+        );
         mediaUrl = null;
       }
+    } else {
+      logger.warn(
+        { conversationId: conversation.id, mediaKind, externalId: msg.key?.id },
+        "Inbound media detected but download returned nothing",
+      );
     }
   }
 

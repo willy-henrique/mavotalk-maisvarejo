@@ -227,6 +227,26 @@ test("limpeza da agenda importada preserva quem tem historico", async () => {
   assert.match(importer, /ON CONFLICT \(organization_id, phone_number\) DO NOTHING/);
 });
 
+test("imagem em mensagem temporaria ou de visualizacao unica e reconhecida", async () => {
+  const client = await read("lib/whatsapp-client.ts");
+
+  // O WhatsApp encapsula o conteudo em ephemeralMessage, viewOnceMessage e
+  // documentWithCaptionMessage. Lendo message.imageMessage direto, a foto nao era
+  // reconhecida como midia nem como texto e a mensagem sumia sem rastro.
+  assert.match(client, /normalizeMessageContent/);
+  assert.match(client, /function messageContent\(/);
+
+  const detect = client.slice(
+    client.indexOf("function detectInboundMedia"),
+    client.indexOf("async function downloadInboundMedia"),
+  );
+  assert.match(detect, /const message = messageContent\(raw\)/);
+
+  // Midia expirada no servidor exige pedir o reenvio; sem o contexto o download
+  // falhava em definitivo.
+  assert.match(client, /reuploadRequest: sock\.updateMediaMessage/);
+});
+
 test("shutdown usa a API do Baileys", async () => {
   const server = await read("server.cjs");
   assert.match(server, /__waClient\.end\(undefined\)/);
