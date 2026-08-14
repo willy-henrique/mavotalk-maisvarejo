@@ -49,6 +49,8 @@ Com `WILLTALK_POST_TRIAGE_REPLY=true` (padrão), cada mensagem após triagem rec
 - `lib/utils.ts` — `buildDemandMenu`, `buildTriageConfirmation`, …, `buildPostTriageClientAck`, `buildOutOfHoursNotice`
 - `lib/cerebro-auto-reply.ts` — Auto-reply do Cérebro AI (só pós-triagem, opcional)
 - `lib/willtalk-webhook.ts` — Webhooks de notificação (desabilitado por padrão)
+- `lib/timezone.ts` — Formatação de data/hora no fuso da loja (`describeZonedDeadline`, `zonedParts`)
+- `lib/organization-timezone.ts` — `getOrganizationTimeZone()`: unidade da fila → unidade da organização → padrão
 
 ## Variáveis de Ambiente Obrigatórias
 
@@ -69,6 +71,7 @@ DEFAULT_ORG_ID=org_willtalk-XXXXX
 - Sempre tratar erros no envio WhatsApp com try/catch (não quebrar o fluxo)
 - Telefone normalizado: `whatsapp:+55XXXXXXXXXXX`
 - `event_id` obrigatório para idempotência (evitar duplicatas)
+- Data ou hora em mensagem ao cliente sempre pelos helpers de `lib/timezone.ts`. O servidor roda em UTC: `toLocaleString`, `Date#getHours` e `Intl` sem `timeZone` adiantam o horário em 3h
 
 ## Proibido
 
