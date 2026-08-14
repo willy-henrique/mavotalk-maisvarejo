@@ -1,5 +1,7 @@
+import { getOrganizationTimeZone } from "@/lib/organization-timezone";
 import { getActivePromotions, getPublishedQueueConfiguration, getRuntimeOffersConfiguration } from "@/lib/queue-automation";
 import type { BusinessHoursAutomationConfig, OffersAutomationConfig } from "@/lib/queue-automation-schemas";
+import { describeZonedDeadline, resolveTimeZone, zonedParts } from "@/lib/timezone";
 
 export type BotOutboundMessage = { text: string; mediaUrl?: string | null };
 
@@ -23,10 +25,8 @@ const footer = (config: { showReturnToMenu: boolean; allowHumanHandoff: boolean 
 };
 const replace = (template: string, values: Record<string, string>) => template.replace(/\{(\w+)\}/g, (_, key) => values[key] || "");
 function zoned(date: Date, timezone: string) {
-  const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
-  const get = (type: string) => parts.find((part) => part.type === type)?.value || "";
-  const weekdayMap: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  return { weekday: weekdayMap[get("weekday")] ?? 0, date: `${get("year")}-${get("month")}-${get("day")}`, minutes: Number(get("hour")) * 60 + Number(get("minute")) };
+  const parts = zonedParts(date, timezone);
+  return { weekday: parts.weekday, date: parts.dateKey, minutes: parts.minutesOfDay };
 }
 const minutes = (time: unknown) => { const [h, m] = String(time || "00:00").split(":").map(Number); return h * 60 + m; };
 const timeText = (value: unknown) => String(value || "").slice(0, 5);
@@ -37,6 +37,7 @@ export async function formatPromotionResponse(organizationId: string, queueId: s
   const config = configuration.automationConfig as OffersAutomationConfig;
   const promotions = await getActivePromotions(organizationId, queueId, now);
   if (!promotions.length) return [{ text: `${config.noContentMessage}${footer(config)}` }];
+  const timeZone = await getOrganizationTimeZone(organizationId, queueId);
   const ordered = config.deliveryMode === "latest" ? promotions.slice(-1) : promotions;
   const messages: BotOutboundMessage[] = [{ text: config.initialMessage }];
   if (config.beforeFlyerMessage) messages.push({ text: config.beforeFlyerMessage });
@@ -47,7 +48,10 @@ export async function formatPromotionResponse(organizationId: string, queueId: s
     if (remainingFlyers <= 0) break;
     const images = (promotion.media as Array<{ url?: string }>).map((item) => item?.url).filter((url): url is string => Boolean(url));
     if (!images.length) continue;
-    const validity = config.showValidity ? `\nVálida até ${new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(promotion.expiresAt))}.` : "";
+    // O prazo sai no fuso da loja: formatar com o relógio do servidor (UTC em
+    // produção) empurrava a validade três horas para frente e, perto do fim do
+    // dia, para a data seguinte.
+    const validity = config.showValidity ? `\nVálida até ${describeZonedDeadline(new Date(promotion.expiresAt), timeZone, now)}.` : "";
     // A legenda acompanha só o primeiro flyer; repeti-la em cada imagem polui a conversa.
     const caption = [promotion.caption || promotion.description || promotion.title, validity].filter(Boolean).join("\n");
     for (const [index, image] of images.slice(0, remainingFlyers).entries()) {
@@ -108,7 +112,7 @@ export async function getCurrentBusinessStatus(organizationId: string, queueId: 
   const content = (published?.contentSnapshot || {}) as BusinessContent;
   const location = content.location || null;
   if (!location) return null;
-  const current = zoned(now, String(location.timezone || "America/Sao_Paulo"));
+  const current = zoned(now, resolveTimeZone(location.timezone));
   const schedule = periodsForDate(content, current.date, current.weekday);
   const periods = schedule.periods;
   const firstUpcoming = periods.find((period) => current.minutes < minutes(period.start));
