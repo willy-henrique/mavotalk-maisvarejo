@@ -1,4 +1,4 @@
-import { apiFetch, apiGet, apiPost, setAccessToken } from './api';
+import { apiFetch, apiGet, apiPost, getAccessToken, setAccessToken } from './api';
 import { User, UserRole, UserStatus, AuthState } from '../types';
 
 const AUTH_STORAGE_KEY = 'willtalk_auth_session';
@@ -110,6 +110,15 @@ export class AuthService {
   }
 
   static async refreshSession(): Promise<AuthState | null> {
+    // No iPhone o cookie de sessão é bloqueado por ser third-party, então o token é a
+    // única credencial. Uma sessão guardada sem token vem de um login anterior ao uso
+    // de token ou de armazenamento descartado pelo navegador: ela renderiza o painel e
+    // falha na primeira escrita. Melhor exigir login agora do que no meio do envio.
+    if (this.getSession()?.isAuthenticated && !getAccessToken()) {
+      this.clearStoredSession();
+      return null;
+    }
+
     const res = await apiFetch('/api/me', { method: 'GET' });
     if (!res.ok) {
       this.clearStoredSession();

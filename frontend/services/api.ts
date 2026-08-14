@@ -47,6 +47,20 @@ export function getAccessToken(): string | null {
   return localStorage.getItem(TOKEN_STORAGE_KEY);
 }
 
+/**
+ * Distingue as duas causas possíveis de um 401, que hoje produzem a mesma tela.
+ *
+ * Sem token, o navegador descartou o armazenamento ou o login é anterior ao uso de
+ * token — casos típicos do iPhone, onde o cookie de sessão é third-party e bloqueado.
+ * Com token, ele foi recusado pelo servidor, o que aponta para expiração ou chave
+ * trocada. O texto vai para a tela porque não há como ler o log de um celular.
+ */
+function authFailureHint(): string {
+  return getAccessToken()
+    ? 'token presente e recusado'
+    : 'nenhum token salvo neste navegador — saia e entre novamente';
+}
+
 export async function apiFetch(
   path: string,
   options: RequestInit = {}
@@ -98,9 +112,12 @@ async function parseJsonOrThrow(res: Response, path: string): Promise<unknown> {
   }
 }
 
-function errorMessage(data: unknown, fallback: string): string {
+function errorMessage(data: unknown, fallback: string, status?: number): string {
   const error = (data as { error?: unknown })?.error;
-  if (typeof error === 'string') return error;
+  // O 401 chega ao operador como texto na tela; sem esta pista o suporte não separa
+  // "token ausente" de "token recusado", que exigem correções diferentes.
+  const suffix = status === 401 ? ` (${authFailureHint()})` : '';
+  if (typeof error === 'string') return `${error}${suffix}`;
   if (
     error &&
     typeof error === 'object' &&
@@ -115,7 +132,7 @@ export async function apiGet<T = unknown>(path: string): Promise<T> {
   const res = await apiFetch(path, { method: 'GET' });
   const data = await parseJsonOrThrow(res, path);
   if (!res.ok) {
-    const msg = errorMessage(data, res.statusText);
+    const msg = errorMessage(data, res.statusText, res.status);
     throw new Error(msg);
   }
   return data as T;
@@ -128,7 +145,7 @@ export async function apiPost<T = unknown>(path: string, body?: unknown): Promis
   });
   const data = await parseJsonOrThrow(res, path);
   if (!res.ok) {
-    const msg = errorMessage(data, res.statusText);
+    const msg = errorMessage(data, res.statusText, res.status);
     throw new Error(msg);
   }
   return data as T;
@@ -141,7 +158,7 @@ export async function apiPatch<T = unknown>(path: string, body?: unknown): Promi
   });
   const data = await parseJsonOrThrow(res, path);
   if (!res.ok) {
-    const msg = errorMessage(data, res.statusText);
+    const msg = errorMessage(data, res.statusText, res.status);
     throw new Error(msg);
   }
   return data as T;
@@ -150,6 +167,6 @@ export async function apiPatch<T = unknown>(path: string, body?: unknown): Promi
 export async function apiDelete<T = unknown>(path: string): Promise<T> {
   const res = await apiFetch(path, { method: 'DELETE' });
   const data = await parseJsonOrThrow(res, path);
-  if (!res.ok) throw new Error(errorMessage(data, res.statusText));
+  if (!res.ok) throw new Error(errorMessage(data, res.statusText, res.status));
   return data as T;
 }
