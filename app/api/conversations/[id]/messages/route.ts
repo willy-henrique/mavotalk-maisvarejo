@@ -13,6 +13,7 @@ import {
   buildQuickReplyContext,
   replaceVariables,
 } from "@/lib/quick-reply-service";
+import { getOrganizationTimeZone } from "@/lib/organization-timezone";
 import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
 import { getSupermarketSettings } from "@/lib/supermarket-settings";
 import { logger } from "@/lib/logger";
@@ -57,6 +58,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     userName: auth.session.name || "Atendente",
     contactName: contact?.name || "Cliente",
     ticketNumber,
+    timeZone: await getOrganizationTimeZone(auth.session.organizationId),
   });
   const resolvedContent = replaceVariables(parsed.data.content, ctx);
 

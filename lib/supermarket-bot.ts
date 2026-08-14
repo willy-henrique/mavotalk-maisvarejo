@@ -1,5 +1,6 @@
 import { SUPERMARKET_QUEUE_PRESET, getSupermarketPresetByOption, queueTypeForMenuOption } from "./supermarket-config";
 import { matchMenuEntry, renderMenuOptions, type BotMenuEntry } from "./bot-menu";
+import { defaultTimeZone, zonedParts } from "./timezone";
 
 export type SupermarketBotConfig = {
   enabled: boolean;
@@ -105,14 +106,9 @@ function firstName(value?: string | null): string {
   return normalized.split(/\s+/)[0];
 }
 
-function greetingByBrasiliaTime(date = new Date()): string {
-  const hour = Number(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Sao_Paulo",
-      hour: "2-digit",
-      hour12: false,
-    }).format(date),
-  );
+/** Saudação pelo relógio da loja, nunca pelo do servidor (UTC em produção). */
+function greetingByStoreTime(date = new Date()): string {
+  const { hour } = zonedParts(date, defaultTimeZone());
   if (hour < 12) return "Bom dia";
   if (hour < 18) return "Boa tarde";
   return "Boa noite";
@@ -162,7 +158,7 @@ export function buildSupermarketMenu(
   menuEntries?: readonly BotMenuEntry[],
 ): string {
   const name = firstName(customerName);
-  const greeting = `${greetingByBrasiliaTime()}${name ? `, ${name}` : ""}! 👋`;
+  const greeting = `${greetingByStoreTime()}${name ? `, ${name}` : ""}! 👋`;
   const entries = menuEntries?.length ? menuEntries : presetMenuEntries(activeMenuOptions);
   const options = renderMenuOptions(entries);
   const availability = businessOpen

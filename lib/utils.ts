@@ -1,14 +1,19 @@
+import { defaultTimeZone, zonedParts } from "@/lib/timezone";
+
 export const DEFAULT_ORGANIZATION_ID = process.env.DEFAULT_ORG_ID || "org_willtalk_default";
 
-export function isInsideBusinessHours(now: Date, startTime: string, endTime: string) {
+/**
+ * Compara minutos do dia, não instantes: quem chama já resolveu o fuso da loja.
+ * A versão anterior usava `Date#getHours`, ou seja, o relógio do servidor — em
+ * produção (UTC) o expediente era avaliado três horas adiantado.
+ */
+export function isInsideTimeRange(minutesOfDay: number, startTime: string, endTime: string) {
   const [startHour, startMin] = startTime.split(":").map(Number);
   const [endHour, endMin] = endTime.split(":").map(Number);
-
-  const current = now.getHours() * 60 + now.getMinutes();
   const start = startHour * 60 + startMin;
   const end = endHour * 60 + endMin;
 
-  return current >= start && current <= end;
+  return minutesOfDay >= start && minutesOfDay <= end;
 }
 
 export function normalizePhone(phone: string) {
@@ -38,14 +43,9 @@ export function toWhatsAppAddress(phone: string): string {
   return digits ? `whatsapp:+${digits}` : "";
 }
 
-function getGreetingByBrasiliaTime(date = new Date()): string {
-  const hour = Number(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "America/Sao_Paulo",
-      hour: "2-digit",
-      hour12: false,
-    }).format(date),
-  );
+/** Saudação pelo relógio da loja, nunca pelo do servidor (UTC em produção). */
+function getGreetingByStoreTime(date = new Date()): string {
+  const { hour } = zonedParts(date, defaultTimeZone());
   if (hour < 12) return "Bom dia";
   if (hour < 18) return "Boa tarde";
   return "Boa noite";
@@ -59,7 +59,7 @@ export function buildDemandMenu(
     .sort((a, b) => a.menuOption - b.menuOption)
     .map((option) => `*${option.menuOption}* - ${option.name}`)
     .join("\n");
-  const greeting = getGreetingByBrasiliaTime();
+  const greeting = getGreetingByStoreTime();
   const nome = String(clienteNome || "").trim();
   const saudacao = nome ? `${greeting}, ${nome}!` : `${greeting}!`;
 

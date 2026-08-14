@@ -3,6 +3,8 @@
  * Variáveis: {user}, {cliente}, {primeiro_nome}, {empresa}, {ticket}, {data}, {hora}, {saudacao}
  */
 
+import { formatZonedDate, formatZonedTime, resolveTimeZone, zonedParts } from "@/lib/timezone";
+
 export function extractFirstName(name: string): string {
   if (!name || typeof name !== "string") return "";
   const n = name
@@ -14,12 +16,14 @@ export function extractFirstName(name: string): string {
   return first || "";
 }
 
-/** 05:00–11:59 → Bom dia; 12:00–17:59 → Boa tarde; 18:00–04:59 → Boa noite */
-export function getGreeting(now?: Date): string {
-  const d = now || new Date();
-  const h = d.getHours();
-  const m = d.getMinutes();
-  const totalMins = h * 60 + m;
+/**
+ * 05:00–11:59 → Bom dia; 12:00–17:59 → Boa tarde; 18:00–04:59 → Boa noite.
+ * Sempre no fuso da loja: com o relógio do servidor (UTC em produção) a mensagem
+ * das 21h saía como "Bom dia" e a prévia do painel não batia com o que o cliente
+ * recebia.
+ */
+export function getGreeting(now?: Date, timeZone?: string): string {
+  const totalMins = zonedParts(now || new Date(), resolveTimeZone(timeZone)).minutesOfDay;
   if (totalMins >= 5 * 60 && totalMins < 12 * 60) return "Bom dia";
   if (totalMins >= 12 * 60 && totalMins < 18 * 60) return "Boa tarde";
   return "Boa noite";
@@ -54,11 +58,13 @@ export function buildQuickReplyContext(options: {
   ticketNumber?: string;
   companyName?: string;
   now?: Date;
+  timeZone?: string;
 }): QuickReplyContext {
   const now = options.now || new Date();
+  const timeZone = resolveTimeZone(options.timeZone);
   const primeiroNome = extractFirstName(options.contactName);
-  const data = now.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-  const hora = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const data = formatZonedDate(now, timeZone);
+  const hora = formatZonedTime(now, timeZone);
   return {
     user: options.userName || "Atendente",
     cliente: options.contactName || "Cliente",
@@ -67,6 +73,6 @@ export function buildQuickReplyContext(options: {
     ticket: options.ticketNumber || "",
     data,
     hora,
-    saudacao: getGreeting(now),
+    saudacao: getGreeting(now, timeZone),
   };
 }

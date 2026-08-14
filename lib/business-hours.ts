@@ -1,8 +1,7 @@
-import { DEFAULT_ORGANIZATION_ID, isInsideBusinessHours } from "@/lib/utils";
+import { DEFAULT_ORGANIZATION_ID, isInsideTimeRange } from "@/lib/utils";
 import { getBusinessHour } from "@/lib/repo";
-import { queryTenantDatabase } from "@/lib/db";
-
-const BRAZIL_TZ = "America/Sao_Paulo";
+import { getOrganizationTimeZone } from "@/lib/organization-timezone";
+import { zonedParts } from "@/lib/timezone";
 
 type BusinessSchedule = {
   startTime: string;
@@ -115,54 +114,15 @@ export function resolveBusinessSchedule(
   return getDefaultBusinessSchedule(weekday, environment);
 }
 
-function getWeekdayAndTime(date: Date, timeZone: string): { weekday: number; hour: number; minute: number } {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone,
-    weekday: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
-
-  const weekdayText = parts.find((p) => p.type === "weekday")?.value || "Sun";
-  const hour = Number(parts.find((p) => p.type === "hour")?.value || "0") % 24;
-  const minute = Number(parts.find((p) => p.type === "minute")?.value || "0");
-
-  const weekdayMap: Record<string, number> = {
-    Sun: 0,
-    Mon: 1,
-    Tue: 2,
-    Wed: 3,
-    Thu: 4,
-    Fri: 5,
-    Sat: 6,
-  };
-
-  return {
-    weekday: weekdayMap[weekdayText] ?? 0,
-    hour,
-    minute,
-  };
-}
-
 export async function isOpenBusinessHour(date = new Date(), organizationId = DEFAULT_ORGANIZATION_ID) {
-  let timezone = BRAZIL_TZ;
-  try {
-    const location = await queryTenantDatabase<{ timezone: string | null }>(organizationId, "SELECT timezone FROM business_locations WHERE organization_id=$1 LIMIT 1", [organizationId]);
-    if (location.rows[0]?.timezone) timezone = String(location.rows[0].timezone);
-  } catch {
-    // Instalações anteriores à migration de localização continuam com o fuso padrão.
-  }
-  const { weekday, hour, minute } = getWeekdayAndTime(date, timezone);
+  const timezone = await getOrganizationTimeZone(organizationId);
+  const { weekday, minutesOfDay } = zonedParts(date, timezone);
   const configured = await getBusinessHour(organizationId, weekday);
   const schedule = resolveBusinessSchedule(weekday, configured);
 
   if (!schedule) return false;
 
-  // Reuse existing helper by building a date with Brazil local hh:mm.
-  const brazilLikeDate = new Date(date);
-  brazilLikeDate.setHours(hour, minute, 0, 0);
-  const open = isInsideBusinessHours(brazilLikeDate, schedule.startTime, schedule.endTime);
+  const open = isInsideTimeRange(minutesOfDay, schedule.startTime, schedule.endTime);
   if (!open || !configured?.breakStartTime || !configured.breakEndTime) return open;
-  return !isInsideBusinessHours(brazilLikeDate, configured.breakStartTime, configured.breakEndTime);
+  return !isInsideTimeRange(minutesOfDay, configured.breakStartTime, configured.breakEndTime);
 }
