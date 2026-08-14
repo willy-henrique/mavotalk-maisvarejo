@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireMenuPermission, requireSession } from "@/lib/api";
+import { getOrganizationTimeZone } from "@/lib/organization-timezone";
 import { getQueueAutomation, listBusinessLocationContent, listQueueAutomationHistory, listQueuePromotions, publishQueueAutomation, saveQueueAutomationDraft, discardQueueAutomationDraft } from "@/lib/queue-automation";
 import { queueConfigurationInputSchema } from "@/lib/queue-automation-schemas";
 import { isMenuOptionConflict, menuOptionConflictMessage } from "@/lib/queue-menu-option";
@@ -14,7 +15,10 @@ export async function GET(_: Request, context: { params: Promise<{ id: string }>
   if (!draft && !published) return NextResponse.json({ error: "Fila não encontrada." }, { status: 404 });
   const queueType = draft?.queueType || published?.queueType;
   const content = queueType === "offers_promotions" ? { promotions: await listQueuePromotions(result.session.organizationId, id) } : queueType === "business_hours_location" ? await listBusinessLocationContent(result.session.organizationId, id) : {};
-  return NextResponse.json({ draft, published, history, content });
+  // O editor precisa do fuso da loja para mostrar e gravar o período das promoções
+  // no mesmo relógio que o bot usa na mensagem enviada ao cliente.
+  const timeZone = await getOrganizationTimeZone(result.session.organizationId, id);
+  return NextResponse.json({ draft, published, history, content, timeZone });
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {

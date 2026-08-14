@@ -29,6 +29,8 @@ type QueueData = {
   published: Config | null;
   history: Array<{ id: string; action: string; changedBy: string | null; createdAt: string }>;
   content: { promotions?: QueuePromotion[]; location?: Record<string, any>; hours?: any[]; exceptions?: any[] };
+  /** Fuso da loja resolvido pela API; o editor de promoções trabalha nele. */
+  timeZone?: string;
 };
 
 export type QueueAutomationTab = 'Visão geral' | 'Conteúdo' | 'Mensagens' | 'Prévia' | 'Histórico';
@@ -352,7 +354,7 @@ export function QueueAutomationDrawer({ queue, initialTab = 'Visão geral', onCl
                 </div>
               </div><CustomerPreview messages={preview} queue={queue} /></div>}
 
-              {tab === 'Conteúdo' && config.queueType === 'offers_promotions' && <QueuePromotionManager queueId={queue.id} promotions={data?.content.promotions || []} published={Boolean(data?.published)} onChanged={load} />}
+              {tab === 'Conteúdo' && config.queueType === 'offers_promotions' && <QueuePromotionManager queueId={queue.id} promotions={data?.content.promotions || []} published={Boolean(data?.published)} timeZone={data?.timeZone} onChanged={load} />}
 
               {tab === 'Conteúdo' && config.queueType === 'business_hours_location' && <div className="max-w-5xl">
                 <SectionTitle eyebrow="Conteúdo da fila" title="Unidade, endereço e horários" description="O bot usa estas informações para responder onde a loja fica e quando ela está aberta." />
