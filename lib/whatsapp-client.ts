@@ -53,6 +53,7 @@ import {
   resolvePhoneJid,
   whatsappPhoneFromJid,
 } from "@/lib/whatsapp-addressing";
+import { selectRecentWhatsappHistoryMessages } from "@/lib/whatsapp-message-history";
 import {
   configuredWhatsappAuthPersistence,
   configuredWhatsappAuthStore,
@@ -98,6 +99,24 @@ type WhatsappState = {
 
 type KnownError = { message?: string };
 
+type WhatsappMessageSyncDiagnostics = {
+  connectedAt: string | null;
+  lastUpsertAt: string | null;
+  lastUpsertType: string | null;
+  upsertMessagesReceived: number;
+  outboundDeviceMessagesReceived: number;
+  outboundDeviceMessagesPersisted: number;
+  outboundDeviceMessagesDuplicate: number;
+  outboundDeviceMessagesUnresolved: number;
+  lastOutboundDevicePersistedAt: string | null;
+  lastOutboundDeviceUnresolvedAt: string | null;
+  historyEventsReceived: number;
+  historyMessagesReceived: number;
+  historyMessagesQueued: number;
+  processingFailures: number;
+  lastProcessingFailureAt: string | null;
+};
+
 declare global {
   var __waClient: WASocket | undefined;
   var __waState: WhatsappState | undefined;
@@ -109,6 +128,34 @@ declare global {
   var __waAuthResetPromise: Promise<void> | undefined;
   var __waAuthHandle: WhatsappAuthStateHandle | undefined;
   var __waGeneration: number | undefined;
+  var __waMessageSyncDiagnostics: WhatsappMessageSyncDiagnostics | undefined;
+}
+
+function newMessageSyncDiagnostics(): WhatsappMessageSyncDiagnostics {
+  return {
+    connectedAt: null,
+    lastUpsertAt: null,
+    lastUpsertType: null,
+    upsertMessagesReceived: 0,
+    outboundDeviceMessagesReceived: 0,
+    outboundDeviceMessagesPersisted: 0,
+    outboundDeviceMessagesDuplicate: 0,
+    outboundDeviceMessagesUnresolved: 0,
+    lastOutboundDevicePersistedAt: null,
+    lastOutboundDeviceUnresolvedAt: null,
+    historyEventsReceived: 0,
+    historyMessagesReceived: 0,
+    historyMessagesQueued: 0,
+    processingFailures: 0,
+    lastProcessingFailureAt: null,
+  };
+}
+
+function messageSyncDiagnostics(): WhatsappMessageSyncDiagnostics {
+  if (!global.__waMessageSyncDiagnostics) {
+    global.__waMessageSyncDiagnostics = newMessageSyncDiagnostics();
+  }
+  return global.__waMessageSyncDiagnostics;
 }
 
 /** Geração do socket ativo. Cada init cria uma nova geração e cada destroy a invalida,
@@ -363,6 +410,25 @@ async function resolveMessagePhone(
   return whatsappPhoneFromJid(phoneJid);
 }
 
+/**
+ * Mensagens enviadas pelo aparelho podem chegar primeiro pelo identificador privado
+ * `@lid`; o mapeamento para o telefone costuma ser persistido logo depois pelo
+ * Signal store. Uma tentativa única descartava a mensagem nessa pequena corrida.
+ */
+async function resolveDeviceMessagePhone(
+  sock: WASocket,
+  msg: WAMessage,
+  options?: { retry?: boolean },
+): Promise<string | null> {
+  const retryDelays = options?.retry === false ? [0] : [0, 250, 750, 1_500];
+  for (const delayMs of retryDelays) {
+    if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+    const phone = await resolveMessagePhone(sock, msg);
+    if (phone) return phone;
+  }
+  return null;
+}
+
 /** Tipos de conteúdo Baileys que não representam uma mensagem real de conversa. */
 const WA_IGNORE_CONTENT_TYPES = new Set([
   "protocolMessage",
@@ -495,6 +561,33 @@ const WA_QUEUED_MESSAGE_RECOVERY_MAX_AGE_SECONDS = Math.max(
     7 * 24 * 60 * 60,
 );
 
+/**
+ * O Baileys separa mensagens novas (`messages.upsert`) das mensagens recuperadas
+ * do telefone (`messaging-history.set`). Esse segundo evento é indispensável para
+ * espelhar no Inbox conversas feitas pelo aplicativo enquanto o Render reiniciava
+ * ou estava dormindo.
+ *
+ * A janela e o teto evitam importar anos de histórico no primeiro pareamento. O
+ * padrão cobre o expediente anterior e o atual sem sobrecarregar a instância free.
+ */
+const WA_HISTORY_MESSAGE_SYNC_ENABLED =
+  String(process.env.WA_HISTORY_MESSAGE_SYNC_ENABLED || "true").toLowerCase() !==
+  "false";
+const WA_HISTORY_MESSAGE_SYNC_MAX_AGE_SECONDS = Math.max(
+  5 * 60,
+  Math.min(
+    7 * 24 * 60 * 60,
+    Number(process.env.WA_HISTORY_MESSAGE_SYNC_MAX_AGE_SECONDS) || 24 * 60 * 60,
+  ),
+);
+const WA_HISTORY_MESSAGE_SYNC_MAX_MESSAGES = Math.max(
+  0,
+  Math.min(
+    1_000,
+    Number(process.env.WA_HISTORY_MESSAGE_SYNC_MAX_MESSAGES) || 250,
+  ),
+);
+
 /** Preserva a ordem de mensagens de um lote `append`/`notify` e evita que duas
  * primeiras mensagens criem/atualizem a mesma conversa em paralelo. */
 let whatsappMessageProcessingTail: Promise<void> = Promise.resolve();
@@ -518,30 +611,90 @@ async function rateLimitedSend(sock: WASocket, jid: string, text: string, fromBo
 async function processOutboundMessageFromDevice(
   sock: WASocket,
   msg: WAMessage,
+  options?: { historical?: boolean },
 ) {
   const to = String(msg.key?.remoteJid || "");
   if (!msg.key?.fromMe || !isDirectUserChat(to)) return;
+  const diagnostics = messageSyncDiagnostics();
+  diagnostics.outboundDeviceMessagesReceived += 1;
 
   const organizationId = DEFAULT_ORGANIZATION_ID;
-  const toPhone = await resolveMessagePhone(sock, msg);
+  const externalId = String(msg.key?.id || "").trim() || undefined;
+  const fromBot = recentBotSends.has(to);
+  if (fromBot) recentBotSends.delete(to);
+
+  // O eco de mensagens enviadas pelo próprio painel chega como `fromMe`. Consultar
+  // antes de criar contato/conversa evita duplicação e também torna a importação de
+  // histórico idempotente entre reinícios.
+  if (externalId) {
+    const existing = await findMessageByExternalId(organizationId, externalId);
+    if (existing) {
+      diagnostics.outboundDeviceMessagesDuplicate += 1;
+      return;
+    }
+  }
+
+  const toPhone = await resolveDeviceMessagePhone(sock, msg, {
+    retry: !options?.historical,
+  });
   if (!toPhone) {
+    diagnostics.outboundDeviceMessagesUnresolved += 1;
+    diagnostics.lastOutboundDeviceUnresolvedAt = new Date().toISOString();
     logger.warn(
-      { to, toAlt: msg.key?.remoteJidAlt, id: msg.key?.id },
+      {
+        jidType: to.split("@")[1] || "unknown",
+        altJidType: String(msg.key?.remoteJidAlt || "").split("@")[1] || null,
+        id: externalId,
+        historical: Boolean(options?.historical),
+      },
       "Ignoring outbound WhatsApp message without a resolvable phone JID",
     );
     return;
   }
 
-  const fromBot = recentBotSends.has(to);
-  if (fromBot) recentBotSends.delete(to);
+  const savedName = await findWhatsappDirectoryName(
+    organizationId,
+    toPhone,
+  ).catch(() => null);
 
   const { conversation } = await getOrCreateContactAndOpenConversation(
     organizationId,
     toPhone,
-    "Contato",
+    savedName || "Contato",
   );
 
-  const body = extractMessageText(msg.message) || "[mídia]";
+  const detectedMedia = detectInboundMedia(msg.message);
+  const type = detectedMedia.kind || "text";
+  let mediaUrl: string | null = null;
+  let mimeType: string | null = detectedMedia.mimeType || null;
+  let cloudinaryPublicId: string | null = null;
+
+  // No fluxo ao vivo também espelhamos a mídia enviada pelo celular. No histórico,
+  // baixar centenas de anexos antigos poderia derrubar a instância; ali preservamos
+  // o tipo e o texto/placeholder, sem resposta automática.
+  if (detectedMedia.kind && !options?.historical) {
+    const downloaded = await downloadInboundMedia(msg, sock);
+    if (downloaded) {
+      mimeType = downloaded.mimeType || mimeType;
+      try {
+        const uploaded = await uploadBase64ToCloudinary(
+          downloaded.base64,
+          mimeType,
+        );
+        mediaUrl = uploaded?.secure_url || null;
+        cloudinaryPublicId = uploaded?.public_id || null;
+      } catch (err) {
+        logger.warn(
+          { err, id: externalId, mediaKind: detectedMedia.kind },
+          "Failed to store outbound media sent from the WhatsApp device",
+        );
+      }
+    }
+  }
+
+  const body =
+    extractMessageText(msg.message) ||
+    (detectedMedia.kind === "image" ? "[imagem]" : detectedMedia.kind ? "[midia]" : "[sem_texto]");
 
   // Qualquer resposta escrita por uma pessoa encerra a triagem, inclusive quando vem
   // do próprio WhatsApp em vez do painel. Antes só cobríamos a conversa aberta pela
@@ -571,8 +724,14 @@ async function processOutboundMessageFromDevice(
     organizationId,
     conversation.id,
     body,
-    msg.key?.id || undefined,
-    skipStatusUpdate ? { skipStatusUpdate: true } : undefined,
+    externalId,
+    {
+      ...(skipStatusUpdate ? { skipStatusUpdate: true } : {}),
+      type,
+      mediaUrl,
+      mimeType,
+      cloudinaryPublicId,
+    },
   );
 
   let status: string;
@@ -589,6 +748,101 @@ async function processOutboundMessageFromDevice(
     id: conversation.id,
     status,
   });
+  diagnostics.outboundDeviceMessagesPersisted += 1;
+  diagnostics.lastOutboundDevicePersistedAt = new Date().toISOString();
+  logger.info(
+    {
+      conversationId: conversation.id,
+      eventId: externalId,
+      historical: Boolean(options?.historical),
+      mediaType: type,
+    },
+    "Synchronized outbound message sent from a WhatsApp device",
+  );
+}
+
+/**
+ * Persiste mensagens recebidas pelo histórico do aparelho sem executar triagem, IA,
+ * webhooks ou respostas automáticas. Esse caminho existe apenas para recompor no
+ * Inbox o que aconteceu enquanto a instância estava indisponível.
+ */
+async function processHistoricalInboundMessage(
+  sock: WASocket,
+  msg: WAMessage,
+) {
+  const remoteJid = String(msg.key?.remoteJid || "");
+  if (msg.key?.fromMe || !isDirectUserChat(remoteJid)) return;
+  if (shouldIgnoreInboundWhatsApp(msg)) return;
+
+  const organizationId = DEFAULT_ORGANIZATION_ID;
+  const externalId = String(msg.key?.id || "").trim() || undefined;
+  if (externalId) {
+    const existing = await findMessageByExternalId(organizationId, externalId);
+    if (existing) return;
+  }
+
+  const fromPhone = await resolveDeviceMessagePhone(sock, msg, { retry: false });
+  if (!fromPhone) {
+    logger.warn(
+      {
+        jidType: remoteJid.split("@")[1] || "unknown",
+        altJidType: String(msg.key?.remoteJidAlt || "").split("@")[1] || null,
+        eventId: externalId,
+      },
+      "Ignoring historical inbound WhatsApp message without a resolvable phone JID",
+    );
+    return;
+  }
+  if (await isContactBlocked(organizationId, fromPhone)) return;
+
+  const savedName = await findWhatsappDirectoryName(
+    organizationId,
+    fromPhone,
+  ).catch(() => null);
+  const { contact, conversation } = await getOrCreateContactAndOpenConversation(
+    organizationId,
+    fromPhone,
+    savedName || msg.pushName || "Cliente",
+  );
+  const detectedMedia = detectInboundMedia(msg.message);
+  const type = detectedMedia.kind || "text";
+  const content =
+    extractMessageText(msg.message) ||
+    (detectedMedia.kind === "image" ? "[imagem]" : detectedMedia.kind ? "[midia]" : "[sem_texto]");
+  const inbound = await addInboundMessage({
+    organizationId,
+    conversationId: String(conversation.id),
+    content,
+    type,
+    externalId,
+    mediaUrl: null,
+    mimeType: detectedMedia.mimeType || null,
+    cloudinaryPublicId: null,
+  });
+
+  emitRealtime(organizationId, "message.created", {
+    conversationId: conversation.id,
+    message: inbound,
+  });
+  emitRealtime(
+    organizationId,
+    conversation.isNew ? "conversation.created" : "conversation.updated",
+    { id: conversation.id, status: conversation.status },
+  );
+  scheduleWhatsappContactAvatarSync(
+    sock,
+    [{ phoneNumber: fromPhone, jid: phoneToChatId(fromPhone) }],
+    "messaging-history.set",
+  );
+  logger.info(
+    {
+      conversationId: conversation.id,
+      contactId: contact.id,
+      eventId: externalId,
+      mediaType: type,
+    },
+    "Synchronized historical inbound WhatsApp message",
+  );
 }
 
 async function handleInboundViaBotTriagem(
@@ -1187,6 +1441,11 @@ export function getWhatsappState() {
   return getState();
 }
 
+/** Diagnóstico autenticado e sem conteúdo/telefone para validar o espelhamento. */
+export function getWhatsappMessageSyncDiagnostics() {
+  return { ...messageSyncDiagnostics() };
+}
+
 export function getPublicWhatsappStatus() {
   const provider = process.env.WHATSAPP_PROVIDER || "twilio";
   const state = getState();
@@ -1286,6 +1545,7 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
       const { state: authState, saveCreds } = auth;
       global.__waAuthHandle = auth;
       const generation = nextWhatsappGeneration();
+      global.__waMessageSyncDiagnostics = newMessageSyncDiagnostics();
       state.authStore = auth.store;
       state.sessionPersistent = auth.persistent;
       state.authPersistenceHealthy = true;
@@ -1304,6 +1564,9 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
         // enquanto o nó de registro caía no fallback CHROME — e o código era recusado.
         // O nome da sessão identifica a sessão persistida, não o navegador.
         browser: Browsers.ubuntu("Chrome"),
+        // Necessário para que envios feitos por esta sessão também produzam eventos
+        // idempotentes. Envios de outros dispositivos chegam pelo mesmo pipeline.
+        emitOwnEvents: true,
         markOnlineOnConnect: false,
         // A agenda do aparelho chega pelo app state, e há indício de que a carga
         // completa só vem com o history sync ligado. Fica ajustável por env para
@@ -1377,6 +1640,7 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
           const digits = rawId.split(":")[0]?.split("@")[0] || "";
           state.connectedPhone = digits ? `+${digits}` : null;
           clientReadyAt = Math.floor(Date.now() / 1000);
+          messageSyncDiagnostics().connectedAt = new Date().toISOString();
         }
 
         if (connection === "close") {
@@ -1490,6 +1754,8 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
         }
       });
 
+      let historyMessagesQueued = 0;
+
       // Agenda da loja: o pushName é o nome que o próprio cliente escolheu no perfil,
       // enquanto estes eventos trazem o nome que a loja salvou — o que identifica um
       // cliente recorrente no atendimento.
@@ -1573,9 +1839,70 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
         });
       };
 
-      sock.ev.on("messaging-history.set", ({ contacts }) => {
+      sock.ev.on("messaging-history.set", (history) => {
         if (generation !== currentWhatsappGeneration()) return;
-        syncDirectory("messaging-history.set", contacts || []);
+        syncDirectory("messaging-history.set", history.contacts || []);
+        const diagnostics = messageSyncDiagnostics();
+        diagnostics.historyEventsReceived += 1;
+        diagnostics.historyMessagesReceived += history.messages?.length || 0;
+
+        const remaining = Math.max(
+          0,
+          WA_HISTORY_MESSAGE_SYNC_MAX_MESSAGES - historyMessagesQueued,
+        );
+        const selected = WA_HISTORY_MESSAGE_SYNC_ENABLED
+          ? selectRecentWhatsappHistoryMessages(history.messages || [], {
+              nowSeconds: Math.floor(Date.now() / 1000),
+              maxAgeSeconds: WA_HISTORY_MESSAGE_SYNC_MAX_AGE_SECONDS,
+              maxMessages: remaining,
+            })
+          : [];
+        historyMessagesQueued += selected.length;
+        diagnostics.historyMessagesQueued += selected.length;
+
+        logger.info(
+          {
+            receivedMessages: history.messages?.length || 0,
+            queuedMessages: selected.length,
+            queuedTotal: historyMessagesQueued,
+            maxMessages: WA_HISTORY_MESSAGE_SYNC_MAX_MESSAGES,
+            maxAgeSeconds: WA_HISTORY_MESSAGE_SYNC_MAX_AGE_SECONDS,
+            syncEnabled: WA_HISTORY_MESSAGE_SYNC_ENABLED,
+            syncType: history.syncType ?? null,
+            isLatest: history.isLatest ?? null,
+            progress: history.progress ?? null,
+            lidPnMappings: history.lidPnMappings?.length || 0,
+          },
+          "WhatsApp message history received",
+        );
+
+        for (const msg of selected) {
+          whatsappMessageProcessingTail = whatsappMessageProcessingTail
+            .then(async () => {
+              if (generation !== currentWhatsappGeneration()) return;
+              if (msg.key?.fromMe) {
+                await processOutboundMessageFromDevice(sock, msg, {
+                  historical: true,
+                });
+                return;
+              }
+              await processHistoricalInboundMessage(sock, msg);
+            })
+            .catch((error) => {
+              const failedDiagnostics = messageSyncDiagnostics();
+              failedDiagnostics.processingFailures += 1;
+              failedDiagnostics.lastProcessingFailureAt = new Date().toISOString();
+              logger.error(
+                {
+                  err: error,
+                  direction: msg.key?.fromMe ? "outbound" : "inbound",
+                  historical: true,
+                  eventId: msg.key?.id,
+                },
+                "Failed to synchronize WhatsApp history message",
+              );
+            });
+        }
       });
       sock.ev.on("contacts.upsert", (contacts) => {
         if (generation !== currentWhatsappGeneration()) return;
@@ -1588,6 +1915,11 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
 
       sock.ev.on("messages.upsert", ({ messages, type }) => {
         if (type !== "notify" && type !== "append") return;
+        if (generation !== currentWhatsappGeneration()) return;
+        const diagnostics = messageSyncDiagnostics();
+        diagnostics.lastUpsertAt = new Date().toISOString();
+        diagnostics.lastUpsertType = type;
+        diagnostics.upsertMessagesReceived += messages.length;
         for (const msg of messages) {
           if (!msg.message) continue;
           whatsappMessageProcessingTail = whatsappMessageProcessingTail
@@ -1599,6 +1931,9 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
               }
             })
             .catch((error) => {
+              const failedDiagnostics = messageSyncDiagnostics();
+              failedDiagnostics.processingFailures += 1;
+              failedDiagnostics.lastProcessingFailureAt = new Date().toISOString();
               logger.error(
                 { err: error, direction: msg.key?.fromMe ? "outbound" : "inbound" },
                 "Failed to process queued WhatsApp message",

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireMenuPermission, requireSession } from "@/lib/api";
-import { getWhatsappState } from "@/lib/whatsapp-client";
+import {
+  getWhatsappMessageSyncDiagnostics,
+  getWhatsappState,
+} from "@/lib/whatsapp-client";
 
 export async function GET() {
   const auth = await requireSession();
@@ -11,5 +14,6 @@ export async function GET() {
   return NextResponse.json({
     provider: process.env.WHATSAPP_PROVIDER || "twilio",
     state: getWhatsappState(),
+    messageSync: getWhatsappMessageSyncDiagnostics(),
   });
 }

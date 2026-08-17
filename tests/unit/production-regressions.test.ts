@@ -299,6 +299,47 @@ test("resposta humana pelo proprio WhatsApp desliga o bot", async () => {
   assert.doesNotMatch(outbound, /if \(conversation\.isNew && !fromBot\) \{/);
 });
 
+test("conversas feitas no aplicativo do WhatsApp são espelhadas no Inbox", async () => {
+  const [client, statusRoute] = await Promise.all([
+    read("lib/whatsapp-client.ts"),
+    read("app/api/whatsapp/status/route.ts"),
+  ]);
+  const outbound = client.slice(
+    client.indexOf("async function processOutboundMessageFromDevice"),
+    client.indexOf("async function handleInboundViaBotTriagem"),
+  );
+  const history = client.slice(
+    client.indexOf('sock.ev.on("messaging-history.set"'),
+    client.indexOf('sock.ev.on("contacts.upsert"'),
+  );
+  const historicalInbound = client.slice(
+    client.indexOf("async function processHistoricalInboundMessage"),
+    client.indexOf("async function handleInboundViaBotTriagem"),
+  );
+
+  // O eco do próprio painel e lotes repetidos do histórico não podem duplicar a
+  // conversa ou a mensagem.
+  assert.match(outbound, /findMessageByExternalId\(organizationId, externalId\)/);
+  assert.match(outbound, /resolveDeviceMessagePhone\(sock, msg,/);
+
+  // O Baileys entrega mensagens recuperadas em um evento separado do upsert ao
+  // vivo. Entrada histórica é persistida sem acionar respostas atrasadas; saída é
+  // processada como mensagem feita em outro dispositivo.
+  assert.match(history, /history\.messages \|\| \[\]/);
+  assert.match(history, /selectRecentWhatsappHistoryMessages/);
+  assert.match(history, /historical: true/);
+  assert.match(history, /processHistoricalInboundMessage\(sock, msg\)/);
+  assert.match(historicalInbound, /addInboundMessage/);
+  assert.doesNotMatch(historicalInbound, /invokeTicketUpsertLocal/);
+  assert.doesNotMatch(historicalInbound, /rateLimitedSend/);
+
+  // O endpoint autenticado permite distinguir evento não recebido, JID sem
+  // resolução e falha de persistência sem expor texto ou telefone do cliente.
+  assert.match(statusRoute, /getWhatsappMessageSyncDiagnostics/);
+  assert.match(client, /outboundDeviceMessagesUnresolved/);
+  assert.match(client, /lastOutboundDevicePersistedAt/);
+});
+
 test("envio automatico desiste se um atendente assumiu no meio do caminho", async () => {
   const route = await read("app/api/webhooks/n8n/ticket-upsert/route.ts");
   const send = route.slice(route.indexOf("SEND REPLY VIA WHATSAPP"));
