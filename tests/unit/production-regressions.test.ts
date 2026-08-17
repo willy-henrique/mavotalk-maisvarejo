@@ -50,12 +50,14 @@ test("visualizador de PDF usa mensagem vinculada ao tenant e não aceita URL do 
   assert.match(inbox, /backendRouteNotDeployed/);
   assert.match(inbox, /url\.hostname === 'res\.cloudinary\.com'/);
   assert.match(inbox, /validatedPdfBlob/);
-  assert.match(inbox, /Abrir em nova aba/);
+  assert.match(inbox, /window\.open\('', '_blank'\)/);
+  assert.match(inbox, /pdfTab\.location\.replace\(url\)/);
+  assert.match(inbox, /O navegador bloqueou a nova aba/);
   assert.match(inbox, /Baixar PDF:/);
-  assert.match(inbox, /<iframe/);
+  assert.doesNotMatch(inbox, /<iframe/);
   assert.doesNotMatch(inbox, /<object/);
   assert.match(inbox, /application\/pdf,\.pdf/);
-  assert.match(indexHtml, /frame-src 'self' blob:/);
+  assert.doesNotMatch(indexHtml, /frame-src/);
   assert.match(indexHtml, /name="mobile-web-app-capable" content="yes"/);
 });
 

@@ -129,14 +129,13 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [openingPdfId, setOpeningPdfId] = useState<string | null>(null);
   const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
-  const [pdfViewer, setPdfViewer] = useState<{ url: string; title: string } | null>(null);
   const [typingAgent, setTypingAgent] = useState<{ name: string } | null>(null);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const signatureTouchedRef = useRef(false);
-  const pdfObjectUrlRef = useRef<string | null>(null);
+  const pdfObjectUrlsRef = useRef<Set<string>>(new Set());
 
   const toggleSignature = () => {
     signatureTouchedRef.current = true;
@@ -372,12 +371,6 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     }
   };
 
-  const closePdfViewer = () => {
-    if (pdfObjectUrlRef.current) URL.revokeObjectURL(pdfObjectUrlRef.current);
-    pdfObjectUrlRef.current = null;
-    setPdfViewer(null);
-  };
-
   const fetchPdfBlob = async (message: ApiMessage, download = false) => {
     if (!selectedId) throw new Error('Selecione o atendimento novamente.');
     const params = new URLSearchParams({
@@ -411,15 +404,34 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
 
   const openPdf = async (message: ApiMessage) => {
     if (!selectedId || !message.id || openingPdfId || downloadingPdfId) return;
+    // Abrir a aba durante o clique evita que o bloqueador de pop-ups recuse a
+    // navegação depois do fetch assíncrono autenticado.
+    const pdfTab = window.open('', '_blank');
+    if (!pdfTab) {
+      setSendError('O navegador bloqueou a nova aba. Permita pop-ups ou use “Baixar”.');
+      return;
+    }
+    pdfTab.opener = null;
+    pdfTab.document.title = 'Carregando PDF…';
+    const loadingMessage = pdfTab.document.createElement('p');
+    loadingMessage.textContent = 'Carregando PDF…';
+    loadingMessage.style.fontFamily = 'sans-serif';
+    loadingMessage.style.padding = '24px';
+    pdfTab.document.body.appendChild(loadingMessage);
+
     setOpeningPdfId(message.id);
     setSendError('');
     try {
       const blob = await fetchPdfBlob(message);
-      if (pdfObjectUrlRef.current) URL.revokeObjectURL(pdfObjectUrlRef.current);
       const url = URL.createObjectURL(blob);
-      pdfObjectUrlRef.current = url;
-      setPdfViewer({ url, title: documentTitle(message) });
+      pdfObjectUrlsRef.current.add(url);
+      pdfTab.location.replace(url);
+      window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+        pdfObjectUrlsRef.current.delete(url);
+      }, 5 * 60_000);
     } catch (error) {
+      pdfTab.close();
       setSendError(error instanceof Error ? error.message : 'Não foi possível abrir o PDF.');
     } finally {
       setOpeningPdfId(null);
@@ -448,7 +460,8 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   };
 
   useEffect(() => () => {
-    if (pdfObjectUrlRef.current) URL.revokeObjectURL(pdfObjectUrlRef.current);
+    for (const url of pdfObjectUrlsRef.current) URL.revokeObjectURL(url);
+    pdfObjectUrlsRef.current.clear();
   }, []);
 
   const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1278,37 +1291,6 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
             onClose={() => setNewChatOpen(false)}
             onStarted={(conversationId) => { void fetchConversations(true); setSelectedId(conversationId); }}
           />
-        )}
-
-        {pdfViewer && (
-          <Dialog
-            title={pdfViewer.title}
-            description="Visualização segura do PDF recebido ou enviado neste atendimento."
-            size="wide"
-            onClose={closePdfViewer}
-          >
-            <div className="p-3 sm:p-5">
-              <iframe
-                src={pdfViewer.url}
-                className="h-[65vh] min-h-[420px] w-full rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800"
-                title={`Visualização do PDF ${pdfViewer.title}`}
-              />
-              <div className="mt-3 flex flex-wrap justify-end gap-2">
-                <button type="button" onClick={closePdfViewer} className="mavo-button-secondary">Fechar</button>
-                <a
-                  href={pdfViewer.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="mavo-button-primary"
-                >
-                  Abrir em nova aba
-                </a>
-                <a href={pdfViewer.url} download="documento.pdf" className="mavo-button-secondary">
-                  Baixar PDF
-                </a>
-              </div>
-            </div>
-          </Dialog>
         )}
 
         {linkModalOpen && (
