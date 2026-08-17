@@ -16,6 +16,10 @@ import {
 import { getOrganizationTimeZone } from "@/lib/organization-timezone";
 import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
 import { getSupermarketSettings } from "@/lib/supermarket-settings";
+import {
+  buildAgentWhatsappMessage,
+  resolveAgentSignature,
+} from "@/lib/agent-message";
 import { logger } from "@/lib/logger";
 
 export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
@@ -69,13 +73,15 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const { agentSignatureEnabled } = await getSupermarketSettings(
     auth.session.organizationId,
   );
-  const useSignature =
-    typeof parsed.data.withSignature === "boolean"
-      ? parsed.data.withSignature
-      : agentSignatureEnabled;
-  const whatsappBody = useSignature
-    ? `${authorName}:\n${resolvedContent}`
-    : resolvedContent;
+  const useSignature = resolveAgentSignature(
+    parsed.data.withSignature,
+    agentSignatureEnabled,
+  );
+  const whatsappBody = buildAgentWhatsappMessage(
+    resolvedContent,
+    authorName,
+    useSignature,
+  );
 
   try {
     if (provider === "unofficial") {
@@ -144,5 +150,5 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     },
   });
 
-  return NextResponse.json({ message }, { status: 201 });
+  return NextResponse.json({ message, signatureApplied: useSignature }, { status: 201 });
 }

@@ -82,6 +82,12 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const signatureTouchedRef = useRef(false);
+
+  const toggleSignature = () => {
+    signatureTouchedRef.current = true;
+    setSignatureOn((value) => !value);
+  };
 
   const selectConversation = useCallback((id: string) => {
     setSelectedId(id);
@@ -320,10 +326,9 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const base = getApiBaseUrl();
-      const res = await fetch(`${base}/api/conversations/${selectedId}/messages/upload`, {
+      formData.append('withSignature', String(signatureOn));
+      const res = await apiFetch(`/api/conversations/${selectedId}/messages/upload`, {
         method: 'POST',
-        credentials: 'include',
         body: formData,
       });
       if (res.ok) {
@@ -411,7 +416,12 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     apiFetch('/api/settings/agent-signature')
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { agentSignatureEnabled?: boolean } | null) => {
-        if (active && data && typeof data.agentSignatureEnabled === 'boolean') {
+        if (
+          active &&
+          !signatureTouchedRef.current &&
+          data &&
+          typeof data.agentSignatureEnabled === 'boolean'
+        ) {
           setSignatureOn(data.agentSignatureEnabled);
         }
       })
@@ -989,7 +999,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                       deste atendente; o padrão continua vindo das configurações da loja. */}
                   <button
                     type="button"
-                    onClick={() => setSignatureOn((value) => !value)}
+                    onClick={toggleSignature}
                     disabled={sending}
                     role="switch"
                     aria-checked={signatureOn}

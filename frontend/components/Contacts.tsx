@@ -11,6 +11,7 @@ type ApiContact = {
   id: string;
   name: string;
   phoneNumber: string;
+  avatarUrl: string | null;
   lastInteraction: string | null;
   status: 'ativo' | 'encerrado';
   blocked: boolean;
@@ -29,6 +30,31 @@ const ContactStatusBadge: React.FC<{ contact: ApiContact; className?: string }> 
     >
       {contact.blocked ? 'Bloqueado' : neverTalked ? 'Sem conversa' : contact.status}
     </StatusBadge>
+  );
+};
+
+const ContactAvatar: React.FC<{ contact: ApiContact }> = ({ contact }) => {
+  const initials = (contact.name || 'Contato')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'C';
+
+  return (
+    <span aria-hidden="true" className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-100 text-xs font-black text-blue-700 dark:bg-blue-950/60 dark:text-blue-200">
+      {initials}
+      {contact.avatarUrl && (
+        <img
+          src={contact.avatarUrl}
+          alt=""
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          className="absolute inset-0 h-full w-full object-cover"
+          onError={(event) => { event.currentTarget.style.display = 'none'; }}
+        />
+      )}
+    </span>
   );
 };
 
@@ -100,16 +126,26 @@ const Contacts: React.FC = () => {
     setNotice('');
     setError('');
     try {
-      const result = await apiPost<{ synced: number; added: number; pending: boolean }>(
+      const result = await apiPost<{
+        synced: number;
+        added: number;
+        pending: boolean;
+        avatars?: { requested: number; found: number; saved: number; pending: number };
+      }>(
         '/api/contacts/sync-whatsapp',
       );
       await fetchContacts();
       // O aparelho pode continuar enviando dados depois da resposta; prometer um
       // total definitivo faria o operador achar que faltou contato.
+      const avatarNotice = result.avatars?.pending
+        ? ' As fotos de perfil continuam sendo carregadas em segundo plano.'
+        : result.avatars?.requested
+          ? ` Fotos de perfil disponíveis verificadas: ${result.avatars.found}.`
+          : '';
       setNotice(
         result.pending
-          ? 'Sincronização solicitada. Os contatos aparecem à medida que o celular envia — atualize a lista em instantes.'
-          : `Agenda sincronizada: ${result.synced} número${result.synced === 1 ? '' : 's'} do celular${result.added ? `, ${result.added} novo${result.added === 1 ? '' : 's'}` : ''}.`,
+          ? `Sincronização solicitada. Os contatos aparecem à medida que o celular envia — atualize a lista em instantes.${avatarNotice}`
+          : `Agenda sincronizada: ${result.synced} número${result.synced === 1 ? '' : 's'} do celular${result.added ? `, ${result.added} novo${result.added === 1 ? '' : 's'}` : ''}.${avatarNotice}`,
       );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Não foi possível sincronizar os contatos.');
@@ -186,7 +222,7 @@ const Contacts: React.FC = () => {
             <tbody>
               {contacts.map((contact) => (
                 <tr key={contact.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-800/50">
-                  <td className="px-5 py-4 font-bold text-slate-800 dark:text-slate-100"><span className="block">{contact.name || 'Sem nome'}</span>{contact.internalNote && <span className="mt-1 block max-w-[240px] truncate text-xs font-normal text-slate-500">Nota: {contact.internalNote}</span>}</td>
+                  <td className="px-5 py-4 font-bold text-slate-800 dark:text-slate-100"><div className="flex items-center gap-3"><ContactAvatar contact={contact} /><div className="min-w-0"><span className="block truncate">{contact.name || 'Sem nome'}</span>{contact.internalNote && <span className="mt-1 block max-w-[240px] truncate text-xs font-normal text-slate-500">Nota: {contact.internalNote}</span>}</div></div></td>
                   <td className="px-5 py-4 font-mono text-xs text-slate-600 dark:text-slate-300">{contact.phoneNumber || '—'}</td>
                   <td className="px-5 py-4 text-xs text-slate-500">{contact.lastInteraction ? new Date(contact.lastInteraction).toLocaleString('pt-BR') : 'Sem histórico'}</td>
                   <td className="px-5 py-4"><ContactStatusBadge contact={contact} /></td>
@@ -195,7 +231,7 @@ const Contacts: React.FC = () => {
               ))}
             </tbody>
           </table>
-        </div><div className="grid gap-3 md:hidden">{contacts.map((contact) => <article key={contact.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{contact.name || 'Sem nome'}</h3><p className="mt-1 font-mono text-xs text-slate-600 dark:text-slate-300">{contact.phoneNumber || '—'}</p></div><ContactStatusBadge contact={contact} className="shrink-0" /></div>{contact.internalNote && <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-600 dark:bg-slate-800/70 dark:text-slate-300">Nota: {contact.internalNote}</p>}<p className="text-xs text-slate-500">{contact.lastInteraction ? `Última interação: ${new Date(contact.lastInteraction).toLocaleString('pt-BR')}` : 'Sem histórico de atendimento'}</p>{contactActions(contact, true)}</article>)}</div></>
+        </div><div className="grid gap-3 md:hidden">{contacts.map((contact) => <article key={contact.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><ContactAvatar contact={contact} /><div className="min-w-0"><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{contact.name || 'Sem nome'}</h3><p className="mt-1 font-mono text-xs text-slate-600 dark:text-slate-300">{contact.phoneNumber || '—'}</p></div></div><ContactStatusBadge contact={contact} className="shrink-0" /></div>{contact.internalNote && <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-600 dark:bg-slate-800/70 dark:text-slate-300">Nota: {contact.internalNote}</p>}<p className="text-xs text-slate-500">{contact.lastInteraction ? `Última interação: ${new Date(contact.lastInteraction).toLocaleString('pt-BR')}` : 'Sem histórico de atendimento'}</p>{contactActions(contact, true)}</article>)}</div></>
       )}
       {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="contatos" onPageChange={setPage} />}
 

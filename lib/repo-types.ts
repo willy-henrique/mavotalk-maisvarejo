@@ -67,6 +67,7 @@ export type ListContactItem = {
   id: string;
   name: string;
   phoneNumber: string;
+  avatarUrl: string | null;
   lastMessage: string | null;
   lastInteraction: string | null;
   status: "ativo" | "encerrado";

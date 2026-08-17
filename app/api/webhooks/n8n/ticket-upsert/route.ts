@@ -21,7 +21,7 @@ import { analyzeImageForSupport } from "@/lib/image-vision";
 import { logger } from "@/lib/logger";
 import { decideSupermarketBot } from "@/lib/supermarket-bot";
 import { getSupermarketBotConfigForOrganization } from "@/lib/supermarket-settings";
-import { getOrderForCustomer, listValidPromotions } from "@/lib/commerce";
+import { listValidPromotions } from "@/lib/commerce";
 import { deliverInOrder, formatBusinessHoursResponse, formatPromotionResponse, type BotOutboundMessage } from "@/lib/queue-automation-runtime";
 import { getPublishedQueueConfiguration } from "@/lib/queue-automation";
 import { applySupermarketQueuePreset } from "@/lib/supermarket-setup";
@@ -32,6 +32,7 @@ import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
 import { sendTriageMessageToWhatsApp } from "@/lib/whatsapp-client";
 import { routeBusinessWhatsappMessage } from "@/lib/business-access/business-whatsapp-router";
 import { requestIdFrom } from "@/lib/observability";
+import { statusAfterInboundMessage } from "@/lib/conversation-state";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 
 const ticketUpsertSchema = z.object({
@@ -605,6 +606,9 @@ export async function POST(request: Request) {
     }
   }
 
+  const humanHandling = conversation.status === "em_atendimento";
+  const inboundConversationStatus = statusAfterInboundMessage(conversation.status);
+
   // ── Persist inbound message ──────────────────────────────────────────
   const inbound = await addInboundMessage({
     organizationId,
@@ -622,11 +626,6 @@ export async function POST(request: Request) {
   emitRealtime(organizationId, "message.created", { conversationId: String(conversation.id), message: inbound });
   const conversationRealtimeEvent = conversation.isNew ? "conversation.created" : "conversation.updated";
   events.push(conversationRealtimeEvent);
-  emitRealtime(organizationId, conversationRealtimeEvent, {
-    id: String(conversation.id),
-    status: "aguardando",
-    queueId: payload.queue_id || null,
-  });
 
   await createAuditLog(
     organizationId,
@@ -698,7 +697,7 @@ export async function POST(request: Request) {
   let triageCompleted = Boolean(conversation.triageCompleted);
   let menuAttempts = Number(conversation.menuAttempts || 0);
   let queueId: string | null = conversation.queueId ? String(conversation.queueId) : null;
-  let conversationStatus: DecisionPayload["conversationStatus"] = "aguardando";
+  let conversationStatus: DecisionPayload["conversationStatus"] = inboundConversationStatus;
   let decisionReason = "inbound_processado_com_regras_de_identidade_triagem_e_seguranca";
 
   const currentQueue = queues.find(
@@ -729,7 +728,7 @@ export async function POST(request: Request) {
         triageCompleted: Boolean(conversation.triageCompleted),
         // Status em_atendimento significa que alguém puxou o chamado. O bot precisa
         // sair de cena, senão reenvia o menu a cada mensagem por cima do atendente.
-        humanHandled: conversation.status === "em_atendimento",
+        humanHandled: humanHandling,
         // Alimenta o teto de reexibições: sem isso o menu voltava a cada mensagem que
         // não casasse com uma opção, sem fim.
         menuAttempts: Number(conversation.menuAttempts || 0),
@@ -752,7 +751,17 @@ export async function POST(request: Request) {
       })
     : null;
 
-  if (supermarketDecision) {
+  if (humanHandling) {
+    // Assumir o chamado é uma transição monotônica: mensagem nova atualiza o chat,
+    // mas não devolve o ticket à fila nem reativa qualquer decisão automática.
+    triageCompleted = true;
+    conversationStatus = "em_atendimento";
+    action = "human_handoff";
+    decisionReason = "human_already_handling_conversation";
+    await updateConversationById(organizationId, String(conversation.id), {
+      triageCompleted: true,
+    });
+  } else if (supermarketDecision) {
     const targetQueue = supermarketDecision.queueId
       ? queues.find((item) => String(item.id) === supermarketDecision.queueId)
       : supermarketDecision.queueMenuOption
@@ -790,8 +799,8 @@ export async function POST(request: Request) {
       queueId,
       triageCompleted,
       menuAttempts,
-      status: "aguardando",
-    });
+      status: conversationStatus,
+    }, { preserveActiveStatus: true });
 
     shouldReply = Boolean(supermarketDecision.replyText);
     replyText = supermarketDecision.replyText;
@@ -900,8 +909,8 @@ export async function POST(request: Request) {
           queueId: queueId || undefined,
           triageCompleted,
           menuAttempts,
-          status: "aguardando",
-        });
+          status: conversationStatus,
+        }, { preserveActiveStatus: true });
 
         shouldReply = true;
         replyText = orch.reply_text;
@@ -925,8 +934,8 @@ export async function POST(request: Request) {
       await updateConversationById(organizationId, String(conversation.id), {
         queueId: queueId || undefined,
         triageCompleted: nextTriageCompleted,
-        status: "aguardando",
-      });
+        status: conversationStatus,
+      }, { preserveActiveStatus: true });
 
       const aiProvidedReply = Boolean(aiReplyTextRaw && aiReplyTextRaw.trim());
       const triageGuardKey = `${organizationId}|${normalizedPhone}|${String(conversation.id)}`;
@@ -956,9 +965,41 @@ export async function POST(request: Request) {
       }
     }
   } else if (conversation.status === "encerrado") {
-    await updateConversationById(organizationId, String(conversation.id), { status: "aguardando" });
+    await updateConversationById(
+      organizationId,
+      String(conversation.id),
+      { status: conversationStatus },
+      { preserveActiveStatus: true },
+    );
     conversationStatus = "aguardando";
   }
+
+  // Confirma o estado persistido depois das decisões. Além de manter a resposta da
+  // API correta, isto cobre o caso em que o atendente clicou em "Puxar" enquanto o
+  // webhook ainda processava a mensagem.
+  const persistedConversation = await getConversation(
+    organizationId,
+    String(conversation.id),
+  );
+  if (persistedConversation) {
+    conversationStatus = persistedConversation.status;
+    triageCompleted = persistedConversation.triageCompleted;
+    queueId = persistedConversation.queueId
+      ? String(persistedConversation.queueId)
+      : null;
+    if (persistedConversation.status === "em_atendimento") {
+      shouldReply = false;
+      replyDelivered = null;
+      action = "human_handoff";
+      decisionReason = "human_already_handling_conversation";
+    }
+  }
+
+  emitRealtime(organizationId, conversationRealtimeEvent, {
+    id: String(conversation.id),
+    status: conversationStatus,
+    queueId,
+  });
 
   // ── SEND REPLY VIA WHATSAPP ────────────────────────────────────────
   const replyPhone = String(conversation.contactPhone || normalizedPhone);
@@ -973,9 +1014,16 @@ export async function POST(request: Request) {
       (latest!.status === "em_atendimento" ||
         (Boolean(latest!.triageCompleted) && !conversation.triageCompleted));
 
+    if (latest) {
+      conversationStatus = latest.status;
+      triageCompleted = latest.triageCompleted;
+      queueId = latest.queueId ? String(latest.queueId) : null;
+    }
+
     if (humanTookOver) {
       shouldReply = false;
       replyDelivered = null;
+      action = "human_handoff";
       decisionReason = "atendente_assumiu_antes_do_envio_automatico";
       logger.info(
         { conversationId: conversation.id, status: latest!.status },

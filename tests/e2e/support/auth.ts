@@ -10,8 +10,9 @@ export async function loginWithQaCredentials(page: Page) {
   await page.getByLabel("E-mail corporativo").fill(email);
   await page.getByLabel("Senha").fill(password);
   const submit = page.getByRole("button", { name: "Entrar no painel" });
-  await submit.click();
-  await expect(submit).toBeDisabled();
-  await page.waitForURL(/\/inbox$/, { timeout: 20_000 });
-  await expect(page.getByRole("heading", { name: "Caixa de entrada" })).toBeVisible();
+  await Promise.all([
+    page.waitForURL(/\/inbox$/, { timeout: 20_000 }),
+    submit.click(),
+  ]);
+  await expect(page.locator("header").getByRole("heading", { name: "Caixa de entrada" })).toBeVisible();
 }

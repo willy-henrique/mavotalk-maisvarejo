@@ -24,7 +24,7 @@ import {
   isContactBlocked,
   updateConversationById,
   updateTicketByConversation,
-  updateContactAvatar,
+  updateWhatsappContactAvatarsByPhone,
   recordSatisfactionRatingByPhone,
   upsertWhatsappDirectoryEntries,
   findWhatsappDirectoryName,
@@ -62,6 +62,11 @@ import {
   type WhatsappDiagnosticCode,
   type WhatsappInitializationStage,
 } from "@/lib/whatsapp-diagnostics";
+import {
+  syncWhatsappContactAvatars,
+  type WhatsappAvatarSyncResult,
+  type WhatsappAvatarTarget,
+} from "@/lib/whatsapp-contact-avatars";
 
 type WhatsappStatus = "idle" | "initializing" | "qr" | "ready" | "disconnected" | "error";
 
@@ -227,6 +232,112 @@ function getState(): WhatsappState {
 function phoneToChatId(phone: string) {
   const digits = phone.replace("whatsapp:", "").replace(/\D/g, "");
   return `${digits}@s.whatsapp.net`;
+}
+
+const WA_CONTACT_AVATAR_CONCURRENCY = Math.max(
+  1,
+  Math.min(6, Number(process.env.WA_CONTACT_AVATAR_CONCURRENCY) || 3),
+);
+const WA_CONTACT_AVATAR_TIMEOUT_MS = Math.max(
+  500,
+  Math.min(30_000, Number(process.env.WA_CONTACT_AVATAR_TIMEOUT_MS) || 6_000),
+);
+const WA_CONTACT_AVATAR_REFRESH_MS = Math.max(
+  60_000,
+  Number(process.env.WA_CONTACT_AVATAR_REFRESH_MS) || 24 * 60 * 60 * 1000,
+);
+
+const queuedAvatarPhones = new Set<string>();
+const recentlySyncedAvatarAt = new Map<string, number>();
+let contactAvatarSyncTail: Promise<void> = Promise.resolve();
+let lastContactAvatarSync: WhatsappAvatarSyncResult & { completedAt: string | null } = {
+  requested: 0,
+  found: 0,
+  saved: 0,
+  unavailable: 0,
+  completedAt: null,
+};
+
+function scheduleWhatsappContactAvatarSync(
+  sock: WASocket,
+  targets: WhatsappAvatarTarget[],
+  source: string,
+) {
+  const now = Date.now();
+  const unique = new Map<string, WhatsappAvatarTarget>();
+  for (const target of targets) {
+    const lastAttempt = recentlySyncedAvatarAt.get(target.phoneNumber) || 0;
+    if (
+      queuedAvatarPhones.has(target.phoneNumber) ||
+      now - lastAttempt < WA_CONTACT_AVATAR_REFRESH_MS
+    ) {
+      continue;
+    }
+    unique.set(target.phoneNumber, target);
+  }
+  const scheduled = [...unique.values()];
+  if (!scheduled.length) return;
+  for (const target of scheduled) queuedAvatarPhones.add(target.phoneNumber);
+
+  const run = async () => {
+    let completed = false;
+    try {
+      const result = await syncWhatsappContactAvatars({
+        targets: scheduled,
+        profilePictureUrl: (jid) => sock.profilePictureUrl(jid, "image"),
+        persist: (updates) =>
+          updateWhatsappContactAvatarsByPhone(DEFAULT_ORGANIZATION_ID, updates),
+        concurrency: WA_CONTACT_AVATAR_CONCURRENCY,
+        timeoutMs: WA_CONTACT_AVATAR_TIMEOUT_MS,
+      });
+      lastContactAvatarSync = {
+        ...result,
+        completedAt: new Date().toISOString(),
+      };
+      completed = true;
+      logger.info({ source, ...result }, "WhatsApp contact avatars synchronized");
+    } catch (err) {
+      logger.warn({ err, source, requested: scheduled.length }, "Failed to sync WhatsApp contact avatars");
+    } finally {
+      const attemptedAt = Date.now();
+      for (const target of scheduled) {
+        queuedAvatarPhones.delete(target.phoneNumber);
+        // Falha de banco/rede deve poder ser tentada novamente no próximo evento.
+        if (completed) recentlySyncedAvatarAt.set(target.phoneNumber, attemptedAt);
+      }
+      if (recentlySyncedAvatarAt.size > 20_000) {
+        const cutoff = attemptedAt - WA_CONTACT_AVATAR_REFRESH_MS;
+        for (const [phoneNumber, syncedAt] of recentlySyncedAvatarAt) {
+          if (syncedAt < cutoff) recentlySyncedAvatarAt.delete(phoneNumber);
+        }
+      }
+    }
+  };
+
+  contactAvatarSyncTail = contactAvatarSyncTail.then(run, run);
+}
+
+export function getWhatsappContactAvatarSyncStatus() {
+  return {
+    ...lastContactAvatarSync,
+    pending: queuedAvatarPhones.size,
+  };
+}
+
+export async function waitForWhatsappContactAvatarSync(timeoutMs = 3_000) {
+  const currentBatch = contactAvatarSyncTail;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      currentBatch,
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, Math.max(0, timeoutMs));
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+  return getWhatsappContactAvatarSyncStatus();
 }
 
 function isDirectUserChat(jid: string): boolean {
@@ -566,6 +677,14 @@ async function handleInboundViaBotTriagem(
     return;
   }
 
+  // O ticket-upsert já criou/resolveu o contato. Buscar a foto depois dele evita
+  // perder o UPDATE no modo de triagem usado atualmente no Render.
+  scheduleWhatsappContactAvatarSync(
+    sock,
+    [{ phoneNumber: fromPhone, jid: phoneToChatId(fromPhone) }],
+    "messages.upsert",
+  );
+
   const decision = result.data as {
     shouldReply?: unknown;
     replyText?: unknown;
@@ -691,14 +810,6 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
   const savedName = await findWhatsappDirectoryName(organizationId, fromPhone).catch(() => null);
   const profileName = savedName || (msg.pushName || "").trim() || "Cliente";
 
-  let avatarUrl: string | null = null;
-  try {
-    const pic = await sock.profilePictureUrl(remoteJid, "image");
-    if (pic) avatarUrl = String(pic);
-  } catch {
-    // sem foto de perfil ou sem permissão — ignora
-  }
-
   const businessRouting = await routeBusinessWhatsappMessage({
     organizationId,
     phone: fromPhone,
@@ -723,11 +834,11 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
     profileName,
   );
 
-  if (avatarUrl) {
-    void updateContactAvatar(organizationId, contact.id, avatarUrl).catch((err) => {
-      logger.warn({ err, contactId: contact.id }, "Failed to update contact avatar");
-    });
-  }
+  scheduleWhatsappContactAvatarSync(
+    sock,
+    [{ phoneNumber: fromPhone, jid: phoneToChatId(fromPhone) }],
+    "messages.upsert",
+  );
 
   let mediaUrl: string | null = null;
   let mimeType: string | null = null;
@@ -1366,9 +1477,13 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
               withoutName += 1;
               return null;
             }
-            return { phoneNumber: phone, displayName };
+            return {
+              phoneNumber: phone,
+              displayName,
+              jid: phoneToChatId(phone),
+            };
           })
-          .filter((entry): entry is { phoneNumber: string; displayName: string } => entry !== null);
+          .filter((entry): entry is { phoneNumber: string; displayName: string; jid: string } => entry !== null);
 
         // Sem isto não há como saber se a sincronização não trouxe nada ou se trouxe e
         // foi descartada aqui — foi exatamente essa dúvida que travou o diagnóstico.
@@ -1386,22 +1501,28 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
           "WhatsApp contact event received",
         );
         if (!entries.length) return;
-        void upsertWhatsappDirectoryEntries(DEFAULT_ORGANIZATION_ID, entries)
-          .then((saved) => {
-            if (saved) logger.info({ saved }, "Synced WhatsApp directory entries");
-          })
-          .catch((err) => {
-            logger.warn({ err }, "Failed to sync WhatsApp directory entries");
-          });
-        // A agenda também vira contato na plataforma, para a loja encontrar o número
-        // sem depender de a pessoa ter escrito antes.
-        void importWhatsappContacts(DEFAULT_ORGANIZATION_ID, entries)
-          .then((created) => {
-            if (created) logger.info({ created }, "Imported WhatsApp contacts");
-          })
-          .catch((err) => {
-            logger.warn({ err }, "Failed to import WhatsApp contacts");
-          });
+        void Promise.all([
+          upsertWhatsappDirectoryEntries(DEFAULT_ORGANIZATION_ID, entries)
+            .then((saved) => {
+              if (saved) logger.info({ saved }, "Synced WhatsApp directory entries");
+            })
+            .catch((err) => {
+              logger.warn({ err }, "Failed to sync WhatsApp directory entries");
+            }),
+          // A agenda também vira contato na plataforma, para a loja encontrar o
+          // número sem depender de a pessoa ter escrito antes.
+          importWhatsappContacts(DEFAULT_ORGANIZATION_ID, entries)
+            .then((created) => {
+              if (created) logger.info({ created }, "Imported WhatsApp contacts");
+            })
+            .catch((err) => {
+              logger.warn({ err }, "Failed to import WhatsApp contacts");
+            }),
+        ]).then(() => {
+          // Esperar a importação evita a corrida em que a foto chega antes de o
+          // contato existir. O processamento segue em segundo plano e com limite.
+          scheduleWhatsappContactAvatarSync(sock, entries, source);
+        });
       };
 
       sock.ev.on("messaging-history.set", ({ contacts }) => {
@@ -1661,6 +1782,17 @@ export async function resyncWhatsappContacts(): Promise<void> {
       "Conecte o WhatsApp antes de sincronizar os contatos do celular.",
     );
   }
+
+  // O clique manual significa atualização explícita. Permitir nova consulta mesmo
+  // para contatos vistos recentemente captura uma foto alterada no WhatsApp.
+  recentlySyncedAvatarAt.clear();
+  lastContactAvatarSync = {
+    requested: 0,
+    found: 0,
+    saved: 0,
+    unavailable: 0,
+    completedAt: null,
+  };
 
   // Todas as coleções: as ações de contato vivem em critical_unblock_low, mas a
   // agenda também aparece em outras, e pedir só uma deixaria nomes de fora.

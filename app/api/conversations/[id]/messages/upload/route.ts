@@ -5,6 +5,11 @@ import { addOutboundMessage, getContactById, getConversation } from "@/lib/repo"
 import { emitRealtime } from "@/lib/realtime";
 import { sendWhatsappMessage } from "@/lib/whatsapp-client";
 import { deleteCloudinaryResources, uploadBase64ToCloudinary } from "@/lib/cloudinary";
+import { getSupermarketSettings } from "@/lib/supermarket-settings";
+import {
+  buildAgentWhatsappMessage,
+  resolveAgentSignature,
+} from "@/lib/agent-message";
 import { logger } from "@/lib/logger";
 
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -62,12 +67,27 @@ export async function POST(
   const twilioToken = process.env.TWILIO_AUTH_TOKEN;
   const twilioFrom = process.env.TWILIO_WHATSAPP_NUMBER;
   const provider = process.env.WHATSAPP_PROVIDER || "twilio";
+  const signatureValue = formData.get("withSignature");
+  const signatureOverride =
+    signatureValue === "true" ? true : signatureValue === "false" ? false : undefined;
+  const { agentSignatureEnabled } = await getSupermarketSettings(
+    auth.session.organizationId,
+  );
+  const useSignature = resolveAgentSignature(
+    signatureOverride,
+    agentSignatureEnabled,
+  );
+  const outboundCaption = buildAgentWhatsappMessage(
+    "[imagem]",
+    auth.session.name,
+    useSignature,
+  );
 
   let externalId: string | undefined;
 
   try {
     if (provider === "unofficial") {
-      externalId = await sendWhatsappMessage(conversation.contactPhone, "[imagem]", {
+      externalId = await sendWhatsappMessage(conversation.contactPhone, outboundCaption, {
         skipRateLimit: true,
         mediaUrl: upload.secure_url,
       });
@@ -76,7 +96,7 @@ export async function POST(
       const sent = await client.messages.create({
         from: twilioFrom,
         to: String(conversation.contactPhone),
-        body: `[${auth.session.name || "Atendente"}] Enviou uma imagem`,
+        body: outboundCaption,
         mediaUrl: [upload.secure_url],
       });
       externalId = sent.sid;
@@ -113,5 +133,5 @@ export async function POST(
   emitRealtime(auth.session.organizationId, "message.created", { conversationId: id, message });
   emitRealtime(auth.session.organizationId, "conversation.updated", { id, status: "em_atendimento" });
 
-  return NextResponse.json({ message }, { status: 201 });
+  return NextResponse.json({ message, signatureApplied: useSignature }, { status: 201 });
 }

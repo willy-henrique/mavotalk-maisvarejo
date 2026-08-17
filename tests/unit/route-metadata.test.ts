@@ -9,4 +9,5 @@ test("cabeçalho aplica metadados de rota na aba e no breadcrumb", async () => {
   assert.match(source, /aria-label="Breadcrumb"/);
   assert.match(source, /const pageMeta/);
   assert.match(source, /\/admin\/menu-visibilidade/);
+  assert.match(source, /match: '\/admin\/pedidos', title: 'Pedidos'/);
 });

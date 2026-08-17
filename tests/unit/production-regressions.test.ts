@@ -205,6 +205,62 @@ test("envio automatico desiste se um atendente assumiu no meio do caminho", asyn
   assert.ok(send.indexOf("humanTookOver") < send.indexOf("deliverInOrder"));
 });
 
+test("mensagem nova não rebaixa chamado já puxado para aguardando", async () => {
+  const [route, repository] = await Promise.all([
+    read("app/api/webhooks/n8n/ticket-upsert/route.ts"),
+    read("lib/supabase-repo.ts"),
+  ]);
+
+  // O caminho humano precisa sair da automação antes do ramo do bot/IA.
+  const humanBranch = route.indexOf("if (humanHandling)");
+  const botBranch = route.indexOf("else if (supermarketDecision)");
+  assert.ok(humanBranch >= 0 && botBranch > humanBranch);
+  assert.match(route, /conversationStatus = "em_atendimento"/);
+
+  // Além da checagem em memória, o UPDATE é condicional no banco. Isso cobre a
+  // corrida em que o atendente puxa o ticket depois da leitura feita pelo webhook.
+  assert.match(route, /preserveActiveStatus: true/);
+  assert.match(repository, /options\?\.preserveActiveStatus/);
+  assert.match(repository, /\.neq\("status", "em_atendimento"\)/);
+});
+
+test("botão de assinatura controla texto, link e imagem do compositor", async () => {
+  const [textRoute, uploadRoute, inbox] = await Promise.all([
+    read("app/api/conversations/[id]/messages/route.ts"),
+    read("app/api/conversations/[id]/messages/upload/route.ts"),
+    read("frontend/components/InboxConversations.tsx"),
+  ]);
+
+  assert.match(textRoute, /buildAgentWhatsappMessage/);
+  assert.match(textRoute, /parsed\.data\.withSignature/);
+  assert.match(uploadRoute, /formData\.get\("withSignature"\)/);
+  assert.match(uploadRoute, /buildAgentWhatsappMessage/);
+  assert.match(inbox, /formData\.append\('withSignature', String\(signatureOn\)\)/);
+  assert.match(inbox, /signatureTouchedRef/);
+  // É o botão azul com lápis mostrado em prints/Screenshot_1.png.
+  assert.match(inbox, /aria-label="Alternar assinatura com o nome do atendente"/);
+  assert.match(inbox, /Assinatura ligada: o cliente vê seu nome antes da mensagem/);
+  assert.match(inbox, /onClick=\{toggleSignature\}/);
+});
+
+test("sincronização da agenda busca e exibe fotos de perfil com limite", async () => {
+  const [whatsapp, repository, contacts] = await Promise.all([
+    read("lib/whatsapp-client.ts"),
+    read("lib/supabase-repo.ts"),
+    read("frontend/components/Contacts.tsx"),
+  ]);
+
+  assert.match(whatsapp, /scheduleWhatsappContactAvatarSync/);
+  assert.match(whatsapp, /sock\.profilePictureUrl\(jid, "image"\)/);
+  assert.match(whatsapp, /WA_CONTACT_AVATAR_CONCURRENCY/);
+  assert.match(whatsapp, /recentlySyncedAvatarAt\.clear\(\)/);
+  assert.match(repository, /updateWhatsappContactAvatarsByPhone/);
+  assert.match(repository, /contact\.avatar_url IS DISTINCT FROM incoming\.avatar_url/);
+  assert.match(repository, /c\.avatar_url/);
+  assert.match(contacts, /const ContactAvatar/);
+  assert.match(contacts, /contact\.avatarUrl/);
+});
+
 test("limpeza da agenda importada preserva quem tem historico", async () => {
   const repository = await read("lib/supabase-repo.ts");
   const remove = repository.slice(

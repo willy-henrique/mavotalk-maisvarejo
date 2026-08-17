@@ -1174,6 +1174,37 @@ export async function updateContactAvatar(
     .eq("organization_id", orgId);
 }
 
+/** Atualiza em lote as fotos descobertas durante a sincronização da agenda. */
+export async function updateWhatsappContactAvatarsByPhone(
+  organizationId: string,
+  entries: Array<{ phoneNumber: string; avatarUrl: string }>,
+): Promise<number> {
+  const orgId = requireOrganizationId(organizationId);
+  const unique = new Map<string, string>();
+  for (const entry of entries) {
+    const phoneNumber = String(entry.phoneNumber || "").trim();
+    const avatarUrl = String(entry.avatarUrl || "").trim();
+    if (!phoneNumber || !avatarUrl.startsWith("https://")) continue;
+    unique.set(phoneNumber, avatarUrl);
+  }
+  if (!unique.size) return 0;
+
+  const rows = [...unique.entries()];
+  const result = await queryTenantDatabase<{ id: string }>(
+    orgId,
+    `UPDATE contacts AS contact
+        SET avatar_url = incoming.avatar_url,
+            updated_at = now()
+       FROM UNNEST($2::text[], $3::text[]) AS incoming(phone_number, avatar_url)
+      WHERE contact.organization_id = $1
+        AND contact.phone_number = incoming.phone_number
+        AND contact.avatar_url IS DISTINCT FROM incoming.avatar_url
+      RETURNING contact.id`,
+    [orgId, rows.map(([phoneNumber]) => phoneNumber), rows.map(([, avatarUrl]) => avatarUrl)],
+  );
+  return result.rows.length;
+}
+
 export async function listContacts(organizationId: string): Promise<ListContactItem[]> {
   const orgId = requireOrganizationId(organizationId);
   const { data: contactRows, error } = await supa(orgId)
@@ -1228,6 +1259,7 @@ export async function listContacts(organizationId: string): Promise<ListContactI
       id: contactId,
       name: String(row.name ?? "Contato"),
       phoneNumber: String(row.phone_number ?? ""),
+      avatarUrl: row.avatar_url != null ? String(row.avatar_url) : null,
       lastMessage,
       lastInteraction,
       status,
@@ -1268,6 +1300,7 @@ export async function listContactsPage(
     id: string;
     name: string | null;
     phone_number: string | null;
+    avatar_url: string | null;
     blocked: boolean | null;
     internal_note: string | null;
     conversation_id: string | null;
@@ -1278,7 +1311,7 @@ export async function listContactsPage(
   const [items, count] = await Promise.all([
     queryTenantDatabase<ContactPageRow>(
       orgId,
-      `SELECT c.id, c.name, c.phone_number, c.blocked, c.internal_note,
+      `SELECT c.id, c.name, c.phone_number, c.avatar_url, c.blocked, c.internal_note,
               latest_conversation.id AS conversation_id,
               latest_conversation.status AS conversation_status,
               latest_conversation.updated_at AS conversation_updated_at,
@@ -1316,6 +1349,7 @@ export async function listContactsPage(
       id: String(row.id),
       name: String(row.name ?? "Contato"),
       phoneNumber: String(row.phone_number ?? ""),
+      avatarUrl: row.avatar_url != null ? String(row.avatar_url) : null,
       lastMessage: row.last_message != null ? String(row.last_message) : null,
       lastInteraction: row.conversation_updated_at ?? null,
       status: row.conversation_id && row.conversation_status !== "encerrado" ? "ativo" : "encerrado",
@@ -1548,6 +1582,7 @@ export async function updateConversationById(
   organizationId: string,
   id: string,
   payload: Record<string, unknown>,
+  options?: { preserveActiveStatus?: boolean },
 ) {
   const orgId = requireOrganizationId(organizationId);
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
@@ -1556,11 +1591,24 @@ export async function updateConversationById(
   if ("triageCompleted" in payload) updates.triage_completed = payload.triageCompleted;
   if ("menuAttempts" in payload) updates.menu_attempts = payload.menuAttempts;
   if ("contactPhone" in payload) updates.contact_phone = payload.contactPhone;
-  await supa(orgId)
+  let query = supa(orgId)
     .from("conversations")
     .update(updates)
     .eq("id", id)
     .eq("organization_id", orgId);
+
+  // O webhook pode ter lido "aguardando" um instante antes de o atendente puxar o
+  // chamado. Este filtro fica no próprio UPDATE, portanto nem essa corrida consegue
+  // rebaixar uma conversa que já chegou a em_atendimento.
+  if (options?.preserveActiveStatus) {
+    query = query.neq("status", "em_atendimento");
+  }
+
+  const { error } = await query;
+  if (error) {
+    logger.error({ err: error, organizationId: orgId, conversationId: id }, "supa updateConversationById");
+    throw error;
+  }
 }
 
 export async function updateTicketByConversation(

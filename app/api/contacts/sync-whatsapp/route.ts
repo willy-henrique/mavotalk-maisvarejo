@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireMenuPermission, requireSession } from "@/lib/api";
 import { countWhatsappDirectory } from "@/lib/repo";
-import { resyncWhatsappContacts } from "@/lib/whatsapp-client";
+import {
+  resyncWhatsappContacts,
+  waitForWhatsappContactAvatarSync,
+} from "@/lib/whatsapp-client";
 import { logger } from "@/lib/logger";
 
 /** Tempo aguardando os eventos de contato chegarem depois do resync. */
@@ -48,12 +51,17 @@ export async function POST() {
     }
   }
 
-  logger.info({ organizationId, before, total }, "WhatsApp contacts resynced");
+  // A consulta de fotos usa poucas requisições em paralelo para não pressionar a
+  // sessão do WhatsApp. Aguarda um pouco, mas não prende o request por uma agenda
+  // grande; o restante continua no processo e aparece ao atualizar a lista.
+  const avatars = await waitForWhatsappContactAvatarSync(3_000);
+  logger.info({ organizationId, before, total, avatars }, "WhatsApp contacts resynced");
   return NextResponse.json({
     synced: total,
     added: Math.max(0, total - before),
     // O aparelho pode continuar enviando dados depois desta resposta; o painel
     // informa isso em vez de afirmar um total definitivo.
     pending: total === before,
+    avatars,
   });
 }

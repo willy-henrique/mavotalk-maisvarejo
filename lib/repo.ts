@@ -69,6 +69,7 @@ export {
   getOrCreateContact,
   updateContact,
   updateContactAvatar,
+  updateWhatsappContactAvatarsByPhone,
   listContacts,
   listContactsPage,
   getOrCreateOpenConversation,

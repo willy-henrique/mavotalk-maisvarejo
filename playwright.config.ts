@@ -1,6 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.QA_BASE_URL?.replace(/\/$/, "") || "http://127.0.0.1:4001";
+const productionReadOnly = process.env.QA_PRODUCTION_READONLY === "true";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -18,8 +19,10 @@ export default defineConfig({
     baseURL,
     actionTimeout: 10_000,
     navigationTimeout: 25_000,
-    screenshot: "only-on-failure",
-    trace: "retain-on-failure",
+    // Uma auditoria em produção pode renderizar PII real. Nesse modo, o relatório
+    // registra somente metadados sanitizados — nunca screenshot/trace do Inbox.
+    screenshot: productionReadOnly ? "off" : "only-on-failure",
+    trace: productionReadOnly ? "off" : "retain-on-failure",
     video: "off",
   },
   projects: [

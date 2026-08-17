@@ -8,7 +8,12 @@ test.describe("navegação operacional autenticada", () => {
   test.skip(!hasQaCredentials, "Defina QA_BASE_URL, QA_EMAIL e QA_PASSWORD somente no ambiente de execução.");
 
   test("navega por Inbox e Contatos sem perder título, URL ou item ativo", async ({ page }, testInfo) => {
-    const assertObservability = observeBrowser(page, testInfo, { allowHttpStatuses: [401] });
+    const assertObservability = observeBrowser(page, testInfo, {
+      allowHttpStatuses: [401],
+      // O WebKit reporta fetches cancelados pela própria navegação como pageerror.
+      // Uma auditoria separada mantém o Inbox parado e continua cobrindo CORS real.
+      allowWebKitNavigationAborts: true,
+    });
     await loginWithQaCredentials(page);
 
     const inboxNavigation = page.getByRole("button", { name: "Inbox", exact: true });
