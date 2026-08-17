@@ -33,9 +33,10 @@ test("mídia assinada exige vínculo da conversa com o tenant autenticado", asyn
 });
 
 test("visualizador de PDF usa mensagem vinculada ao tenant e não aceita URL do cliente", async () => {
-  const [route, inbox] = await Promise.all([
+  const [route, inbox, indexHtml] = await Promise.all([
     read("app/api/media/pdf/route.ts"),
     read("frontend/components/InboxConversations.tsx"),
+    read("frontend/index.html"),
   ]);
   assert.match(route, /requireMenuPermission\(auth\.session, "inbox", "read"\)/);
   assert.match(route, /getMessageMediaForConversation/);
@@ -43,9 +44,19 @@ test("visualizador de PDF usa mensagem vinculada ao tenant e não aceita URL do 
   assert.match(route, /url\.hostname === "res\.cloudinary\.com"/);
   assert.match(route, /Content-Disposition/);
   assert.match(route, /application\/pdf/);
+  assert.match(route, /shouldDownload \? "attachment" : "inline"/);
   assert.match(inbox, /\/api\/media\/pdf\?/);
+  assert.match(inbox, /const downloadPdf/);
+  assert.match(inbox, /backendRouteNotDeployed/);
+  assert.match(inbox, /url\.hostname === 'res\.cloudinary\.com'/);
+  assert.match(inbox, /validatedPdfBlob/);
   assert.match(inbox, /Abrir em nova aba/);
+  assert.match(inbox, /Baixar PDF:/);
+  assert.match(inbox, /<iframe/);
+  assert.doesNotMatch(inbox, /<object/);
   assert.match(inbox, /application\/pdf,\.pdf/);
+  assert.match(indexHtml, /frame-src 'self' blob:/);
+  assert.match(indexHtml, /name="mobile-web-app-capable" content="yes"/);
 });
 
 test("nova conversa envia para o JID verificado e grava o telefone canônico", async () => {

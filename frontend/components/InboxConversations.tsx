@@ -62,6 +62,41 @@ function documentTitle(message: ApiMessage): string {
   return isPdfMessage(message) ? 'Documento PDF' : 'Documento';
 }
 
+function isTrustedPdfFallbackUrl(value: string | null | undefined): boolean {
+  try {
+    const url = new URL(String(value || ''));
+    return url.protocol === 'https:' && url.hostname === 'res.cloudinary.com';
+  } catch {
+    return false;
+  }
+}
+
+async function validatedPdfBlob(response: Response): Promise<Blob> {
+  const blob = await response.blob();
+  if (blob.size > 20 * 1024 * 1024) {
+    throw new Error('O PDF excede o limite de 20 MB.');
+  }
+  const header = new Uint8Array(await blob.slice(0, 1024).arrayBuffer());
+  const signature = String.fromCharCode(...header);
+  if (!signature.includes('%PDF-')) {
+    throw new Error('O arquivo recebido não contém um PDF válido.');
+  }
+  return blob.type === 'application/pdf'
+    ? blob
+    : new Blob([blob], { type: 'application/pdf' });
+}
+
+function pdfDownloadName(message: ApiMessage): string {
+  const base = documentTitle(message)
+    .replace(/\.pdf$/i, '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return `${base || `documento-${message.id.slice(0, 8)}`}.pdf`;
+}
+
 export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentUser }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [conversations, setConversations] = useState<ApiConversation[]>([]);
@@ -93,6 +128,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const [listSearch, setListSearch] = useState('');
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [openingPdfId, setOpeningPdfId] = useState<string | null>(null);
+  const [downloadingPdfId, setDownloadingPdfId] = useState<string | null>(null);
   const [pdfViewer, setPdfViewer] = useState<{ url: string; title: string } | null>(null);
   const [typingAgent, setTypingAgent] = useState<{ name: string } | null>(null);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
@@ -342,26 +378,43 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     setPdfViewer(null);
   };
 
+  const fetchPdfBlob = async (message: ApiMessage, download = false) => {
+    if (!selectedId) throw new Error('Selecione o atendimento novamente.');
+    const params = new URLSearchParams({
+      conversationId: selectedId,
+      messageId: message.id,
+    });
+    if (download) params.set('download', '1');
+
+    const response = await apiFetch(`/api/media/pdf?${params.toString()}`, {
+      method: 'GET',
+      headers: { Accept: 'application/pdf' },
+    });
+    if (response.ok) return validatedPdfBlob(response);
+
+    const contentType = String(response.headers.get('content-type') || '');
+    const backendRouteNotDeployed =
+      response.status === 404 && contentType.includes('text/html');
+    if (backendRouteNotDeployed && isTrustedPdfFallbackUrl(message.mediaUrl)) {
+      const fallback = await fetch(String(message.mediaUrl), {
+        method: 'GET',
+        headers: { Accept: 'application/pdf' },
+      });
+      if (fallback.ok) return validatedPdfBlob(fallback);
+    }
+
+    const data = contentType.includes('application/json')
+      ? ((await response.json().catch(() => ({}))) as { error?: string })
+      : {};
+    throw new Error(data.error || 'Não foi possível carregar o PDF.');
+  };
+
   const openPdf = async (message: ApiMessage) => {
-    if (!selectedId || !message.id || openingPdfId) return;
+    if (!selectedId || !message.id || openingPdfId || downloadingPdfId) return;
     setOpeningPdfId(message.id);
     setSendError('');
     try {
-      const params = new URLSearchParams({
-        conversationId: selectedId,
-        messageId: message.id,
-      });
-      const response = await apiFetch(`/api/media/pdf?${params.toString()}`, {
-        method: 'GET',
-      });
-      if (!response.ok) {
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error || 'Não foi possível abrir o PDF.');
-      }
-      const blob = await response.blob();
-      if (blob.type !== 'application/pdf') {
-        throw new Error('O servidor não retornou um PDF válido.');
-      }
+      const blob = await fetchPdfBlob(message);
       if (pdfObjectUrlRef.current) URL.revokeObjectURL(pdfObjectUrlRef.current);
       const url = URL.createObjectURL(blob);
       pdfObjectUrlRef.current = url;
@@ -370,6 +423,27 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
       setSendError(error instanceof Error ? error.message : 'Não foi possível abrir o PDF.');
     } finally {
       setOpeningPdfId(null);
+    }
+  };
+
+  const downloadPdf = async (message: ApiMessage) => {
+    if (!selectedId || !message.id || openingPdfId || downloadingPdfId) return;
+    setDownloadingPdfId(message.id);
+    setSendError('');
+    try {
+      const blob = await fetchPdfBlob(message, true);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = pdfDownloadName(message);
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : 'Não foi possível baixar o PDF.');
+    } finally {
+      setDownloadingPdfId(null);
     }
   };
 
@@ -1001,19 +1075,34 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                             </p>
                           </div>
                           {isPdfMessage(m) ? (
-                            <button
-                              type="button"
-                              onClick={() => void openPdf(m)}
-                              disabled={openingPdfId === m.id}
-                              className={`shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition disabled:opacity-60 ${
-                                m.direction === 'outbound'
-                                  ? 'bg-white text-blue-700 hover:bg-blue-50'
-                                  : 'bg-blue-600 text-white hover:bg-blue-700'
-                              }`}
-                              aria-label={`Abrir PDF: ${documentTitle(m)}`}
-                            >
-                              {openingPdfId === m.id ? 'Abrindo…' : 'Abrir'}
-                            </button>
+                            <div className="flex shrink-0 flex-col gap-1.5 sm:flex-row">
+                              <button
+                                type="button"
+                                onClick={() => void openPdf(m)}
+                                disabled={openingPdfId === m.id || downloadingPdfId === m.id}
+                                className={`rounded-lg px-3 py-2 text-xs font-bold transition disabled:opacity-60 ${
+                                  m.direction === 'outbound'
+                                    ? 'bg-white text-blue-700 hover:bg-blue-50'
+                                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                                }`}
+                                aria-label={`Abrir PDF: ${documentTitle(m)}`}
+                              >
+                                {openingPdfId === m.id ? 'Abrindo…' : 'Abrir'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void downloadPdf(m)}
+                                disabled={openingPdfId === m.id || downloadingPdfId === m.id}
+                                className={`rounded-lg border px-3 py-2 text-xs font-bold transition disabled:opacity-60 ${
+                                  m.direction === 'outbound'
+                                    ? 'border-white/70 text-white hover:bg-white/10'
+                                    : 'border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-200 dark:hover:bg-blue-950/40'
+                                }`}
+                                aria-label={`Baixar PDF: ${documentTitle(m)}`}
+                              >
+                                {downloadingPdfId === m.id ? 'Baixando…' : 'Baixar'}
+                              </button>
+                            </div>
                           ) : (
                             <a
                               href={m.mediaUrl}
@@ -1199,16 +1288,11 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
             onClose={closePdfViewer}
           >
             <div className="p-3 sm:p-5">
-              <object
-                data={pdfViewer.url}
-                type="application/pdf"
+              <iframe
+                src={pdfViewer.url}
                 className="h-[65vh] min-h-[420px] w-full rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800"
-                aria-label={`Visualização do PDF ${pdfViewer.title}`}
-              >
-                <p className="p-6 text-sm text-slate-600 dark:text-slate-300">
-                  Este navegador não exibe PDF dentro da página. Use “Abrir em nova aba”.
-                </p>
-              </object>
+                title={`Visualização do PDF ${pdfViewer.title}`}
+              />
               <div className="mt-3 flex flex-wrap justify-end gap-2">
                 <button type="button" onClick={closePdfViewer} className="mavo-button-secondary">Fechar</button>
                 <a

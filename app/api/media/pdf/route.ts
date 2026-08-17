@@ -62,6 +62,9 @@ export async function GET(request: NextRequest) {
   const messageId = String(
     request.nextUrl.searchParams.get("messageId") || "",
   ).trim();
+  const shouldDownload = ["1", "true"].includes(
+    String(request.nextUrl.searchParams.get("download") || "").toLowerCase(),
+  );
   if (
     !conversationId ||
     !messageId ||
@@ -140,7 +143,7 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="documento-${messageId.slice(0, 12)}.pdf"`,
+        "Content-Disposition": `${shouldDownload ? "attachment" : "inline"}; filename="documento-${messageId.slice(0, 12)}.pdf"`,
         "Content-Length": String(bytes.byteLength),
         "Cache-Control": "private, no-store, max-age=0",
         "X-Content-Type-Options": "nosniff",
