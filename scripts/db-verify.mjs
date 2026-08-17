@@ -63,6 +63,39 @@ await runDeployStep("db:verify", async () => {
         ) duplicates
     `);
 
+    const duplicateContactPhones = await client.query(`
+      SELECT COUNT(*)::int AS groups
+        FROM (
+          SELECT organization_id,
+                 regexp_replace(phone_number, '\\D', '', 'g') AS phone_digits
+            FROM contacts
+           WHERE length(regexp_replace(phone_number, '\\D', '', 'g'))
+                 BETWEEN 10 AND 15
+           GROUP BY organization_id,
+                    regexp_replace(phone_number, '\\D', '', 'g')
+          HAVING COUNT(*) > 1
+        ) duplicates
+    `);
+
+    const duplicateOpenConversations = await client.query(`
+      SELECT COUNT(*)::int AS groups
+        FROM (
+          SELECT organization_id, contact_id
+            FROM conversations
+           WHERE status IN ('aguardando', 'em_atendimento', 'pendente_cliente')
+           GROUP BY organization_id, contact_id
+          HAVING COUNT(*) > 1
+        ) duplicates
+    `);
+
+    const phoneIdentityIndex = await client.query(`
+      SELECT 1
+        FROM pg_indexes
+       WHERE schemaname = 'public'
+         AND indexname = 'idx_contacts_org_phone_digits'
+       LIMIT 1
+    `);
+
     const rls = await client.query(
       `SELECT relname, relrowsecurity
          FROM pg_class
@@ -86,6 +119,9 @@ await runDeployStep("db:verify", async () => {
             missing.length === 0 &&
             rlsMissing.length === 0 &&
             duplicateMessages.rows[0]?.groups === 0 &&
+            duplicateContactPhones.rows[0]?.groups === 0 &&
+            duplicateOpenConversations.rows[0]?.groups === 0 &&
+            phoneIdentityIndex.rowCount === 1 &&
             defaultOrganizationExists
               ? "ok"
               : "attention",
@@ -93,6 +129,11 @@ await runDeployStep("db:verify", async () => {
           tablesWithoutRls: rlsMissing,
           duplicateExternalMessageGroups:
             duplicateMessages.rows[0]?.groups ?? 0,
+          duplicateContactPhoneGroups:
+            duplicateContactPhones.rows[0]?.groups ?? 0,
+          duplicateOpenConversationGroups:
+            duplicateOpenConversations.rows[0]?.groups ?? 0,
+          phoneIdentityIndexExists: phoneIdentityIndex.rowCount === 1,
           defaultOrganizationExists,
         },
         null,
@@ -103,6 +144,9 @@ await runDeployStep("db:verify", async () => {
       missing.length ||
       rlsMissing.length ||
       duplicateMessages.rows[0]?.groups ||
+      duplicateContactPhones.rows[0]?.groups ||
+      duplicateOpenConversations.rows[0]?.groups ||
+      phoneIdentityIndex.rowCount !== 1 ||
       !defaultOrganizationExists
     ) {
       process.exitCode = 1;

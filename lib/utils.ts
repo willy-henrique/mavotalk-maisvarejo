@@ -25,17 +25,80 @@ export function normalizePhone(phone: string) {
  * prefixos de transporte como `whatsapp:` ou sufixos do whatsapp-web.js.
  */
 export function normalizePhoneDigits(phone: string): string {
-  let digits = String(phone || "").replace(/\D/g, "");
+  const raw = String(phone || "").trim();
+  const explicitInternational =
+    /^(?:whatsapp:)?\s*\+/i.test(raw) || /^00/.test(raw);
+  let digits = raw.replace(/\D/g, "");
+  // Aceita o prefixo internacional discado (00) sem transformá-lo em parte do DDI.
+  if (digits.startsWith("00")) {
+    digits = digits.slice(2);
+  }
   if (digits.startsWith("0") && digits.length > 10) {
     digits = digits.slice(1);
   }
-  if (digits.length === 10 || digits.length === 11) {
+  if (!explicitInternational && (digits.length === 10 || digits.length === 11)) {
     digits = `55${digits}`;
   }
   if (digits.length < 10 || digits.length > 15) {
     return "";
   }
   return digits;
+}
+
+/**
+ * Possíveis endereços E.164 para consulta no WhatsApp.
+ *
+ * No Brasil há contas antigas cujo JID ainda usa o número sem o nono dígito. O
+ * `onWhatsApp` é a autoridade para decidir qual candidato existe; a aplicação não
+ * deve escolher no escuro nem reconstruir o JID depois dessa consulta.
+ */
+export function whatsappPhoneCandidates(phone: string): string[] {
+  const primary = normalizePhoneDigits(phone);
+  if (!primary) return [];
+
+  const candidates = [primary];
+  if (primary.startsWith("55")) {
+    const national = primary.slice(2);
+    const ddd = national.slice(0, 2);
+    const subscriber = national.slice(2);
+
+    if (ddd.length === 2 && subscriber.length === 8) {
+      candidates.push(`55${ddd}9${subscriber}`);
+    } else if (
+      ddd.length === 2 &&
+      subscriber.length === 9 &&
+      subscriber.startsWith("9")
+    ) {
+      candidates.push(`55${ddd}${subscriber.slice(1)}`);
+    }
+  }
+
+  return [...new Set(candidates)].filter(
+    (candidate) => /^\d{10,15}$/.test(candidate),
+  );
+}
+
+/** Formatos históricos aceitos ao procurar um contato já salvo no banco. */
+export function whatsappPhoneStorageAliases(phone: string): string[] {
+  const raw = String(phone || "").trim();
+  const [canonicalDigits, ...legacyBrazilianVariants] =
+    whatsappPhoneCandidates(phone);
+  const aliases = canonicalDigits
+    ? [
+        canonicalDigits,
+        `+${canonicalDigits}`,
+        `whatsapp:${canonicalDigits}`,
+        `whatsapp:+${canonicalDigits}`,
+      ]
+    : [];
+  // A versão antiga da "Nova conversa" só gravava dígitos. Consultamos a variação
+  // brasileira apenas nesses formatos legados; nunca fundimos dois contatos
+  // canônicos `whatsapp:+...` que possam representar contas realmente distintas.
+  for (const digits of legacyBrazilianVariants) {
+    aliases.push(digits, `+${digits}`);
+  }
+  if (raw) aliases.push(raw);
+  return [...new Set(aliases)];
 }
 
 export function toWhatsAppAddress(phone: string): string {

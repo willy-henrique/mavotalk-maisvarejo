@@ -13,11 +13,13 @@ test("falha do provedor impede persistência enganosa da mensagem de saída", as
   assert.match(route, /status:\s*503/);
 });
 
-test("upload valida tipo e limite e remove órfão quando a entrega falha", async () => {
+test("upload valida imagem/PDF, persiste MIME e remove órfão quando a entrega falha", async () => {
   const route = await read("app/api/conversations/[id]/messages/upload/route.ts");
-  assert.match(route, /MAX_IMAGE_BYTES\s*=\s*8\s*\*\s*1024\s*\*\s*1024/);
-  assert.match(route, /ALLOWED_IMAGE_TYPES/);
-  assert.match(route, /deleteCloudinaryResources\(\[upload\.public_id\]\)/);
+  assert.match(route, /MAX_MESSAGE_ATTACHMENT_BYTES/);
+  assert.match(route, /validateMessageAttachment/);
+  assert.match(route, /attachment\.mimeType/);
+  assert.match(route, /attachment\.fileName/);
+  assert.match(route, /attachment\.kind === "document" \? "raw" : "image"/);
   assert.match(route, /status:\s*413/);
   assert.match(route, /status:\s*503/);
 });
@@ -28,6 +30,96 @@ test("mídia assinada exige vínculo da conversa com o tenant autenticado", asyn
   assert.match(route, /auth\.session\.organizationId/);
   assert.match(route, /getCloudinaryPublicIdsForConversation/);
   assert.match(route, /allowedPublicIds\.includes\(publicId\)/);
+});
+
+test("visualizador de PDF usa mensagem vinculada ao tenant e não aceita URL do cliente", async () => {
+  const [route, inbox] = await Promise.all([
+    read("app/api/media/pdf/route.ts"),
+    read("frontend/components/InboxConversations.tsx"),
+  ]);
+  assert.match(route, /requireMenuPermission\(auth\.session, "inbox", "read"\)/);
+  assert.match(route, /getMessageMediaForConversation/);
+  assert.match(route, /auth\.session\.organizationId/);
+  assert.match(route, /url\.hostname === "res\.cloudinary\.com"/);
+  assert.match(route, /Content-Disposition/);
+  assert.match(route, /application\/pdf/);
+  assert.match(inbox, /\/api\/media\/pdf\?/);
+  assert.match(inbox, /Abrir em nova aba/);
+  assert.match(inbox, /application\/pdf,\.pdf/);
+});
+
+test("nova conversa envia para o JID verificado e grava o telefone canônico", async () => {
+  const [route, client, repository] = await Promise.all([
+    read("app/api/conversations/route.ts"),
+    read("lib/whatsapp-client.ts"),
+    read("lib/supabase-repo.ts"),
+  ]);
+  assert.match(route, /resolveWhatsappDestination\(inputPhone\)/);
+  assert.match(route, /const phone = destination\.phone/);
+  assert.match(route, /destinationJid: destination\.jid/);
+  assert.ok(
+    route.indexOf("externalId = await sendWhatsappMessage") <
+      route.indexOf("const persisted = await addOutboundMessage"),
+  );
+  assert.match(route, /stage: "createConversation"/);
+  assert.match(route, /stage: "sendMessageToGateway"/);
+  assert.match(route, /stage: "updateStatusLocal"/);
+  assert.match(client, /sock\.onWhatsApp\(\.\.\.candidates\)/);
+  assert.match(client, /jid: match\.jid/);
+  assert.match(repository, /whatsappPhoneStorageAliases\(canonicalPhone\)/);
+  assert.match(repository, /existingPhone !== contactPhone/);
+});
+
+test("contato legado não pode manter um segundo chamado aberto para o mesmo número", async () => {
+  const [repository, migration, verification] = await Promise.all([
+    read("lib/supabase-repo.ts"),
+    read(
+      "supabase/migrations/202608170019_deduplicate_whatsapp_contacts.sql",
+    ),
+    read("scripts/db-verify.mjs"),
+  ]);
+
+  // Em produção o mesmo telefone aparecia como `5562...` e
+  // `whatsapp:+5562...`, cada formato com um contact_id e um protocolo aberto.
+  assert.match(repository, /whatsappPhoneStorageAliases\(canonicalPhone\)/);
+  assert.match(repository, /\.order\("created_at", \{ ascending: true \}\)/);
+  assert.match(repository, /ON CONFLICT DO NOTHING/);
+  assert.match(
+    repository,
+    /Contato concorrente não encontrado após conflito de identidade/,
+  );
+
+  // A correção dos registros existentes preserva o protocolo original e reúne
+  // nele as mensagens, sem apagar o rastro do protocolo redundante.
+  assert.match(migration, /regexp_replace\(phone_number, '\\D', '', 'g'\)/);
+  assert.match(migration, /ORDER BY conversation\.created_at ASC/);
+  assert.match(
+    migration,
+    /SET conversation_id = keeper_conversation_id/,
+  );
+  assert.match(
+    migration,
+    /Chamado duplicado consolidado automaticamente em #/,
+  );
+  assert.match(migration, /SET contact_id = keeper_contact_id/);
+  assert.match(migration, /idx_contacts_org_phone_digits/);
+  assert.match(migration, /CREATE UNIQUE INDEX/);
+  assert.match(verification, /duplicateContactPhoneGroups/);
+  assert.match(verification, /duplicateOpenConversationGroups/);
+  assert.match(verification, /phoneIdentityIndexExists/);
+});
+
+test("mensagem acumulada durante reconexão entra no Inbox sem resposta atrasada", async () => {
+  const [client, route] = await Promise.all([
+    read("lib/whatsapp-client.ts"),
+    read("app/api/webhooks/n8n/ticket-upsert/route.ts"),
+  ]);
+  assert.match(client, /const isPreConnectionQueued/);
+  assert.match(client, /suppressReply: isPreConnectionQueued/);
+  assert.doesNotMatch(client, /Skipping pre-connection queued message/);
+  assert.match(client, /whatsappMessageProcessingTail/);
+  assert.match(route, /"suppress_reply"/);
+  assert.match(route, /mensagem_recuperada_apos_reconexao_sem_resposta_automatica/);
 });
 
 test("novo contato após encerramento cria protocolo novo", async () => {

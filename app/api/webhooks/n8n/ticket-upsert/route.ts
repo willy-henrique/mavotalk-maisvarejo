@@ -407,6 +407,10 @@ export async function POST(request: Request) {
     normalizeInboundEchoPayload(inboundRaw);
   const mediaUrl = payload.mediaUrl || payload.media_url || null;
   const mimeType = payload.mimeType || payload.mime_type || null;
+  const suppressReply = getMetadataBoolean(payload.metadata, [
+    "suppress_reply",
+    "suppressReply",
+  ]) === true;
 
   if (!inboundBody && !mediaUrl) {
     return NextResponse.json(
@@ -432,7 +436,7 @@ export async function POST(request: Request) {
   });
   if (businessRouting.destination === "business") {
     let replyDelivered: boolean | null = null;
-    if (businessRouting.reply) {
+    if (businessRouting.reply && !suppressReply) {
       const dryRun =
         String(process.env.WILLTALK_DRY_RUN_WHATSAPP || "").toLowerCase() ===
         "true";
@@ -475,7 +479,7 @@ export async function POST(request: Request) {
           businessRouting.reason === "duplicate"
             ? "ignored_duplicate"
             : "updated",
-        shouldReply: Boolean(businessRouting.reply),
+        shouldReply: Boolean(businessRouting.reply) && !suppressReply,
         replyText: businessRouting.reply || null,
         replyDelivered,
         reason: `business_${businessRouting.reason}`,
@@ -1002,6 +1006,15 @@ export async function POST(request: Request) {
   });
 
   // ── SEND REPLY VIA WHATSAPP ────────────────────────────────────────
+  if (suppressReply && shouldReply) {
+    shouldReply = false;
+    replyDelivered = null;
+    decisionReason = "mensagem_recuperada_apos_reconexao_sem_resposta_automatica";
+    logger.info(
+      { conversationId: conversation.id, externalId: payload.event_id },
+      "Persisted queued inbound message without sending a delayed automatic reply",
+    );
+  }
   const replyPhone = String(conversation.contactPhone || normalizedPhone);
   if (shouldReply && replyText) {
     // A decisão foi tomada no início deste pedido, mas o envio acontece agora. Nesse

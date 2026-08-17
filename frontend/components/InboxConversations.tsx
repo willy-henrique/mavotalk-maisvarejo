@@ -47,6 +47,21 @@ function formatMessageTime(createdAt?: string) {
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
+function isPdfMessage(message: ApiMessage): boolean {
+  if (String(message.mimeType || '').toLowerCase() === 'application/pdf') return true;
+  try {
+    return /\.pdf$/i.test(new URL(String(message.mediaUrl || '')).pathname);
+  } catch {
+    return false;
+  }
+}
+
+function documentTitle(message: ApiMessage): string {
+  const content = String(message.content || '').trim();
+  if (content && !/^\[(midia|mídia|documento)\]$/i.test(content)) return content;
+  return isPdfMessage(message) ? 'Documento PDF' : 'Documento';
+}
+
 export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentUser }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [conversations, setConversations] = useState<ApiConversation[]>([]);
@@ -76,13 +91,16 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const [quickReplyOpen, setQuickReplyOpen] = useState(false);
   const [quickReplyIndex, setQuickReplyIndex] = useState(0);
   const [listSearch, setListSearch] = useState('');
-  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [openingPdfId, setOpeningPdfId] = useState<string | null>(null);
+  const [pdfViewer, setPdfViewer] = useState<{ url: string; title: string } | null>(null);
   const [typingAgent, setTypingAgent] = useState<{ name: string } | null>(null);
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const signatureTouchedRef = useRef(false);
+  const pdfObjectUrlRef = useRef<string | null>(null);
 
   const toggleSignature = () => {
     signatureTouchedRef.current = true;
@@ -318,10 +336,61 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     }
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const closePdfViewer = () => {
+    if (pdfObjectUrlRef.current) URL.revokeObjectURL(pdfObjectUrlRef.current);
+    pdfObjectUrlRef.current = null;
+    setPdfViewer(null);
+  };
+
+  const openPdf = async (message: ApiMessage) => {
+    if (!selectedId || !message.id || openingPdfId) return;
+    setOpeningPdfId(message.id);
+    setSendError('');
+    try {
+      const params = new URLSearchParams({
+        conversationId: selectedId,
+        messageId: message.id,
+      });
+      const response = await apiFetch(`/api/media/pdf?${params.toString()}`, {
+        method: 'GET',
+      });
+      if (!response.ok) {
+        const data = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || 'Não foi possível abrir o PDF.');
+      }
+      const blob = await response.blob();
+      if (blob.type !== 'application/pdf') {
+        throw new Error('O servidor não retornou um PDF válido.');
+      }
+      if (pdfObjectUrlRef.current) URL.revokeObjectURL(pdfObjectUrlRef.current);
+      const url = URL.createObjectURL(blob);
+      pdfObjectUrlRef.current = url;
+      setPdfViewer({ url, title: documentTitle(message) });
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : 'Não foi possível abrir o PDF.');
+    } finally {
+      setOpeningPdfId(null);
+    }
+  };
+
+  useEffect(() => () => {
+    if (pdfObjectUrlRef.current) URL.revokeObjectURL(pdfObjectUrlRef.current);
+  }, []);
+
+  const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !selectedId || !file.type.startsWith('image/') || uploadingImage) return;
-    setUploadingImage(true);
+    const isAllowed = Boolean(file && (file.type.startsWith('image/') || file.type === 'application/pdf' || /\.pdf$/i.test(file.name)));
+    if (!file || !selectedId || !isAllowed || uploadingAttachment) {
+      if (file && !isAllowed) setSendError('Envie uma imagem ou um arquivo PDF.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > 16 * 1024 * 1024) {
+      setSendError('O anexo deve ter no máximo 16 MB.');
+      e.target.value = '';
+      return;
+    }
+    setUploadingAttachment(true);
     e.target.value = '';
     try {
       const formData = new FormData();
@@ -336,13 +405,13 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
         await fetchConversations(false);
       } else {
         const data = await res.json().catch(() => ({}));
-        const msg = (data as { error?: string }).error || 'Erro ao enviar imagem';
+        const msg = (data as { error?: string }).error || 'Erro ao enviar anexo';
         setSendError(msg);
       }
     } catch {
-      setSendError('Falha ao enviar imagem. Verifique a conexao do WhatsApp.');
+      setSendError('Falha ao enviar anexo. Verifique a conexão do WhatsApp.');
     } finally {
-      setUploadingImage(false);
+      setUploadingAttachment(false);
     }
   };
 
@@ -910,6 +979,57 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                           className="max-w-full rounded-lg max-h-64 object-contain"
                         />
                       </a>
+                    ) : m.type === 'document' && m.mediaUrl ? (
+                      <div className="min-w-[220px] max-w-sm">
+                        {m.direction === 'outbound' && m.authorName && (
+                          <span className="mb-2 block font-semibold">{m.authorName}:</span>
+                        )}
+                        <div className={`flex items-center gap-3 rounded-xl border p-3 ${
+                          m.direction === 'outbound'
+                            ? 'border-blue-400/70 bg-blue-700/30'
+                            : 'border-slate-200 bg-slate-50 dark:border-slate-500 dark:bg-slate-800'
+                        }`}>
+                          <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg font-black ${
+                            m.direction === 'outbound'
+                              ? 'bg-white/15 text-white'
+                              : 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+                          }`} aria-hidden="true">{isPdfMessage(m) ? 'PDF' : 'DOC'}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-semibold" title={documentTitle(m)}>{documentTitle(m)}</p>
+                            <p className={`text-xs ${m.direction === 'outbound' ? 'text-blue-100' : 'text-slate-500 dark:text-slate-300'}`}>
+                              {isPdfMessage(m) ? 'Arquivo PDF' : (m.mimeType || 'Arquivo')}
+                            </p>
+                          </div>
+                          {isPdfMessage(m) ? (
+                            <button
+                              type="button"
+                              onClick={() => void openPdf(m)}
+                              disabled={openingPdfId === m.id}
+                              className={`shrink-0 rounded-lg px-3 py-2 text-xs font-bold transition disabled:opacity-60 ${
+                                m.direction === 'outbound'
+                                  ? 'bg-white text-blue-700 hover:bg-blue-50'
+                                  : 'bg-blue-600 text-white hover:bg-blue-700'
+                              }`}
+                              aria-label={`Abrir PDF: ${documentTitle(m)}`}
+                            >
+                              {openingPdfId === m.id ? 'Abrindo…' : 'Abrir'}
+                            </button>
+                          ) : (
+                            <a
+                              href={m.mediaUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={`shrink-0 rounded-lg px-3 py-2 text-xs font-bold ${
+                                m.direction === 'outbound'
+                                  ? 'bg-white text-blue-700'
+                                  : 'bg-blue-600 text-white'
+                              }`}
+                            >
+                              Baixar
+                            </a>
+                          )}
+                        </div>
+                      </div>
                     ) : m.direction === 'outbound' && m.authorName ? (
                       <>
                         <span className="font-semibold block mb-1">{m.authorName}:</span>
@@ -970,12 +1090,12 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                   </div>
                 )}
                 <div className="flex gap-1.5 sm:gap-2 relative">
-                  <label aria-label="Enviar imagem" className="shrink-0 flex items-center justify-center w-10 h-11 sm:w-12 sm:h-12 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer disabled:opacity-50 text-slate-500 dark:text-slate-400" title="Enviar imagem">
+                  <label aria-label="Enviar imagem ou PDF" className="shrink-0 flex items-center justify-center w-10 h-11 sm:w-12 sm:h-12 rounded-xl border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer disabled:opacity-50 text-slate-500 dark:text-slate-400" title="Enviar imagem ou PDF (até 16 MB)">
                     <input
                       type="file"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                      disabled={sending || uploadingImage}
+                      accept="image/jpeg,image/png,image/webp,image/gif,application/pdf,.pdf"
+                      onChange={handleAttachmentUpload}
+                      disabled={sending || uploadingAttachment}
                       className="hidden"
                     />
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-5 h-5 text-slate-500">
@@ -1069,6 +1189,42 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
             onClose={() => setNewChatOpen(false)}
             onStarted={(conversationId) => { void fetchConversations(true); setSelectedId(conversationId); }}
           />
+        )}
+
+        {pdfViewer && (
+          <Dialog
+            title={pdfViewer.title}
+            description="Visualização segura do PDF recebido ou enviado neste atendimento."
+            size="wide"
+            onClose={closePdfViewer}
+          >
+            <div className="p-3 sm:p-5">
+              <object
+                data={pdfViewer.url}
+                type="application/pdf"
+                className="h-[65vh] min-h-[420px] w-full rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800"
+                aria-label={`Visualização do PDF ${pdfViewer.title}`}
+              >
+                <p className="p-6 text-sm text-slate-600 dark:text-slate-300">
+                  Este navegador não exibe PDF dentro da página. Use “Abrir em nova aba”.
+                </p>
+              </object>
+              <div className="mt-3 flex flex-wrap justify-end gap-2">
+                <button type="button" onClick={closePdfViewer} className="mavo-button-secondary">Fechar</button>
+                <a
+                  href={pdfViewer.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mavo-button-primary"
+                >
+                  Abrir em nova aba
+                </a>
+                <a href={pdfViewer.url} download="documento.pdf" className="mavo-button-secondary">
+                  Baixar PDF
+                </a>
+              </div>
+            </div>
+          </Dialog>
         )}
 
         {linkModalOpen && (

@@ -21,8 +21,17 @@ export const sendMessageSchema = z.object({
 });
 
 export const startConversationSchema = z.object({
-  /** DDI + DDD + número, apenas dígitos. */
-  phone: z.string().trim().regex(/^\d{10,15}$/, "Informe o número com DDI e DDD, somente dígitos."),
+  /** DDD + número brasileiro ou E.164 com DDI, apenas dígitos. */
+  phone: z
+    .string()
+    .trim()
+    .min(10)
+    .max(32)
+    .regex(/^[+()\d\s.-]+$/, "O número contém caracteres inválidos.")
+    .refine(
+      (value) => /^\d{10,15}$/.test(value.replace(/\D/g, "")),
+      "Informe DDD + número ou DDI + DDD + número.",
+    ),
   message: z.string().trim().min(1).max(4_000),
   contactName: z.string().trim().max(200).optional(),
 });

@@ -1,4 +1,5 @@
 import { v2 as cloudinary } from "cloudinary";
+import { randomUUID } from "node:crypto";
 
 const cleanEnv = (value: string | undefined) => String(value || "").trim().replace(/^(['"])(.*)\1$/, "$2");
 /** Descarta os placeholders `<your_api_key>` copiados do painel do Cloudinary. */
@@ -106,10 +107,18 @@ export async function uploadBufferToCloudinary(buffer: Buffer, mimeType?: string
     : mimeType?.startsWith("audio/")
       ? "video"
       : "raw";
+  const publicId =
+    resourceType === "raw" && mimeType === "application/pdf"
+      ? `${randomUUID()}.pdf`
+      : undefined;
 
   return new Promise<{ secure_url: string; public_id: string }>((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: resourceType },
+      {
+        folder,
+        resource_type: resourceType,
+        ...(publicId ? { public_id: publicId } : {}),
+      },
       (error, result) => {
         if (error || !result) {
           reject(error ? cloudinaryError(error) : new Error("Upload cloudinary sem resultado"));
@@ -129,7 +138,10 @@ export function generateSignedUrl(publicId: string): string {
 }
 
 /** Remove recursos do Cloudinary. */
-export async function deleteCloudinaryResources(publicIds: string[]): Promise<void> {
+export async function deleteCloudinaryResources(
+  publicIds: string[],
+  resourceType: "image" | "video" | "raw" = "image",
+): Promise<void> {
   if (!cloudName || !apiKey || !apiSecret || publicIds.length === 0) return;
-  await cloudinary.api.delete_resources(publicIds, { resource_type: "image" });
+  await cloudinary.api.delete_resources(publicIds, { resource_type: resourceType });
 }

@@ -40,7 +40,12 @@ import {
   buildQuickGuidance,
   INVESTIGATION_AI_ROUNDS,
 } from "@/lib/investigation-reply";
-import { DEFAULT_ORGANIZATION_ID, buildDemandMenu } from "@/lib/utils";
+import {
+  DEFAULT_ORGANIZATION_ID,
+  buildDemandMenu,
+  toWhatsAppAddress,
+  whatsappPhoneCandidates,
+} from "@/lib/utils";
 import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
 import { routeBusinessWhatsappMessage } from "@/lib/business-access/business-whatsapp-router";
 import {
@@ -230,7 +235,7 @@ function getState(): WhatsappState {
 }
 
 function phoneToChatId(phone: string) {
-  const digits = phone.replace("whatsapp:", "").replace(/\D/g, "");
+  const digits = whatsappPhoneCandidates(phone)[0] || "";
   return `${digits}@s.whatsapp.net`;
 }
 
@@ -482,8 +487,17 @@ let pairingRequestedGeneration: number | null = null;
 
 /** Timestamp Unix (segundos) do momento em que o cliente ficou pronto.
  * Mensagens com timestamp anterior a este valor são mensagens offline enfileiradas
- * e devem ser ignoradas para não disparar respostas automáticas indevidas. */
+ * e são recuperadas sem disparar respostas automáticas atrasadas. */
 let clientReadyAt: number | null = null;
+const WA_QUEUED_MESSAGE_RECOVERY_MAX_AGE_SECONDS = Math.max(
+  60,
+  Number(process.env.WA_QUEUED_MESSAGE_RECOVERY_MAX_AGE_SECONDS) ||
+    7 * 24 * 60 * 60,
+);
+
+/** Preserva a ordem de mensagens de um lote `append`/`notify` e evita que duas
+ * primeiras mensagens criem/atualizem a mesma conversa em paralelo. */
+let whatsappMessageProcessingTail: Promise<void> = Promise.resolve();
 
 /** ChatIds de envios automáticos (bot) - mensagens enviadas por aqui não devem alterar status para em_atendimento. */
 const recentBotSends = new Set<string>();
@@ -580,6 +594,7 @@ async function processOutboundMessageFromDevice(
 async function handleInboundViaBotTriagem(
   sock: WASocket,
   msg: WAMessage,
+  options?: { suppressReply?: boolean },
 ) {
   const remoteJid = String(msg.key?.remoteJid || "");
   const fromPhone = await resolveMessagePhone(sock, msg);
@@ -592,12 +607,14 @@ async function handleInboundViaBotTriagem(
       },
       "Inbound WhatsApp message has no resolvable phone JID",
     );
-    await rateLimitedSend(
-      sock,
-      remoteJid,
-      "Não consegui iniciar o atendimento automático agora. Por favor, tente novamente em instantes.",
-      true,
-    );
+    if (!options?.suppressReply) {
+      await rateLimitedSend(
+        sock,
+        remoteJid,
+        "Não consegui iniciar o atendimento automático agora. Por favor, tente novamente em instantes.",
+        true,
+      );
+    }
     return;
   }
   // O nome salvo pela loja vale mais que o pushName: é ele que identifica o cliente
@@ -655,7 +672,10 @@ async function handleInboundViaBotTriagem(
     mensagem: inboundText,
     mediaUrl,
     mimeType,
-    metadata: { ingest_origin: "whatsapp-unofficial" },
+    metadata: {
+      ingest_origin: "whatsapp-unofficial",
+      ...(options?.suppressReply ? { suppress_reply: true } : {}),
+    },
   });
   if (!result.ok) {
     logger.error(
@@ -668,12 +688,14 @@ async function handleInboundViaBotTriagem(
       },
       "ticket-upsert local failed — WhatsApp may reply but inbox will not update until fixed (check WILLTALK_WEBHOOK_TOKEN, WILLTALK_INTERNAL_BASE_URL/PORT, DEFAULT_ORG_ID vs user organization)",
     );
-    await rateLimitedSend(
-      sock,
-      remoteJid,
-      "Não consegui concluir o atendimento automático agora. Por favor, tente novamente em instantes.",
-      true,
-    );
+    if (!options?.suppressReply) {
+      await rateLimitedSend(
+        sock,
+        remoteJid,
+        "Não consegui concluir o atendimento automático agora. Por favor, tente novamente em instantes.",
+        true,
+      );
+    }
     return;
   }
 
@@ -693,6 +715,7 @@ async function handleInboundViaBotTriagem(
     organizationId?: unknown;
   };
   if (
+    !options?.suppressReply &&
     decision.shouldReply === true &&
     decision.replyDelivered === false &&
     typeof decision.replyText === "string" &&
@@ -733,16 +756,37 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
   if (msg.key?.fromMe || !isDirectUserChat(remoteJid)) return;
   if (shouldIgnoreInboundWhatsApp(msg)) return;
 
-  // Ignora mensagens enfileiradas que chegaram enquanto o WhatsApp estava desconectado.
-  // Quando o cliente reconecta, o Baileys reenvia notificações pendentes ("append") —
-  // sem este filtro, o bot responderia a todos sem motivo.
+  // Mensagens que chegaram enquanto a Render estava dormindo reaparecem como
+  // `append` após a reconexão. Elas precisam ser persistidas no Inbox, mas não podem
+  // disparar uma sequência atrasada de respostas automáticas para o cliente.
   const messageTimestamp = Number(msg.messageTimestamp || 0);
-  if (clientReadyAt !== null && messageTimestamp > 0 && messageTimestamp < clientReadyAt) {
-    logger.debug(
-      { from: remoteJid, msgTs: messageTimestamp, readyAt: clientReadyAt },
-      "Skipping pre-connection queued message",
+  const isPreConnectionQueued =
+    clientReadyAt !== null &&
+    messageTimestamp > 0 &&
+    messageTimestamp < clientReadyAt;
+  if (isPreConnectionQueued) {
+    const queuedAgeSeconds = clientReadyAt! - messageTimestamp;
+    if (queuedAgeSeconds > WA_QUEUED_MESSAGE_RECOVERY_MAX_AGE_SECONDS) {
+      logger.debug(
+        {
+          from: remoteJid,
+          msgTs: messageTimestamp,
+          readyAt: clientReadyAt,
+          queuedAgeSeconds,
+        },
+        "Skipping historical WhatsApp message outside the recovery window",
+      );
+      return;
+    }
+    logger.info(
+      {
+        from: remoteJid,
+        msgTs: messageTimestamp,
+        readyAt: clientReadyAt,
+        queuedAgeSeconds,
+      },
+      "Persisting pre-connection queued message without an automatic reply",
     );
-    return;
   }
 
   const { kind: mediaKind } = detectInboundMedia(msg.message);
@@ -770,20 +814,24 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
     }
     if (rated) {
       logger.info({ phone: ratingPhone, score: bodyRaw.trim() }, "Satisfaction rating recorded");
-      await rateLimitedSend(
-        sock,
-        remoteJid,
-        "Obrigado pela sua avaliação! Se precisar de algo, é só chamar.",
-        true,
-      );
+      if (!isPreConnectionQueued) {
+        await rateLimitedSend(
+          sock,
+          remoteJid,
+          "Obrigado pela sua avaliação! Se precisar de algo, é só chamar.",
+          true,
+        );
+      }
       return;
     }
   }
 
   const n8nOnlyMode = String(process.env.WILLTALK_N8N_ONLY || "").toLowerCase() === "true";
   const aiTriageOnlyMode = String(process.env.WILLTALK_AI_TRIAGE_ONLY || "true").toLowerCase() !== "false";
-  if (n8nOnlyMode || aiTriageOnlyMode) {
-    await handleInboundViaBotTriagem(sock, msg);
+  if (isPreConnectionQueued || n8nOnlyMode || aiTriageOnlyMode) {
+    await handleInboundViaBotTriagem(sock, msg, {
+      suppressReply: isPreConnectionQueued,
+    });
     return;
   }
 
@@ -1542,15 +1590,20 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
         if (type !== "notify" && type !== "append") return;
         for (const msg of messages) {
           if (!msg.message) continue;
-          if (msg.key?.fromMe) {
-            void processOutboundMessageFromDevice(sock, msg).catch((error) => {
-              logger.error({ err: error }, "Failed to process outbound WhatsApp message (device)");
+          whatsappMessageProcessingTail = whatsappMessageProcessingTail
+            .then(async () => {
+              if (msg.key?.fromMe) {
+                await processOutboundMessageFromDevice(sock, msg);
+              } else {
+                await processInboundMessage(sock, msg);
+              }
+            })
+            .catch((error) => {
+              logger.error(
+                { err: error, direction: msg.key?.fromMe ? "outbound" : "inbound" },
+                "Failed to process queued WhatsApp message",
+              );
             });
-          } else {
-            void processInboundMessage(sock, msg).catch((error) => {
-              logger.error({ err: error }, "Failed to process inbound WhatsApp message");
-            });
-          }
         }
       });
 
@@ -1810,23 +1863,135 @@ export async function resyncWhatsappContacts(): Promise<void> {
  * conectada) — nesse caso quem chama decide seguir, em vez de bloquear o envio por
  * falta de informação.
  */
-export async function whatsappNumberExists(phone: string): Promise<boolean | null> {
-  const provider = process.env.WHATSAPP_PROVIDER || "twilio";
-  if (provider !== "unofficial") return null;
-  const sock = global.__waClient;
-  if (!sock || getState().status !== "ready") return null;
+export type WhatsappDestinationResolution =
+  | {
+      status: "verified" | "unverified";
+      phone: string;
+      jid: string;
+      corrected: boolean;
+      candidatesChecked: number;
+    }
+  | {
+      status: "invalid" | "not_found" | "unavailable";
+      candidatesChecked: number;
+      reason: string;
+    };
 
-  const digits = phone.replace(/\D/g, "");
-  if (digits.length < 10 || digits.length > 15) return false;
+function maskedPhone(phone: string): string {
+  const digits = String(phone || "").replace(/\D/g, "");
+  return digits ? `***${digits.slice(-4)}` : "invalid";
+}
+
+/**
+ * Resolve o destino uma única vez e conserva o JID canônico devolvido pelo
+ * WhatsApp. Reconstruir o JID a partir do texto digitado anulava justamente a
+ * correção feita por `onWhatsApp`, sobretudo na variação brasileira do 9º dígito.
+ */
+export async function resolveWhatsappDestination(
+  phone: string,
+): Promise<WhatsappDestinationResolution> {
+  const candidates = whatsappPhoneCandidates(phone);
+  if (!candidates.length) {
+    return {
+      status: "invalid",
+      candidatesChecked: 0,
+      reason: "Telefone fora do formato E.164",
+    };
+  }
+
+  const provider = process.env.WHATSAPP_PROVIDER || "twilio";
+  if (provider !== "unofficial") {
+    const digits = candidates[0];
+    return {
+      status: "unverified",
+      phone: toWhatsAppAddress(digits),
+      jid: `${digits}@s.whatsapp.net`,
+      corrected: digits !== String(phone).replace(/\D/g, ""),
+      candidatesChecked: 0,
+    };
+  }
+
+  const sock = global.__waClient;
+  if (!sock || getState().status !== "ready") {
+    return {
+      status: "unavailable",
+      candidatesChecked: 0,
+      reason: "WhatsApp conectado ainda não está pronto",
+    };
+  }
 
   try {
-    const result = await sock.onWhatsApp(digits);
-    const match = result?.[0];
-    return match ? Boolean(match.exists) : false;
+    const result = await sock.onWhatsApp(...candidates);
+    const match = result?.find(
+      (candidate) => candidate.exists && isDirectUserJid(candidate.jid),
+    );
+    if (!match) {
+      logger.info(
+        {
+          phone: maskedPhone(phone),
+          stage: "formatJID",
+          candidatesChecked: candidates.length,
+          status: "not_found",
+        },
+        "Active conversation destination not found on WhatsApp",
+      );
+      return {
+        status: "not_found",
+        candidatesChecked: candidates.length,
+        reason: "Número não encontrado no WhatsApp",
+      };
+    }
+
+    const canonicalPhone = whatsappPhoneFromJid(match.jid);
+    if (!canonicalPhone) {
+      return {
+        status: "not_found",
+        candidatesChecked: candidates.length,
+        reason: "WhatsApp não devolveu um JID de telefone válido",
+      };
+    }
+
+    const canonicalDigits = canonicalPhone.replace(/\D/g, "");
+    logger.info(
+      {
+        phone: maskedPhone(canonicalPhone),
+        stage: "formatJID",
+        candidatesChecked: candidates.length,
+        corrected: canonicalDigits !== String(phone).replace(/\D/g, ""),
+        status: "verified",
+      },
+      "Active conversation destination resolved",
+    );
+    return {
+      status: "verified",
+      phone: canonicalPhone,
+      jid: match.jid,
+      corrected: canonicalDigits !== String(phone).replace(/\D/g, ""),
+      candidatesChecked: candidates.length,
+    };
   } catch (err) {
-    logger.warn({ err, phone: digits }, "Failed to verify WhatsApp number");
-    return null;
+    logger.warn(
+      {
+        err,
+        phone: maskedPhone(phone),
+        stage: "checkNumberStatus",
+        candidatesChecked: candidates.length,
+      },
+      "Failed to resolve active conversation destination",
+    );
+    return {
+      status: "unavailable",
+      candidatesChecked: candidates.length,
+      reason: "Não foi possível consultar o número no WhatsApp",
+    };
   }
+}
+
+export async function whatsappNumberExists(phone: string): Promise<boolean | null> {
+  const resolution = await resolveWhatsappDestination(phone);
+  if (resolution.status === "verified") return true;
+  if (resolution.status === "invalid" || resolution.status === "not_found") return false;
+  return null;
 }
 
 /** Envia indicador de digitação para o contato no WhatsApp (apenas unofficial). */
@@ -1843,18 +2008,23 @@ export async function sendTypingIndicator(contactPhone: string): Promise<void> {
   }
 }
 
-function buildOutboundMediaContent(mediaUrl: string, caption?: string): AnyMessageContent {
+function buildOutboundMediaContent(
+  mediaUrl: string,
+  caption?: string,
+  options?: { mimeType?: string; fileName?: string },
+): AnyMessageContent {
   const clean = mediaUrl.split("?")[0].toLowerCase();
-  if (/\.(jpe?g|png|gif|webp)$/.test(clean)) {
+  const declaredMimeType = String(options?.mimeType || "").toLowerCase();
+  if (declaredMimeType.startsWith("image/") || /\.(jpe?g|png|gif|webp)$/.test(clean)) {
     return { image: { url: mediaUrl }, caption: caption || undefined };
   }
-  if (/\.(mp4|3gp|mov)$/.test(clean)) {
+  if (declaredMimeType.startsWith("video/") || /\.(mp4|3gp|mov)$/.test(clean)) {
     return { video: { url: mediaUrl }, caption: caption || undefined };
   }
-  if (/\.(mp3|ogg|oga|m4a|wav|opus)$/.test(clean)) {
-    return { audio: { url: mediaUrl }, mimetype: "audio/mpeg" };
+  if (declaredMimeType.startsWith("audio/") || /\.(mp3|ogg|oga|m4a|wav|opus)$/.test(clean)) {
+    return { audio: { url: mediaUrl }, mimetype: declaredMimeType || "audio/mpeg" };
   }
-  const fileName = mediaUrl.split("/").pop() || "arquivo";
+  const fileName = options?.fileName || mediaUrl.split("/").pop() || "arquivo";
   const extMatch = /\.([a-z0-9]+)$/.exec(clean);
   const documentMimeTypes: Record<string, string> = {
     pdf: "application/pdf",
@@ -1864,7 +2034,10 @@ function buildOutboundMediaContent(mediaUrl: string, caption?: string): AnyMessa
     xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     txt: "text/plain",
   };
-  const mimetype = (extMatch && documentMimeTypes[extMatch[1]]) || "application/octet-stream";
+  const mimetype =
+    declaredMimeType ||
+    (extMatch && documentMimeTypes[extMatch[1]]) ||
+    "application/octet-stream";
   return { document: { url: mediaUrl }, mimetype, fileName, caption: caption || undefined };
 }
 
@@ -1873,7 +2046,14 @@ function buildOutboundMediaContent(mediaUrl: string, caption?: string): AnyMessa
 export async function sendWhatsappMessage(
   toPhone: string,
   text: string,
-  options?: { skipRateLimit?: boolean; mediaUrl?: string; fromBot?: boolean },
+  options?: {
+    skipRateLimit?: boolean;
+    mediaUrl?: string;
+    fromBot?: boolean;
+    destinationJid?: string;
+    mimeType?: string;
+    fileName?: string;
+  },
 ) {
   const provider = process.env.WHATSAPP_PROVIDER || "twilio";
   if (provider !== "unofficial") {
@@ -1892,12 +2072,15 @@ export async function sendWhatsappMessage(
     throw new Error("WhatsApp client ainda nao esta pronto");
   }
 
-  const digits = toPhone.replace(/\D/g, "");
-  if (digits.length < 10 || digits.length > 15) {
+  const digits = whatsappPhoneCandidates(toPhone)[0] || "";
+  if (!digits) {
     throw new Error(`Telefone invalido para envio WhatsApp: ${toPhone}`);
   }
 
-  const jid = phoneToChatId(toPhone);
+  const jid = options?.destinationJid || phoneToChatId(toPhone);
+  if (!/@(s\.whatsapp\.net|hosted)$/i.test(jid)) {
+    throw new Error("Destino WhatsApp inválido para envio");
+  }
 
   // Marca como envio de bot ANTES de enviar, para que o listener de mensagens
   // gerado pelo Baileys (fromMe) seja reconhecido como automático.
@@ -1907,7 +2090,13 @@ export async function sendWhatsappMessage(
 
   let sent: WAMessage | undefined;
   if (options?.mediaUrl) {
-    sent = await sock.sendMessage(jid, buildOutboundMediaContent(options.mediaUrl, text));
+    sent = await sock.sendMessage(
+      jid,
+      buildOutboundMediaContent(options.mediaUrl, text, {
+        mimeType: options.mimeType,
+        fileName: options.fileName,
+      }),
+    );
   } else if (options?.skipRateLimit === true) {
     sent = await sock.sendMessage(jid, { text });
   } else {

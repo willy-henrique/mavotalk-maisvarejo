@@ -11,9 +11,10 @@ import {
   resolveAgentSignature,
 } from "@/lib/agent-message";
 import { logger } from "@/lib/logger";
-
-const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
-const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+import {
+  MAX_MESSAGE_ATTACHMENT_BYTES,
+  validateMessageAttachment,
+} from "@/lib/message-attachment-validation";
 
 export async function POST(
   request: Request,
@@ -39,28 +40,33 @@ export async function POST(
   }
 
   const contentLength = Number(request.headers.get("content-length") || 0);
-  if (contentLength > MAX_IMAGE_BYTES + 512 * 1024) {
-    return NextResponse.json({ error: "Imagem excede o limite de 8 MB" }, { status: 413 });
+  if (contentLength > MAX_MESSAGE_ATTACHMENT_BYTES + 512 * 1024) {
+    return NextResponse.json({ error: "O anexo excede o limite de 16 MB" }, { status: 413 });
   }
 
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
-  if (!file || !ALLOWED_IMAGE_TYPES.has(file.type)) {
+  if (!file) {
     return NextResponse.json(
-      { error: "Envie uma imagem JPEG, PNG, WebP ou GIF" },
+      { error: "Selecione uma imagem ou um arquivo PDF" },
       { status: 400 },
     );
-  }
-  if (file.size <= 0 || file.size > MAX_IMAGE_BYTES) {
-    return NextResponse.json({ error: "Imagem excede o limite de 8 MB" }, { status: 413 });
   }
 
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
+  let attachment: ReturnType<typeof validateMessageAttachment>;
+  try {
+    attachment = validateMessageAttachment(file, buffer);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Anexo inválido";
+    const status = file.size > MAX_MESSAGE_ATTACHMENT_BYTES ? 413 : 400;
+    return NextResponse.json({ error: message }, { status });
+  }
   const base64 = buffer.toString("base64");
-  const upload = await uploadBase64ToCloudinary(base64, file.type);
+  const upload = await uploadBase64ToCloudinary(base64, attachment.mimeType);
   if (!upload) {
-    return NextResponse.json({ error: "Falha ao enviar imagem" }, { status: 500 });
+    return NextResponse.json({ error: "Falha ao armazenar o anexo" }, { status: 500 });
   }
 
   const twilioSid = process.env.TWILIO_ACCOUNT_SID;
@@ -78,7 +84,7 @@ export async function POST(
     agentSignatureEnabled,
   );
   const outboundCaption = buildAgentWhatsappMessage(
-    "[imagem]",
+    attachment.placeholder,
     auth.session.name,
     useSignature,
   );
@@ -90,6 +96,8 @@ export async function POST(
       externalId = await sendWhatsappMessage(conversation.contactPhone, outboundCaption, {
         skipRateLimit: true,
         mediaUrl: upload.secure_url,
+        mimeType: attachment.mimeType,
+        fileName: attachment.fileName,
       });
     } else if (twilioSid && twilioToken && twilioFrom) {
       const client = twilio(twilioSid, twilioToken);
@@ -106,13 +114,16 @@ export async function POST(
   } catch (err) {
     logger.error(
       { err, provider, organizationId: auth.session.organizationId, conversationId: id },
-      "Failed to deliver outbound WhatsApp image",
+      "Failed to deliver outbound WhatsApp attachment",
     );
-    await deleteCloudinaryResources([upload.public_id]).catch((cleanupError) => {
+    await deleteCloudinaryResources(
+      [upload.public_id],
+      attachment.kind === "document" ? "raw" : "image",
+    ).catch((cleanupError) => {
       logger.warn({ err: cleanupError, publicId: upload.public_id }, "Failed to clean orphaned upload");
     });
     return NextResponse.json(
-      { error: "Nao foi possivel entregar a imagem no WhatsApp. Tente novamente." },
+      { error: "Não foi possível entregar o anexo no WhatsApp. Tente novamente." },
       { status: 503 },
     );
   }
@@ -120,12 +131,13 @@ export async function POST(
   const message = await addOutboundMessage(
     auth.session.organizationId,
     id,
-    "[imagem]",
+    attachment.placeholder,
     externalId,
     {
       authorId: auth.session.userId,
-      type: "image",
+      type: attachment.kind,
       mediaUrl: upload.secure_url,
+      mimeType: attachment.mimeType,
       cloudinaryPublicId: upload.public_id,
     },
   );

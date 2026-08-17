@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import twilio from "twilio";
 import {
   addOutboundMessage,
   assignConversation,
@@ -13,8 +14,12 @@ import { requireMenuPermission, requireSession } from "@/lib/api";
 import { startConversationSchema } from "@/lib/schemas";
 import { emitRealtime } from "@/lib/realtime";
 import { getSupermarketSettings } from "@/lib/supermarket-settings";
-import { sendWhatsappMessage, whatsappNumberExists } from "@/lib/whatsapp-client";
+import {
+  resolveWhatsappDestination,
+  sendWhatsappMessage,
+} from "@/lib/whatsapp-client";
 import { logger } from "@/lib/logger";
+import { requestIdFrom } from "@/lib/observability";
 
 const allowedStatus = new Set<ConversationStatus>(["aguardando", "em_atendimento", "pendente_cliente", "encerrado"]);
 
@@ -43,6 +48,7 @@ export async function GET(request: NextRequest) {
  * dar o primeiro passo — só responder.
  */
 export async function POST(request: NextRequest) {
+  const requestId = requestIdFrom(request);
   const auth = await requireSession();
   if (auth.error || !auth.session) return auth.error;
   const denied = await requireMenuPermission(auth.session, "inbox", "update");
@@ -57,23 +63,51 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { phone, message, contactName } = parsed.data;
+  const { phone: inputPhone, message, contactName } = parsed.data;
   const organizationId = auth.session.organizationId;
 
-  if (await isContactBlocked(organizationId, phone)) {
+  logger.info(
+    { requestId, organizationId, stage: "createConversation" },
+    "Starting active WhatsApp conversation",
+  );
+
+  const destination = await resolveWhatsappDestination(inputPhone);
+  if (!("phone" in destination)) {
+    if (destination.status === "unavailable") {
+      return NextResponse.json(
+        {
+          error: "O WhatsApp conectado não está pronto para validar e enviar. Tente novamente em instantes.",
+          code: "WHATSAPP_UNAVAILABLE",
+          requestId,
+        },
+        { status: 503 },
+      );
+    }
     return NextResponse.json(
-      { error: "Este contato está bloqueado. Desbloqueie antes de iniciar a conversa." },
-      { status: 409 },
+      {
+        error:
+          destination.status === "invalid"
+            ? "Número inválido. Informe DDD + número ou DDI + DDD + número."
+            : "Este número não foi encontrado no WhatsApp. Confira o DDI, o DDD e o nono dígito.",
+        code:
+          destination.status === "invalid"
+            ? "INVALID_PHONE"
+            : "WHATSAPP_NUMBER_NOT_FOUND",
+        requestId,
+      },
+      { status: 422 },
     );
   }
 
-  // Um número digitado errado seria enviado para o vazio e ainda criaria contato e
-  // conversa fantasmas no painel. `null` significa que não deu para verificar.
-  const exists = await whatsappNumberExists(phone);
-  if (exists === false) {
+  const phone = destination.phone;
+  if (await isContactBlocked(organizationId, phone)) {
     return NextResponse.json(
-      { error: "Este número não tem WhatsApp. Confira o DDI, o DDD e os dígitos." },
-      { status: 422 },
+      {
+        error: "Este contato está bloqueado. Desbloqueie antes de iniciar a conversa.",
+        code: "CONTACT_BLOCKED",
+        requestId,
+      },
+      { status: 409 },
     );
   }
 
@@ -96,17 +130,56 @@ export async function POST(request: NextRequest) {
 
   let externalId: string | undefined;
   try {
-    externalId = await sendWhatsappMessage(phone, outboundBody, { skipRateLimit: true });
+    const provider = process.env.WHATSAPP_PROVIDER || "twilio";
+    logger.info(
+      {
+        requestId,
+        organizationId,
+        conversationId: conversation.id,
+        stage: "sendMessageToGateway",
+        provider,
+        destinationCorrected: destination.corrected,
+      },
+      "Sending first active-conversation message",
+    );
+    if (provider === "unofficial") {
+      externalId = await sendWhatsappMessage(phone, outboundBody, {
+        skipRateLimit: true,
+        destinationJid: destination.jid,
+      });
+    } else {
+      const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+      const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+      const twilioFrom = process.env.TWILIO_WHATSAPP_NUMBER;
+      if (!twilioSid || !twilioToken || !twilioFrom) {
+        throw new Error("Outbound WhatsApp provider is not configured");
+      }
+      const client = twilio(twilioSid, twilioToken);
+      const sent = await client.messages.create({
+        from: twilioFrom,
+        to: phone,
+        body: outboundBody,
+      });
+      externalId = sent.sid;
+    }
   } catch (error) {
-    logger.error({ err: error, organizationId, phone }, "Failed to start conversation on WhatsApp");
+    logger.error(
+      {
+        err: error,
+        requestId,
+        organizationId,
+        conversationId: conversation.id,
+        stage: "sendMessageToGateway",
+      },
+      "Failed to start conversation on WhatsApp",
+    );
     // A conversa fica criada e atribuída, mas sem mensagem entregue seria enganoso
     // reportar sucesso: o atendente precisa saber que o cliente não recebeu nada.
     return NextResponse.json(
       {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Não foi possível enviar a mensagem pelo WhatsApp.",
+        error: "O WhatsApp recusou ou não confirmou o envio. A mensagem não foi registrada como entregue; tente novamente.",
+        code: "WHATSAPP_SEND_FAILED",
+        requestId,
         conversation: { id: conversation.id },
       },
       { status: 502 },
@@ -127,7 +200,24 @@ export async function POST(request: NextRequest) {
     "start_conversation",
     "conversation",
     String(conversation.id),
-    { phone, verifiedOnWhatsapp: exists },
+    {
+      verifiedOnWhatsapp: destination.status === "verified",
+      destinationCorrected: destination.corrected,
+      candidatesChecked: destination.candidatesChecked,
+      gatewayMessageId: externalId,
+      requestId,
+    },
+  );
+
+  logger.info(
+    {
+      requestId,
+      organizationId,
+      conversationId: conversation.id,
+      stage: "updateStatusLocal",
+      gatewayConfirmed: Boolean(externalId),
+    },
+    "Active WhatsApp conversation started",
   );
 
   emitRealtime(organizationId, "message.created", {

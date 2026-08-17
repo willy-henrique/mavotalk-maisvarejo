@@ -11,7 +11,11 @@ import type {
 } from "@/lib/repo-types";
 import { getSupabaseClient } from "@/lib/supabase-admin";
 import { createTenantPostgresSupabaseShim, type Row, type SupabaseLikeClient } from "@/lib/postgres-supabase-shim";
-import { DEFAULT_ORGANIZATION_ID } from "@/lib/utils";
+import {
+  DEFAULT_ORGANIZATION_ID,
+  toWhatsAppAddress,
+  whatsappPhoneStorageAliases,
+} from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { enqueueSlaCheck } from "@/lib/queues";
 import { isProtectedSystemQueue, normalizeQueueType, queueTypeForMenuOption, SUPERMARKET_QUEUE_PRESET } from "@/lib/supermarket-config";
@@ -914,8 +918,9 @@ export async function addOutboundMessage(
   options?: {
     skipStatusUpdate?: boolean;
     authorId?: string;
-    type?: "text" | "image";
+    type?: "text" | "image" | "document" | "audio";
     mediaUrl?: string | null;
+    mimeType?: string | null;
     cloudinaryPublicId?: string | null;
   },
 ) {
@@ -923,7 +928,7 @@ export async function addOutboundMessage(
   if (externalId) {
     const { data: dup } = await supa(orgId)
       .from("messages")
-      .select("id, content, type, author_id")
+      .select("id, content, type, author_id, media_url, mime_type, cloudinary_public_id")
       .eq("organization_id", orgId)
       .eq("conversation_id", conversationId)
       .eq("external_id", externalId)
@@ -937,6 +942,9 @@ export async function addOutboundMessage(
         type: String(dup.type || "text"),
         content: String(dup.content || content),
         authorId: dup.author_id ?? undefined,
+        mediaUrl: dup.media_url ?? undefined,
+        mimeType: dup.mime_type ?? undefined,
+        cloudinaryPublicId: dup.cloudinary_public_id ?? undefined,
       };
     }
   }
@@ -953,6 +961,7 @@ export async function addOutboundMessage(
     external_id: externalId || null,
     author_id: options?.authorId || null,
     media_url: options?.mediaUrl || null,
+    mime_type: options?.mimeType || null,
     cloudinary_public_id: options?.cloudinaryPublicId || null,
   });
   if (insertError) {
@@ -987,6 +996,7 @@ export async function addOutboundMessage(
     content,
     authorId: options?.authorId,
     mediaUrl: options?.mediaUrl,
+    mimeType: options?.mimeType,
     cloudinaryPublicId: options?.cloudinaryPublicId,
   };
 }
@@ -1074,6 +1084,42 @@ export async function getCloudinaryPublicIdsForConversation(
   return (data ?? []).map((r) => String(r.cloudinary_public_id)).filter(Boolean);
 }
 
+export async function getMessageMediaForConversation(
+  organizationId: string,
+  conversationId: string,
+  messageId: string,
+): Promise<{
+  mediaUrl: string | null;
+  mimeType: string | null;
+  cloudinaryPublicId: string | null;
+  type: string;
+} | null> {
+  const orgId = requireOrganizationId(organizationId);
+  const { data, error } = await supa(orgId)
+    .from("messages")
+    .select("media_url, mime_type, cloudinary_public_id, type")
+    .eq("organization_id", orgId)
+    .eq("conversation_id", conversationId)
+    .eq("id", messageId)
+    .maybeSingle();
+  if (error) {
+    logger.error(
+      { err: error, organizationId: orgId, conversationId, messageId },
+      "supa getMessageMediaForConversation",
+    );
+    throw error;
+  }
+  if (!data) return null;
+  return {
+    mediaUrl: data.media_url ? String(data.media_url) : null,
+    mimeType: data.mime_type ? String(data.mime_type) : null,
+    cloudinaryPublicId: data.cloudinary_public_id
+      ? String(data.cloudinary_public_id)
+      : null,
+    type: String(data.type || "text"),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Contacts
 // ---------------------------------------------------------------------------
@@ -1100,65 +1146,123 @@ export async function getContactById(
 
 export async function getContactByPhone(organizationId: string, phoneNumber: string) {
   const orgId = requireOrganizationId(organizationId);
+  const aliases = whatsappPhoneStorageAliases(phoneNumber);
+  if (!aliases.length) return null;
   const { data } = await supa(orgId)
     .from("contacts")
     .select("*")
     .eq("organization_id", orgId)
-    .eq("phone_number", phoneNumber)
-    .maybeSingle();
-  if (!data) return null;
+    .in("phone_number", aliases);
+  const rows = data ?? [];
+  const canonicalPhone = toWhatsAppAddress(phoneNumber);
+  const contact =
+    rows.find((row) => String(row.phone_number) === canonicalPhone) || rows[0];
+  if (!contact) return null;
   return {
-    id: String(data.id),
+    id: String(contact.id),
     organizationId: orgId,
-    phoneNumber: String(data.phone_number ?? phoneNumber),
-    name: String(data.name ?? ""),
-    blocked: Boolean(data.blocked),
+    phoneNumber: String(contact.phone_number ?? canonicalPhone ?? phoneNumber),
+    name: String(contact.name ?? ""),
+    blocked: Boolean(contact.blocked),
   };
 }
 
 export async function isContactBlocked(organizationId: string, phoneNumber: string): Promise<boolean> {
-  const contact = await getContactByPhone(organizationId, phoneNumber);
-  return contact?.blocked === true;
+  const orgId = requireOrganizationId(organizationId);
+  const aliases = whatsappPhoneStorageAliases(phoneNumber);
+  if (!aliases.length) return false;
+  const { data } = await supa(orgId)
+    .from("contacts")
+    .select("id, blocked")
+    .eq("organization_id", orgId)
+    .in("phone_number", aliases)
+    .eq("blocked", true)
+    .limit(1);
+  return Boolean(data?.length);
 }
 
 export async function getOrCreateContact(organizationId: string, phoneNumber: string, name: string) {
   const orgId = requireOrganizationId(organizationId);
-  const { data: existing } = await supa(orgId)
+  const canonicalPhone = toWhatsAppAddress(phoneNumber) || phoneNumber.trim();
+  const aliases = whatsappPhoneStorageAliases(canonicalPhone);
+  const { data: existingRows } = await supa(orgId)
     .from("contacts")
     .select("*")
     .eq("organization_id", orgId)
-    .eq("phone_number", phoneNumber)
-    .maybeSingle();
+    .in("phone_number", aliases);
+  const existing = (existingRows ?? []).find(
+    (row) => String(row.phone_number) === canonicalPhone,
+  ) ?? existingRows?.[0];
 
   if (existing) {
     const currentName = String(existing.name ?? "").trim();
     const newName = name.trim();
     const shouldUpdate = newName && !isPlaceholderName(newName) && newName !== currentName;
-    if (shouldUpdate) {
+    const shouldCanonicalize =
+      (existingRows ?? []).length === 1 &&
+      String(existing.phone_number || "") !== canonicalPhone;
+    if (shouldUpdate || shouldCanonicalize) {
       await supa(orgId)
         .from("contacts")
-        .update({ name: newName, updated_at: new Date().toISOString() })
+        .update({
+          ...(shouldUpdate ? { name: newName } : {}),
+          ...(shouldCanonicalize ? { phone_number: canonicalPhone } : {}),
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", existing.id)
         .eq("organization_id", orgId);
-      return { id: String(existing.id), organizationId: orgId, phoneNumber: String(existing.phone_number), name: newName };
+      return {
+        id: String(existing.id),
+        organizationId: orgId,
+        phoneNumber: canonicalPhone,
+        name: shouldUpdate ? newName : currentName || newName || "Contato",
+      };
     }
     return {
       id: String(existing.id),
       organizationId: orgId,
-      phoneNumber: String(existing.phone_number ?? phoneNumber),
+      phoneNumber: canonicalPhone,
       name: currentName || newName || "Contato",
     };
   }
 
-  const id = randomUUID();
   const finalName = name.trim() || "Contato";
-  await supa(orgId).from("contacts").insert({
-    id,
-    organization_id: orgId,
-    phone_number: phoneNumber,
-    name: finalName,
-  });
-  return { id, organizationId: orgId, phoneNumber, name: finalName };
+  const id = randomUUID();
+  const inserted = await queryTenantDatabase<{
+    id: string;
+    phone_number: string;
+    name: string;
+  }>(
+    orgId,
+    `INSERT INTO contacts (id, organization_id, phone_number, name)
+     VALUES ($2, $1, $3, $4)
+     ON CONFLICT DO NOTHING
+     RETURNING id, phone_number, name`,
+    [orgId, id, canonicalPhone, finalName],
+  );
+  if (inserted.rows[0]) {
+    return {
+      id: String(inserted.rows[0].id),
+      organizationId: orgId,
+      phoneNumber: String(inserted.rows[0].phone_number),
+      name: String(inserted.rows[0].name),
+    };
+  }
+
+  // Outro webhook pode ter criado o mesmo contato enquanto fazíamos a leitura.
+  // O índice por dígitos bloqueia a duplicação; a segunda leitura devolve o dono.
+  const concurrent = await getContactByPhone(orgId, canonicalPhone);
+  if (!concurrent) {
+    throw new Error(
+      "Contato concorrente não encontrado após conflito de identidade",
+    );
+  }
+  return {
+    id: concurrent.id,
+    organizationId: orgId,
+    phoneNumber: canonicalPhone,
+    name: concurrent.name || finalName,
+  };
 }
 
 export async function updateContactAvatar(
@@ -1377,7 +1481,10 @@ export async function updateContact(
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (payload.name !== undefined) updates.name = payload.name.trim();
-  if (payload.phoneNumber !== undefined) updates.phone_number = payload.phoneNumber.trim();
+  if (payload.phoneNumber !== undefined) {
+    updates.phone_number =
+      toWhatsAppAddress(payload.phoneNumber) || payload.phoneNumber.trim();
+  }
   if (payload.blocked !== undefined) updates.blocked = payload.blocked;
   if (payload.internalNote !== undefined) updates.internal_note = payload.internalNote ?? null;
   if (Object.keys(updates).length <= 1) {
@@ -1469,7 +1576,7 @@ export async function getOrCreateOpenConversation(
     const existing = existingResult.rows[0];
     if (existing) {
       const existingPhone = String(existing.contact_phone || "").trim();
-      if (!existingPhone) {
+      if (existingPhone !== contactPhone) {
         await client.query(
           `UPDATE conversations
               SET contact_phone = $1, updated_at = now()
@@ -1481,7 +1588,7 @@ export async function getOrCreateOpenConversation(
         id: String(existing.id),
         organizationId: String(existing.organization_id),
         contactId: String(existing.contact_id),
-        contactPhone: existingPhone || contactPhone,
+        contactPhone,
         queueId: existing.queue_id ? String(existing.queue_id) : null,
         status: String(existing.status) as ConversationStatus,
         triageCompleted: Boolean(existing.triage_completed),
@@ -1529,15 +1636,50 @@ export async function getOrCreateContactAndOpenConversation(
   contactName: string,
 ): Promise<ContactAndConversation> {
   const orgId = requireOrganizationId(organizationId);
+  const canonicalPhone = toWhatsAppAddress(contactPhone) || contactPhone.trim();
+  const aliases = whatsappPhoneStorageAliases(canonicalPhone);
   const finalName = contactName.trim() || "Contato";
 
-  // Upsert contact
-  const { data: existingContact } = await supa(orgId)
+  // Contatos criados manualmente por versões antigas eram gravados como `5562...`,
+  // enquanto o inbound usa `whatsapp:+5562...`. Procurar os aliases impede que a
+  // resposta do cliente abra outro ticket. Havendo mais de um legado, preservamos o
+  // que já possui uma conversa aberta.
+  const { data: existingContacts, error: contactLookupError } = await supa(orgId)
     .from("contacts")
     .select("*")
     .eq("organization_id", orgId)
-    .eq("phone_number", contactPhone)
-    .maybeSingle();
+    .in("phone_number", aliases);
+  if (contactLookupError) throw contactLookupError;
+
+  let existingContact = (existingContacts ?? []).find(
+    (item) => String(item.phone_number) === canonicalPhone,
+  ) ?? (existingContacts ?? [])[0];
+  if ((existingContacts ?? []).length > 1) {
+    const contactIds = (existingContacts ?? []).map((item) => String(item.id));
+    const { data: openConversations } = await supa(orgId)
+      .from("conversations")
+      .select("contact_id, created_at")
+      .eq("organization_id", orgId)
+      .in("contact_id", contactIds)
+      .in("status", ["aguardando", "em_atendimento", "pendente_cliente"])
+      .order("created_at", { ascending: true })
+      .limit(1);
+    const activeContactId = openConversations?.[0]?.contact_id;
+    if (activeContactId) {
+      existingContact = (existingContacts ?? []).find(
+        (item) => String(item.id) === String(activeContactId),
+      ) ?? existingContact;
+    }
+    logger.warn(
+      {
+        organizationId: orgId,
+        contactIds,
+        selectedContactId: existingContact?.id,
+        duplicateCount: contactIds.length,
+      },
+      "Duplicate WhatsApp contact identities detected; preserving the original open conversation",
+    );
+  }
 
   let contact: { id: string; organizationId: string; phoneNumber: string; name: string };
 
@@ -1552,25 +1694,80 @@ export async function getOrCreateContactAndOpenConversation(
         .eq("id", existingContact.id)
         .eq("organization_id", orgId);
     }
+
+    const canonicalAlreadyOwned = (existingContacts ?? []).some(
+      (item) =>
+        String(item.id) !== String(existingContact.id) &&
+        String(item.phone_number) === canonicalPhone,
+    );
+    if (
+      String(existingContact.phone_number || "") !== canonicalPhone &&
+      !canonicalAlreadyOwned
+    ) {
+      const { error: canonicalizeError } = await supa(orgId)
+        .from("contacts")
+        .update({ phone_number: canonicalPhone, updated_at: new Date().toISOString() })
+        .eq("id", existingContact.id)
+        .eq("organization_id", orgId);
+      if (canonicalizeError) {
+        logger.warn(
+          { err: canonicalizeError, contactId: existingContact.id },
+          "Failed to canonicalize legacy contact phone",
+        );
+      }
+    }
     contact = {
       id: String(existingContact.id),
       organizationId: orgId,
-      phoneNumber: contactPhone,
+      phoneNumber: canonicalPhone,
       name: shouldUpdate ? newName : currentName || newName || "Contato",
     };
   } else {
     const id = randomUUID();
-    await supa(orgId).from("contacts").insert({
-      id,
-      organization_id: orgId,
-      phone_number: contactPhone,
-      name: finalName,
-    });
-    contact = { id, organizationId: orgId, phoneNumber: contactPhone, name: finalName };
+    const inserted = await queryTenantDatabase<{
+      id: string;
+      phone_number: string;
+      name: string;
+    }>(
+      orgId,
+      `INSERT INTO contacts (id, organization_id, phone_number, name)
+       VALUES ($2, $1, $3, $4)
+       ON CONFLICT DO NOTHING
+       RETURNING id, phone_number, name`,
+      [orgId, id, canonicalPhone, finalName],
+    );
+    const insertedContact = inserted.rows[0];
+    if (insertedContact) {
+      contact = {
+        id: String(insertedContact.id),
+        organizationId: orgId,
+        phoneNumber: String(insertedContact.phone_number),
+        name: String(insertedContact.name),
+      };
+    } else {
+      // Duas primeiras mensagens podem ser processadas em processos diferentes.
+      // O banco escolhe um único contato; esta leitura recupera o vencedor.
+      const concurrent = await getContactByPhone(orgId, canonicalPhone);
+      if (!concurrent) {
+        throw new Error(
+          "Contato concorrente não encontrado após conflito de identidade",
+        );
+      }
+      contact = {
+        id: concurrent.id,
+        organizationId: orgId,
+        phoneNumber: canonicalPhone,
+        name: concurrent.name || finalName,
+      };
+    }
   }
 
   // Find or create open conversation
-  const conversation = await getOrCreateOpenConversation(organizationId, contact.id, contactPhone);
+  const conversation = await getOrCreateOpenConversation(
+    organizationId,
+    contact.id,
+    canonicalPhone,
+  );
   return { contact, conversation };
 }
 

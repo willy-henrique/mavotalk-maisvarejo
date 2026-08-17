@@ -4,12 +4,13 @@ type DialogProps = {
   children: React.ReactNode;
   description?: string;
   onClose: () => void;
+  size?: 'default' | 'wide';
   title: string;
 };
 
 const focusableSelector = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-export function Dialog({ children, description, onClose, title }: DialogProps) {
+export function Dialog({ children, description, onClose, size = 'default', title }: DialogProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descriptionId = useId();
@@ -56,7 +57,6 @@ export function Dialog({ children, description, onClose, title }: DialogProps) {
     };
     // Sem dependências: abrir o diálogo é o único momento em que faz sentido mover
     // o foco. Reagir a mudanças de props aqui é exatamente o que quebrava a digitação.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -67,7 +67,7 @@ export function Dialog({ children, description, onClose, title }: DialogProps) {
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
-        className="w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        className={`w-full ${size === 'wide' ? 'max-w-6xl' : 'max-w-lg'} max-h-[calc(100vh-2rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900`}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5 dark:border-slate-700">

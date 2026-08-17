@@ -63,6 +63,7 @@ export {
   addInboundMessage,
   findMessageByExternalId,
   getCloudinaryPublicIdsForConversation,
+  getMessageMediaForConversation,
   getContactById,
   getContactByPhone,
   isContactBlocked,

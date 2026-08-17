@@ -23,7 +23,7 @@ const StartConversationDialog: React.FC<{
     event.preventDefault();
     const digits = phone.replace(/\D/g, '');
     if (digits.length < 10 || digits.length > 15) {
-      setError('Informe o número com DDI e DDD. Ex.: 5562984127954.');
+      setError('Informe DDD + número ou DDI + DDD + número. Ex.: 62984127954.');
       return;
     }
     if (!message.trim()) {
@@ -34,7 +34,7 @@ const StartConversationDialog: React.FC<{
     setSending(true);
     try {
       const result = await apiPost<{ conversation: { id: string } }>('/api/conversations', {
-        phone: digits,
+        phone: phone.trim(),
         message: message.trim(),
         contactName: name.trim() || undefined,
       });
@@ -63,10 +63,10 @@ const StartConversationDialog: React.FC<{
             inputMode="numeric"
             value={phone}
             onChange={(event) => setPhone(event.target.value)}
-            placeholder="5562984127954"
+            placeholder="62984127954"
             className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
           />
-          <p className="mt-1 text-xs text-slate-500">DDI + DDD + número, somente dígitos. O sistema confirma se o número tem WhatsApp antes de enviar.</p>
+          <p className="mt-1 text-xs text-slate-500">Para números do Brasil, o DDI 55 é opcional. O sistema consulta o WhatsApp e usa o JID correto, inclusive na variação do nono dígito.</p>
         </div>
         <div>
           <label htmlFor="start-chat-name" className="mb-1 block text-xs font-bold uppercase text-slate-500">Nome do contato</label>
