@@ -6,8 +6,8 @@ import {
   addInboundMessage,
   listQueues,
   findMessageByExternalId,
+  getContactInboundPolicy,
   getOrCreateContactAndOpenConversation,
-  isContactBlocked,
   resolveOrganizationByChannel,
   updateConversationById,
   updateTicketByConversation,
@@ -24,6 +24,7 @@ import { sendWillTalkWebhook } from "@/lib/willtalk-webhook";
 import { routeBusinessWhatsappMessage } from "@/lib/business-access/business-whatsapp-router";
 import { requestIdFrom } from "@/lib/observability";
 import { formatBusinessHoursResponse } from "@/lib/queue-automation-runtime";
+import { statusAfterInboundMessage } from "@/lib/conversation-state";
 
 function twimlMessage(body: string) {
   const response = new twilio.twiml.MessagingResponse();
@@ -115,21 +116,24 @@ export async function POST(request: Request) {
     }
   }
 
-  const businessRouting = await routeBusinessWhatsappMessage({
-    organizationId,
-    phone: from,
-    message: body || (mediaUrl ? "[mídia]" : ""),
-    conversationReference: messageSid,
-    requestId,
-  });
-  if (businessRouting.destination === "business") {
+  const contactPolicy = await getContactInboundPolicy(organizationId, from);
+  if (contactPolicy.blocked) {
+    return emptyTwiML();
+  }
+
+  const businessRouting = contactPolicy.botDisabled
+    ? null
+    : await routeBusinessWhatsappMessage({
+        organizationId,
+        phone: from,
+        message: body || (mediaUrl ? "[mídia]" : ""),
+        conversationReference: messageSid,
+        requestId,
+      });
+  if (businessRouting?.destination === "business") {
     return businessRouting.reply
       ? withXml(twimlMessage(businessRouting.reply))
       : emptyTwiML();
-  }
-
-  if (await isContactBlocked(organizationId, from)) {
-    return emptyTwiML();
   }
 
   // Bot-first / Cérebro v3: mesma triagem do não-oficial — delega ao ticket-upsert (sem TwiML de resposta).
@@ -142,6 +146,7 @@ export async function POST(request: Request) {
       mensagem: body || "[midia]",
       mediaUrl: mediaUrl || undefined,
       mimeType: mediaType || undefined,
+      metadata: contactPolicy.botDisabled ? { suppress_reply: true } : undefined,
     });
     return emptyTwiML();
   }
@@ -198,6 +203,22 @@ export async function POST(request: Request) {
       mensagem: body || "[midia]",
     },
   });
+
+  if (contactPolicy.botDisabled) {
+    const status = statusAfterInboundMessage(conversation.status);
+    await updateConversationById(
+      organizationId,
+      String(conversation.id),
+      { status },
+      { preserveActiveStatus: true },
+    );
+    emitRealtime(
+      organizationId,
+      conversation.isNew ? "conversation.created" : "conversation.updated",
+      { id: String(conversation.id), status },
+    );
+    return emptyTwiML();
+  }
 
   const queues = (await listQueues(organizationId)).filter((q) => q.isActive !== false);
 

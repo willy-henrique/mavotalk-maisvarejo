@@ -6,6 +6,7 @@ import StartConversationDialog from './StartConversationDialog';
 import { EmptyState, ErrorState } from './ui/PageState';
 import { Pagination } from './ui/Pagination';
 import { StatusBadge } from './ui/StatusBadge';
+import { AvatarPreviewDialog } from './ui/AvatarPreviewDialog';
 
 type ApiContact = {
   id: string;
@@ -15,6 +16,7 @@ type ApiContact = {
   lastInteraction: string | null;
   status: 'ativo' | 'encerrado';
   blocked: boolean;
+  botDisabled: boolean;
   internalNote: string | null;
   lastConversationId: string | null;
 };
@@ -33,7 +35,10 @@ const ContactStatusBadge: React.FC<{ contact: ApiContact; className?: string }> 
   );
 };
 
-const ContactAvatar: React.FC<{ contact: ApiContact }> = ({ contact }) => {
+const ContactAvatar: React.FC<{
+  contact: ApiContact;
+  onPreview: (contact: ApiContact) => void;
+}> = ({ contact, onPreview }) => {
   const initials = (contact.name || 'Contato')
     .split(/\s+/)
     .filter(Boolean)
@@ -41,8 +46,8 @@ const ContactAvatar: React.FC<{ contact: ApiContact }> = ({ contact }) => {
     .map((part) => part[0]?.toUpperCase())
     .join('') || 'C';
 
-  return (
-    <span aria-hidden="true" className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-100 text-xs font-black text-blue-700 dark:bg-blue-950/60 dark:text-blue-200">
+  const avatar = (
+    <span className="relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-blue-100 text-xs font-black text-blue-700 dark:bg-blue-950/60 dark:text-blue-200">
       {initials}
       {contact.avatarUrl && (
         <img
@@ -55,6 +60,19 @@ const ContactAvatar: React.FC<{ contact: ApiContact }> = ({ contact }) => {
         />
       )}
     </span>
+  );
+
+  if (!contact.avatarUrl) return avatar;
+  return (
+    <button
+      type="button"
+      onClick={() => onPreview(contact)}
+      aria-label={`Ampliar foto de ${contact.name || 'Contato'}`}
+      title="Ampliar foto"
+      className="shrink-0 rounded-full transition hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-500/30"
+    >
+      {avatar}
+    </button>
   );
 };
 
@@ -75,6 +93,8 @@ const Contacts: React.FC = () => {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [blockingId, setBlockingId] = useState<string | null>(null);
+  const [botToggleId, setBotToggleId] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<ApiContact | null>(null);
   const deferredSearch = useDeferredValue(search);
   const requestRef = useRef(0);
   const pageSize = 25;
@@ -169,6 +189,27 @@ const Contacts: React.FC = () => {
     }
   };
 
+  const toggleBot = async (contact: ApiContact) => {
+    setBotToggleId(contact.id);
+    setNotice('');
+    setError('');
+    try {
+      await apiPatch(`/api/contacts/${contact.id}`, {
+        botDisabled: !contact.botDisabled,
+      });
+      await fetchContacts();
+      setNotice(
+        contact.botDisabled
+          ? `Bot ativado para ${contact.name || 'o contato'}.`
+          : `Bot desativado para ${contact.name || 'o contato'}. As mensagens continuam chegando ao Inbox.`,
+      );
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Não foi possível atualizar o bot deste contato.');
+    } finally {
+      setBotToggleId(null);
+    }
+  };
+
   const saveNote = async () => {
     if (!noteModal) return;
     setSavingNote(true);
@@ -183,7 +224,46 @@ const Contacts: React.FC = () => {
     }
   };
 
-  const contactActions = (contact: ApiContact, compact = false) => <div className={`flex flex-wrap justify-end gap-2 ${compact ? 'justify-start' : ''}`}><button type="button" onClick={() => void startConversation(contact)} disabled={startingId === contact.id || contact.blocked} className="mavo-button-primary min-h-0 rounded-lg px-3 py-2 text-xs">{startingId === contact.id ? 'Abrindo...' : 'Conversar'}</button><button type="button" onClick={() => openConversation(contact)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Histórico</button><button type="button" onClick={() => { setNoteModal(contact); setNoteValue(contact.internalNote || ''); }} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">Nota</button><button type="button" disabled={blockingId === contact.id} onClick={() => void toggleBlock(contact)} className={`rounded-lg px-3 py-2 text-xs font-bold transition disabled:opacity-50 ${contact.blocked ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-200' : 'bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-200'}`}>{blockingId === contact.id ? 'Atualizando…' : contact.blocked ? 'Desbloquear' : 'Bloquear'}</button></div>;
+  const contactActions = (contact: ApiContact, compact = false) => (
+    <div className={`flex flex-wrap justify-end gap-2 ${compact ? 'justify-start' : ''}`}>
+      <button
+        type="button"
+        onClick={() => void startConversation(contact)}
+        disabled={startingId === contact.id || contact.blocked}
+        className="mavo-button-primary min-h-0 rounded-lg px-3 py-2 text-xs"
+      >
+        {startingId === contact.id ? 'Abrindo...' : 'Conversar'}
+      </button>
+      <button type="button" onClick={() => openConversation(contact)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
+        Histórico
+      </button>
+      <button
+        type="button"
+        onClick={() => { setNoteModal(contact); setNoteValue(contact.internalNote || ''); }}
+        className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+      >
+        Nota
+      </button>
+      <button
+        type="button"
+        disabled={botToggleId === contact.id}
+        onClick={() => void toggleBot(contact)}
+        aria-pressed={contact.botDisabled}
+        title={contact.botDisabled ? 'Permitir respostas automáticas para este contato' : 'Impedir respostas automáticas para este contato'}
+        className={`rounded-lg px-3 py-2 text-xs font-bold transition disabled:opacity-50 ${contact.botDisabled ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-200' : 'bg-amber-50 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/30 dark:text-amber-200'}`}
+      >
+        {botToggleId === contact.id ? 'Atualizando…' : contact.botDisabled ? 'Ativar bot' : 'Desativar bot'}
+      </button>
+      <button
+        type="button"
+        disabled={blockingId === contact.id}
+        onClick={() => void toggleBlock(contact)}
+        className={`rounded-lg px-3 py-2 text-xs font-bold transition disabled:opacity-50 ${contact.blocked ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-200' : 'bg-rose-50 text-rose-700 hover:bg-rose-100 dark:bg-rose-950/30 dark:text-rose-200'}`}
+      >
+        {blockingId === contact.id ? 'Atualizando…' : contact.blocked ? 'Desbloquear' : 'Bloquear'}
+      </button>
+    </div>
+  );
 
   return (
     <main className="mavo-page"><div className="mavo-page-content">
@@ -222,7 +302,20 @@ const Contacts: React.FC = () => {
             <tbody>
               {contacts.map((contact) => (
                 <tr key={contact.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/80 dark:border-slate-800 dark:hover:bg-slate-800/50">
-                  <td className="px-5 py-4 font-bold text-slate-800 dark:text-slate-100"><div className="flex items-center gap-3"><ContactAvatar contact={contact} /><div className="min-w-0"><span className="block truncate">{contact.name || 'Sem nome'}</span>{contact.internalNote && <span className="mt-1 block max-w-[240px] truncate text-xs font-normal text-slate-500">Nota: {contact.internalNote}</span>}</div></div></td>
+                  <td className="px-5 py-4 font-bold text-slate-800 dark:text-slate-100">
+                    <div className="flex items-center gap-3">
+                      <ContactAvatar contact={contact} onPreview={setAvatarPreview} />
+                      <div className="min-w-0">
+                        <span className="block truncate">{contact.name || 'Sem nome'}</span>
+                        {contact.botDisabled && (
+                          <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
+                            Bot desativado
+                          </span>
+                        )}
+                        {contact.internalNote && <span className="mt-1 block max-w-[240px] truncate text-xs font-normal text-slate-500">Nota: {contact.internalNote}</span>}
+                      </div>
+                    </div>
+                  </td>
                   <td className="px-5 py-4 font-mono text-xs text-slate-600 dark:text-slate-300">{contact.phoneNumber || '—'}</td>
                   <td className="px-5 py-4 text-xs text-slate-500">{contact.lastInteraction ? new Date(contact.lastInteraction).toLocaleString('pt-BR') : 'Sem histórico'}</td>
                   <td className="px-5 py-4"><ContactStatusBadge contact={contact} /></td>
@@ -231,11 +324,18 @@ const Contacts: React.FC = () => {
               ))}
             </tbody>
           </table>
-        </div><div className="grid gap-3 md:hidden">{contacts.map((contact) => <article key={contact.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><ContactAvatar contact={contact} /><div className="min-w-0"><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{contact.name || 'Sem nome'}</h3><p className="mt-1 font-mono text-xs text-slate-600 dark:text-slate-300">{contact.phoneNumber || '—'}</p></div></div><ContactStatusBadge contact={contact} className="shrink-0" /></div>{contact.internalNote && <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-600 dark:bg-slate-800/70 dark:text-slate-300">Nota: {contact.internalNote}</p>}<p className="text-xs text-slate-500">{contact.lastInteraction ? `Última interação: ${new Date(contact.lastInteraction).toLocaleString('pt-BR')}` : 'Sem histórico de atendimento'}</p>{contactActions(contact, true)}</article>)}</div></>
+        </div><div className="grid gap-3 md:hidden">{contacts.map((contact) => <article key={contact.id} className="mavo-card space-y-3 p-4"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-3"><ContactAvatar contact={contact} onPreview={setAvatarPreview} /><div className="min-w-0"><h3 className="truncate font-bold text-slate-800 dark:text-slate-100">{contact.name || 'Sem nome'}</h3><p className="mt-1 font-mono text-xs text-slate-600 dark:text-slate-300">{contact.phoneNumber || '—'}</p>{contact.botDisabled && <span className="mt-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-800 dark:bg-amber-950/50 dark:text-amber-200">Bot desativado</span>}</div></div><ContactStatusBadge contact={contact} className="shrink-0" /></div>{contact.internalNote && <p className="rounded-lg bg-slate-50 p-2 text-xs text-slate-600 dark:bg-slate-800/70 dark:text-slate-300">Nota: {contact.internalNote}</p>}<p className="text-xs text-slate-500">{contact.lastInteraction ? `Última interação: ${new Date(contact.lastInteraction).toLocaleString('pt-BR')}` : 'Sem histórico de atendimento'}</p>{contactActions(contact, true)}</article>)}</div></>
       )}
       {!loading && <Pagination page={page} pageSize={pageSize} total={total} itemLabel="contatos" onPageChange={setPage} />}
 
       {noteModal && <Dialog title="Nota interna" description={noteModal.name} onClose={() => { if (!savingNote) setNoteModal(null); }}><form onSubmit={(event) => { event.preventDefault(); void saveNote(); }} className="p-6"><label htmlFor="contact-internal-note" className="sr-only">Nota interna</label><textarea id="contact-internal-note" value={noteValue} onChange={(event) => setNoteValue(event.target.value)} rows={5} placeholder="Informação visível somente para a equipe" className="mavo-field" /><div className="mt-5 flex justify-end gap-3"><button type="button" onClick={() => setNoteModal(null)} disabled={savingNote} className="mavo-button-secondary">Cancelar</button><button disabled={savingNote} className="mavo-button-primary">{savingNote ? 'Salvando...' : 'Salvar nota'}</button></div></form></Dialog>}
+      {avatarPreview?.avatarUrl && (
+        <AvatarPreviewDialog
+          avatarUrl={avatarPreview.avatarUrl}
+          contactName={avatarPreview.name || 'Contato'}
+          onClose={() => setAvatarPreview(null)}
+        />
+      )}
     </div></main>
   );
 };

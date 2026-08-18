@@ -45,6 +45,7 @@ export const updateContactSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   phoneNumber: z.string().min(1).max(30).optional(),
   blocked: z.boolean().optional(),
+  botDisabled: z.boolean().optional(),
   internalNote: z.string().max(2000).nullable().optional(),
 });
 

@@ -1,7 +1,13 @@
 import crypto from "crypto";
 import twilio from "twilio";
 import { z } from "zod";
-import { addOutboundMessage, createAuditLog, listConversations } from "@/lib/repo";
+import {
+  addOutboundMessage,
+  createAuditLog,
+  getContactInboundPolicy,
+  listConversations,
+  resolveDefaultOrganizationId,
+} from "@/lib/repo";
 import { logger } from "@/lib/logger";
 import { emitRealtime } from "@/lib/realtime";
 import { DEFAULT_ORGANIZATION_ID } from "@/lib/utils";
@@ -20,7 +26,12 @@ export const cerebroAutoReplySchema = z.object({
 
 export type CerebroAutoReplyPayload = z.infer<typeof cerebroAutoReplySchema>;
 
-type AutoReplyStatus = "received" | "sent" | "duplicate_ignored" | "error";
+type AutoReplyStatus =
+  | "received"
+  | "sent"
+  | "duplicate_ignored"
+  | "suppressed"
+  | "error";
 
 type AutoReplyResult = {
   statusCode: number;
@@ -138,7 +149,9 @@ function buildFinalMessage(respostaSugerida: string) {
 }
 
 async function findConversationTarget(ticketId: string): Promise<ConversationTarget | null> {
-  const organizationId = DEFAULT_ORGANIZATION_ID;
+  const organizationId = await resolveDefaultOrganizationId(
+    DEFAULT_ORGANIZATION_ID,
+  );
   const targetRaw = ticketId.trim();
 
   const conversations = (await listConversations(organizationId)) as ConversationListItem[];
@@ -301,6 +314,24 @@ export async function processCerebroAutoReply(payload: CerebroAutoReplyPayload):
       error: "telefone_nao_confere_ticket",
     });
     return { statusCode: 409, body: { error: "telefone_nao_confere_ticket" } };
+  }
+
+  const contactPolicy = await getContactInboundPolicy(
+    target.organizationId,
+    target.contactPhone,
+  );
+  if (contactPolicy.blocked || contactPolicy.botDisabled) {
+    const reason = contactPolicy.blocked
+      ? "contact_blocked"
+      : "contact_bot_disabled";
+    await logAutoReplyEvent({
+      organizationId: target.organizationId,
+      ticketId: payload.ticket_id,
+      payload,
+      status: "suppressed",
+      error: reason,
+    });
+    return { statusCode: 200, body: { message: reason } };
   }
 
   const finalMessage = buildFinalMessage(payload.resposta_sugerida);

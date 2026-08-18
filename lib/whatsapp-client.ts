@@ -20,6 +20,7 @@ import {
   addOutboundMessage,
   listQueues,
   findMessageByExternalId,
+  getContactInboundPolicy,
   getOrCreateContactAndOpenConversation,
   isContactBlocked,
   updateConversationById,
@@ -56,6 +57,7 @@ import {
   whatsappPhoneFromJid,
 } from "@/lib/whatsapp-addressing";
 import { selectRecentWhatsappHistoryMessages } from "@/lib/whatsapp-message-history";
+import { statusAfterInboundMessage } from "@/lib/conversation-state";
 import {
   configuredWhatsappAuthPersistence,
   configuredWhatsappAuthStore,
@@ -1096,6 +1098,9 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
   // triagem: seguindo adiante, o "5" vira uma mensagem comum, o ticket-upsert abre
   // um atendimento novo e o cliente recebe o menu de boas-vindas logo após avaliar.
   const ratingPhone = await resolveMessagePhone(sock, msg);
+  const inboundContactPolicy = ratingPhone
+    ? await getContactInboundPolicy(organizationId, ratingPhone)
+    : { blocked: false, botDisabled: false };
   if (ratingPhone && bodyRaw) {
     let rated = false;
     try {
@@ -1109,7 +1114,11 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
     }
     if (rated) {
       logger.info({ phone: ratingPhone, score: bodyRaw.trim() }, "Satisfaction rating recorded");
-      if (!isPreConnectionQueued) {
+      if (
+        !isPreConnectionQueued &&
+        !inboundContactPolicy.blocked &&
+        !inboundContactPolicy.botDisabled
+      ) {
         await rateLimitedSend(
           sock,
           remoteJid,
@@ -1121,11 +1130,19 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
     }
   }
 
+  if (inboundContactPolicy.blocked) {
+    logger.info(
+      { organizationId },
+      "Ignored inbound WhatsApp message from blocked contact",
+    );
+    return;
+  }
+
   const n8nOnlyMode = String(process.env.WILLTALK_N8N_ONLY || "").toLowerCase() === "true";
   const aiTriageOnlyMode = String(process.env.WILLTALK_AI_TRIAGE_ONLY || "true").toLowerCase() !== "false";
   if (isPreConnectionQueued || n8nOnlyMode || aiTriageOnlyMode) {
     await handleInboundViaBotTriagem(sock, msg, {
-      suppressReply: isPreConnectionQueued,
+      suppressReply: isPreConnectionQueued || inboundContactPolicy.botDisabled,
       organizationId,
     });
     return;
@@ -1153,20 +1170,26 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
   const savedName = await findWhatsappDirectoryName(organizationId, fromPhone).catch(() => null);
   const profileName = savedName || (msg.pushName || "").trim() || "Cliente";
 
-  const businessRouting = await routeBusinessWhatsappMessage({
-    organizationId,
-    phone: fromPhone,
-    message: body || (mediaKind ? "[mídia]" : ""),
-    conversationReference: externalId,
-  });
-  if (businessRouting.destination === "business") {
+  const contactPolicy = ratingPhone === fromPhone
+    ? inboundContactPolicy
+    : await getContactInboundPolicy(organizationId, fromPhone);
+
+  const businessRouting = contactPolicy.botDisabled
+    ? null
+    : await routeBusinessWhatsappMessage({
+        organizationId,
+        phone: fromPhone,
+        message: body || (mediaKind ? "[mídia]" : ""),
+        conversationReference: externalId,
+      });
+  if (businessRouting?.destination === "business") {
     if (businessRouting.reply) {
       await rateLimitedSend(sock, remoteJid, businessRouting.reply, true);
     }
     return;
   }
 
-  if (await isContactBlocked(organizationId, fromPhone)) {
+  if (contactPolicy.blocked) {
     logger.info({ organizationId, phone: fromPhone }, "Ignored inbound message from blocked contact");
     return;
   }
@@ -1257,6 +1280,26 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
       mensagem: body || "[midia]",
     },
   });
+
+  if (contactPolicy.botDisabled) {
+    const status = statusAfterInboundMessage(conversation.status);
+    await updateConversationById(
+      organizationId,
+      String(conversation.id),
+      { status },
+      { preserveActiveStatus: true },
+    );
+    emitRealtime(
+      organizationId,
+      conversation.isNew ? "conversation.created" : "conversation.updated",
+      { id: String(conversation.id), status },
+    );
+    logger.info(
+      { organizationId, contactId: contact.id, conversationId: conversation.id },
+      "Inbound WhatsApp message persisted without automatic reply",
+    );
+    return;
+  }
 
   const queues = (await listQueues(organizationId)).filter((q) => q.isActive !== false);
 

@@ -66,6 +66,7 @@ export {
   getMessageMediaForConversation,
   getContactById,
   getContactByPhone,
+  getContactInboundPolicy,
   isContactBlocked,
   getOrCreateContact,
   updateContact,

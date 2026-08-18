@@ -96,6 +96,16 @@ await runDeployStep("db:verify", async () => {
        LIMIT 1
     `);
 
+    const contactBotPolicyColumn = await client.query(`
+      SELECT 1
+        FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'contacts'
+         AND column_name = 'bot_disabled'
+         AND is_nullable = 'NO'
+       LIMIT 1
+    `);
+
     const rls = await client.query(
       `SELECT relname, relrowsecurity
          FROM pg_class
@@ -122,6 +132,7 @@ await runDeployStep("db:verify", async () => {
             duplicateContactPhones.rows[0]?.groups === 0 &&
             duplicateOpenConversations.rows[0]?.groups === 0 &&
             phoneIdentityIndex.rowCount === 1 &&
+            contactBotPolicyColumn.rowCount === 1 &&
             defaultOrganizationExists
               ? "ok"
               : "attention",
@@ -134,6 +145,7 @@ await runDeployStep("db:verify", async () => {
           duplicateOpenConversationGroups:
             duplicateOpenConversations.rows[0]?.groups ?? 0,
           phoneIdentityIndexExists: phoneIdentityIndex.rowCount === 1,
+          contactBotPolicyColumnExists: contactBotPolicyColumn.rowCount === 1,
           defaultOrganizationExists,
         },
         null,
@@ -147,6 +159,7 @@ await runDeployStep("db:verify", async () => {
       duplicateContactPhones.rows[0]?.groups ||
       duplicateOpenConversations.rows[0]?.groups ||
       phoneIdentityIndex.rowCount !== 1 ||
+      contactBotPolicyColumn.rowCount !== 1 ||
       !defaultOrganizationExists
     ) {
       process.exitCode = 1;

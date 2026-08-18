@@ -1127,7 +1127,13 @@ export async function getMessageMediaForConversation(
 export async function getContactById(
   organizationId: string,
   contactId: string,
-): Promise<{ id: string; name: string; phoneNumber: string; blocked: boolean } | null> {
+): Promise<{
+  id: string;
+  name: string;
+  phoneNumber: string;
+  blocked: boolean;
+  botDisabled: boolean;
+} | null> {
   const orgId = requireOrganizationId(organizationId);
   const { data } = await supa(orgId)
     .from("contacts")
@@ -1141,6 +1147,7 @@ export async function getContactById(
     name: String(data.name ?? "Cliente"),
     phoneNumber: String(data.phone_number ?? ""),
     blocked: Boolean(data.blocked),
+    botDisabled: Boolean(data.bot_disabled),
   };
 }
 
@@ -1164,7 +1171,48 @@ export async function getContactByPhone(organizationId: string, phoneNumber: str
     phoneNumber: String(contact.phone_number ?? canonicalPhone ?? phoneNumber),
     name: String(contact.name ?? ""),
     blocked: Boolean(contact.blocked),
+    botDisabled: Boolean(contact.bot_disabled),
   };
+}
+
+export type ContactInboundPolicy = {
+  blocked: boolean;
+  botDisabled: boolean;
+};
+
+/**
+ * Política de entrada por contato. A busca considera as variações equivalentes
+ * do número brasileiro para que o bloqueio do bot também funcione quando o
+ * WhatsApp alternar entre JID/LID ou entre números com e sem o nono dígito.
+ */
+export async function getContactInboundPolicy(
+  organizationId: string,
+  phoneNumber: string,
+): Promise<ContactInboundPolicy> {
+  const orgId = requireOrganizationId(organizationId);
+  const aliases = whatsappPhoneStorageAliases(phoneNumber);
+  if (!aliases.length) return { blocked: false, botDisabled: false };
+
+  const { data, error } = await supa(orgId)
+    .from("contacts")
+    .select("blocked, bot_disabled")
+    .eq("organization_id", orgId)
+    .in("phone_number", aliases);
+  if (error) {
+    logger.error(
+      { err: error, organizationId: orgId },
+      "supa getContactInboundPolicy",
+    );
+    throw error;
+  }
+
+  return (data ?? []).reduce<ContactInboundPolicy>(
+    (policy, row) => ({
+      blocked: policy.blocked || Boolean(row.blocked),
+      botDisabled: policy.botDisabled || Boolean(row.bot_disabled),
+    }),
+    { blocked: false, botDisabled: false },
+  );
 }
 
 export async function isContactBlocked(organizationId: string, phoneNumber: string): Promise<boolean> {
@@ -1397,6 +1445,7 @@ export async function listContacts(organizationId: string): Promise<ListContactI
       lastInteraction,
       status,
       blocked: Boolean(row.blocked),
+      botDisabled: Boolean(row.bot_disabled),
       internalNote: row.internal_note != null ? String(row.internal_note) : null,
       lastConversationId: lastConv?.id ?? null,
     };
@@ -1435,6 +1484,7 @@ export async function listContactsPage(
     phone_number: string | null;
     avatar_url: string | null;
     blocked: boolean | null;
+    bot_disabled: boolean | null;
     internal_note: string | null;
     conversation_id: string | null;
     conversation_status: string | null;
@@ -1444,7 +1494,7 @@ export async function listContactsPage(
   const [items, count] = await Promise.all([
     queryTenantDatabase<ContactPageRow>(
       orgId,
-      `SELECT c.id, c.name, c.phone_number, c.avatar_url, c.blocked, c.internal_note,
+      `SELECT c.id, c.name, c.phone_number, c.avatar_url, c.blocked, c.bot_disabled, c.internal_note,
               latest_conversation.id AS conversation_id,
               latest_conversation.status AS conversation_status,
               latest_conversation.updated_at AS conversation_updated_at,
@@ -1487,6 +1537,7 @@ export async function listContactsPage(
       lastInteraction: row.conversation_updated_at ?? null,
       status: row.conversation_id && row.conversation_status !== "encerrado" ? "ativo" : "encerrado",
       blocked: Boolean(row.blocked),
+      botDisabled: Boolean(row.bot_disabled),
       internalNote: row.internal_note != null ? String(row.internal_note) : null,
       lastConversationId: row.conversation_id != null ? String(row.conversation_id) : null,
     })),
@@ -1497,7 +1548,13 @@ export async function listContactsPage(
 export async function updateContact(
   organizationId: string,
   contactId: string,
-  payload: { name?: string; phoneNumber?: string; blocked?: boolean; internalNote?: string | null },
+  payload: {
+    name?: string;
+    phoneNumber?: string;
+    blocked?: boolean;
+    botDisabled?: boolean;
+    internalNote?: string | null;
+  },
 ) {
   const orgId = requireOrganizationId(organizationId);
   const { data: existing } = await supa(orgId)
@@ -1515,6 +1572,7 @@ export async function updateContact(
       toWhatsAppAddress(payload.phoneNumber) || payload.phoneNumber.trim();
   }
   if (payload.blocked !== undefined) updates.blocked = payload.blocked;
+  if (payload.botDisabled !== undefined) updates.bot_disabled = payload.botDisabled;
   if (payload.internalNote !== undefined) updates.internal_note = payload.internalNote ?? null;
   if (Object.keys(updates).length <= 1) {
     return {
@@ -1523,6 +1581,7 @@ export async function updateContact(
       phoneNumber: existing.phone_number,
       name: existing.name,
       blocked: existing.blocked,
+      botDisabled: Boolean(existing.bot_disabled),
       internalNote: existing.internal_note,
     };
   }
@@ -1534,7 +1593,16 @@ export async function updateContact(
     .eq("organization_id", orgId)
     .select("*")
     .maybeSingle();
-  return data ? { id: contactId, ...data } : null;
+  if (!data) return null;
+  return {
+    id: contactId,
+    organizationId: orgId,
+    phoneNumber: String(data.phone_number ?? ""),
+    name: String(data.name ?? "Contato"),
+    blocked: Boolean(data.blocked),
+    botDisabled: Boolean(data.bot_disabled),
+    internalNote: data.internal_note != null ? String(data.internal_note) : null,
+  };
 }
 
 // ---------------------------------------------------------------------------

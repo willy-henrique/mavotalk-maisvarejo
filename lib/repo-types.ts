@@ -72,6 +72,7 @@ export type ListContactItem = {
   lastInteraction: string | null;
   status: "ativo" | "encerrado";
   blocked: boolean;
+  botDisabled: boolean;
   internalNote: string | null;
   lastConversationId: string | null;
 };

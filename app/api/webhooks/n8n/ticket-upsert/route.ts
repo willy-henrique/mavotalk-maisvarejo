@@ -6,9 +6,9 @@ import {
   addOutboundMessage,
   createAuditLog,
   findMessageByExternalId,
+  getContactInboundPolicy,
   getConversation,
   getOrCreateContactAndOpenConversation,
-  isContactBlocked,
   listConversations,
   listQueues,
   resolveDefaultOrganizationId,
@@ -407,7 +407,7 @@ export async function POST(request: Request) {
     normalizeInboundEchoPayload(inboundRaw);
   const mediaUrl = payload.mediaUrl || payload.media_url || null;
   const mimeType = payload.mimeType || payload.mime_type || null;
-  const suppressReply = getMetadataBoolean(payload.metadata, [
+  const metadataSuppressReply = getMetadataBoolean(payload.metadata, [
     "suppress_reply",
     "suppressReply",
   ]) === true;
@@ -427,14 +427,38 @@ export async function POST(request: Request) {
     );
   }
 
-  const businessRouting = await routeBusinessWhatsappMessage({
+  const contactPolicy = await getContactInboundPolicy(
     organizationId,
-    phone: normalizedPhone,
-    message: inboundBody || (mediaUrl ? "[mídia]" : ""),
-    conversationReference: payload.event_id,
-    requestId,
-  });
-  if (businessRouting.destination === "business") {
+    normalizedPhone,
+  );
+  if (contactPolicy.blocked) {
+    logger.info(
+      { organizationId, normalizedPhone, requestId },
+      "n8n ticket-upsert ignored blocked contact",
+    );
+    return NextResponse.json(
+      decisionBase({
+        action: "updated",
+        reason: "contact_blocked",
+        organizationId,
+        created: false,
+      }),
+      { status: 200 },
+    );
+  }
+  const botDisabled = contactPolicy.botDisabled;
+  const suppressReply = metadataSuppressReply || botDisabled;
+
+  const businessRouting = botDisabled
+    ? null
+    : await routeBusinessWhatsappMessage({
+        organizationId,
+        phone: normalizedPhone,
+        message: inboundBody || (mediaUrl ? "[mídia]" : ""),
+        conversationReference: payload.event_id,
+        requestId,
+      });
+  if (businessRouting?.destination === "business") {
     let replyDelivered: boolean | null = null;
     if (businessRouting.reply && !suppressReply) {
       const dryRun =
@@ -484,22 +508,6 @@ export async function POST(request: Request) {
         replyDelivered,
         reason: `business_${businessRouting.reason}`,
         duplicate: businessRouting.reason === "duplicate",
-        organizationId,
-        created: false,
-      }),
-      { status: 200 },
-    );
-  }
-
-  if (await isContactBlocked(organizationId, normalizedPhone)) {
-    logger.info(
-      { organizationId, normalizedPhone, requestId },
-      "n8n ticket-upsert ignored blocked contact",
-    );
-    return NextResponse.json(
-      decisionBase({
-        action: "updated",
-        reason: "contact_blocked",
         organizationId,
         created: false,
       }),
@@ -755,7 +763,28 @@ export async function POST(request: Request) {
       })
     : null;
 
-  if (humanHandling) {
+  if (botDisabled) {
+    // Silenciar o bot não bloqueia o cliente. A mensagem já foi persistida acima e
+    // a conversa volta para a fila (ou permanece com quem já a assumiu), sem menu,
+    // IA, roteamento comercial ou qualquer resposta automática.
+    conversationStatus = inboundConversationStatus;
+    action = humanHandling ? "human_handoff" : action;
+    decisionReason = "contact_bot_disabled";
+    await updateConversationById(
+      organizationId,
+      String(conversation.id),
+      { status: conversationStatus },
+      { preserveActiveStatus: true },
+    );
+    logger.info(
+      {
+        organizationId,
+        contactId: contact.id,
+        conversationId: String(conversation.id),
+      },
+      "Inbound message persisted without automation for contact with bot disabled",
+    );
+  } else if (humanHandling) {
     // Assumir o chamado é uma transição monotônica: mensagem nova atualiza o chat,
     // mas não devolve o ticket à fila nem reativa qualquer decisão automática.
     triageCompleted = true;
@@ -995,7 +1024,9 @@ export async function POST(request: Request) {
       shouldReply = false;
       replyDelivered = null;
       action = "human_handoff";
-      decisionReason = "human_already_handling_conversation";
+      if (!botDisabled) {
+        decisionReason = "human_already_handling_conversation";
+      }
     }
   }
 
@@ -1009,7 +1040,9 @@ export async function POST(request: Request) {
   if (suppressReply && shouldReply) {
     shouldReply = false;
     replyDelivered = null;
-    decisionReason = "mensagem_recuperada_apos_reconexao_sem_resposta_automatica";
+    decisionReason = botDisabled
+      ? "contact_bot_disabled"
+      : "mensagem_recuperada_apos_reconexao_sem_resposta_automatica";
     logger.info(
       { conversationId: conversation.id, externalId: payload.event_id },
       "Persisted queued inbound message without sending a delayed automatic reply",
@@ -1021,7 +1054,10 @@ export async function POST(request: Request) {
     // intervalo um atendente pode ter respondido — pelo painel ou pelo próprio
     // WhatsApp — e a mensagem automática cairia por cima da conversa humana. Reler o
     // estado aqui é o que fecha essa janela; sem isso o bot ainda dispara uma vez.
-    const latest = await getConversation(organizationId, String(conversation.id));
+    const [latest, latestContactPolicy] = await Promise.all([
+      getConversation(organizationId, String(conversation.id)),
+      getContactInboundPolicy(organizationId, replyPhone),
+    ]);
     const humanTookOver =
       Boolean(latest) &&
       (latest!.status === "em_atendimento" ||
@@ -1033,7 +1069,21 @@ export async function POST(request: Request) {
       queueId = latest.queueId ? String(latest.queueId) : null;
     }
 
-    if (humanTookOver) {
+    if (latestContactPolicy.blocked || latestContactPolicy.botDisabled) {
+      shouldReply = false;
+      replyDelivered = null;
+      decisionReason = latestContactPolicy.blocked
+        ? "contact_blocked_before_automatic_reply"
+        : "contact_bot_disabled";
+      logger.info(
+        {
+          conversationId: conversation.id,
+          blocked: latestContactPolicy.blocked,
+          botDisabled: latestContactPolicy.botDisabled,
+        },
+        "Skipped automatic reply after refreshing contact policy",
+      );
+    } else if (humanTookOver) {
       shouldReply = false;
       replyDelivered = null;
       action = "human_handoff";

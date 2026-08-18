@@ -17,10 +17,17 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
     return NextResponse.json({ error: "Dados invalidos", details: parsed.error.flatten() }, { status: 400 });
   }
 
-  const payload: { name?: string; phoneNumber?: string; blocked?: boolean; internalNote?: string | null } = {};
+  const payload: {
+    name?: string;
+    phoneNumber?: string;
+    blocked?: boolean;
+    botDisabled?: boolean;
+    internalNote?: string | null;
+  } = {};
   if (parsed.data.name !== undefined) payload.name = parsed.data.name;
   if (parsed.data.phoneNumber !== undefined) payload.phoneNumber = parsed.data.phoneNumber;
   if (parsed.data.blocked !== undefined) payload.blocked = parsed.data.blocked;
+  if (parsed.data.botDisabled !== undefined) payload.botDisabled = parsed.data.botDisabled;
   if (parsed.data.internalNote !== undefined) payload.internalNote = parsed.data.internalNote;
   if (Object.keys(payload).length === 0) {
     return NextResponse.json({ error: "Nenhum campo para atualizar" }, { status: 400 });
@@ -35,8 +42,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   return NextResponse.json({
     contact: {
       id: result.id,
-      name: (result as { name?: string }).name,
-      phoneNumber: (result as { phoneNumber?: string }).phoneNumber,
+      name: result.name,
+      phoneNumber: result.phoneNumber,
+      blocked: result.blocked,
+      botDisabled: result.botDisabled,
     },
   });
 }

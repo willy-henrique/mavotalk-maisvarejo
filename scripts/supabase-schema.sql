@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS contacts (
   name             TEXT NOT NULL DEFAULT 'Contato',
   avatar_url       TEXT,
   blocked          BOOLEAN NOT NULL DEFAULT false,
+  bot_disabled     BOOLEAN NOT NULL DEFAULT false,
   internal_note    TEXT,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()

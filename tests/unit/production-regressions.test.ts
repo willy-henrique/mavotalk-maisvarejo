@@ -152,7 +152,8 @@ test("contatos bloqueados são filtrados nos três canais de entrada", async () 
     read("app/api/webhooks/n8n/ticket-upsert/route.ts"),
   ]);
   for (const source of sources) {
-    assert.match(source, /isContactBlocked/);
+    assert.match(source, /getContactInboundPolicy/);
+    assert.match(source, /\.blocked/);
   }
 });
 

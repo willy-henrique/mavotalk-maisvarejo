@@ -22,7 +22,13 @@ export const ContactService = {
   async update(
     organizationId: string,
     contactId: string,
-    payload: { name?: string; phoneNumber?: string; blocked?: boolean; internalNote?: string | null },
+    payload: {
+      name?: string;
+      phoneNumber?: string;
+      blocked?: boolean;
+      botDisabled?: boolean;
+      internalNote?: string | null;
+    },
   ) {
     return updateContact(organizationId, contactId, payload);
   },

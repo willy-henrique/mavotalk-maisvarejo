@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import { User } from '../types';
 import { apiFetch, apiPatch, apiPost, getAccessToken, getApiBaseUrl, getApiUrl, getSocketUrl } from '../services/api';
 import { Dialog } from './ui/Dialog';
+import { AvatarPreviewDialog } from './ui/AvatarPreviewDialog';
 import StartConversationDialog from './StartConversationDialog';
 
 type ConversationStatus = 'aguardando' | 'em_atendimento' | 'pendente_cliente' | 'encerrado';
@@ -133,6 +134,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const [linkModalOpen, setLinkModalOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
   const [linkTitle, setLinkTitle] = useState('');
+  const [avatarPreview, setAvatarPreview] = useState<{ url: string; name: string } | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const signatureTouchedRef = useRef(false);
   const pdfObjectUrlsRef = useRef<Set<string>>(new Set());
@@ -908,18 +910,32 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                     </div>
                   </div>
                   <div className="ml-2 flex gap-2">
-                    <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 text-sm font-bold shrink-0 overflow-hidden">
-                      {c.contact?.avatarUrl ? (
+                    {c.contact?.avatarUrl ? (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setAvatarPreview({
+                            url: c.contact.avatarUrl!,
+                            name: c.contact.name || c.contact.phoneNumber || 'Contato',
+                          });
+                        }}
+                        aria-label={`Ampliar foto de ${c.contact.name || c.contact.phoneNumber || 'Contato'}`}
+                        title="Ampliar foto"
+                        className="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-slate-200 transition hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-500/30 dark:bg-slate-700"
+                      >
                         <img
                           src={c.contact.avatarUrl}
                           alt={c.contact.name || c.contact.phoneNumber || 'Contato'}
                           referrerPolicy="no-referrer"
                           className="w-full h-full object-cover"
                         />
-                      ) : (
-                        (c.contact?.name || c.contact?.phoneNumber || '?')[0].toUpperCase()
-                      )}
-                    </div>
+                      </button>
+                    ) : (
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-sm font-bold text-slate-600 dark:bg-slate-700 dark:text-slate-300">
+                        {(c.contact?.name || c.contact?.phoneNumber || '?')[0].toUpperCase()}
+                      </div>
+                    )}
                     <div className="min-w-0 flex-1">
                       <h3 className="font-bold text-slate-800 dark:text-slate-100 line-clamp-1 text-sm">
                         {c.contact?.name || c.contact?.phoneNumber || 'Contato'}
@@ -971,18 +987,29 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                     <path fillRule="evenodd" d="M17 10a.75.75 0 01-.75.75H5.56l3.22 3.22a.75.75 0 11-1.06 1.06l-4.5-4.5a.75.75 0 010-1.06l4.5-4.5a.75.75 0 011.06 1.06L5.56 9.25h10.69A.75.75 0 0117 10z" clipRule="evenodd" />
                   </svg>
                 </button>
-                <div className="hidden sm:flex w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 items-center justify-center text-slate-600 dark:text-slate-300 text-sm font-bold shrink-0 overflow-hidden">
-                  {selected.contact?.avatarUrl ? (
+                {selected.contact?.avatarUrl ? (
+                  <button
+                    type="button"
+                    onClick={() => setAvatarPreview({
+                      url: selected.contact.avatarUrl!,
+                      name: selected.contact.name || selected.contact.phoneNumber || 'Contato',
+                    })}
+                    aria-label={`Ampliar foto de ${selected.contact.name || selected.contact.phoneNumber || 'Contato'}`}
+                    title="Ampliar foto"
+                    className="flex h-9 w-9 shrink-0 overflow-hidden rounded-full bg-slate-200 transition hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-500/30 sm:h-10 sm:w-10 dark:bg-slate-700"
+                  >
                     <img
                       src={selected.contact.avatarUrl}
                       alt={selected.contact.name || selected.contact.phoneNumber || 'Contato'}
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover"
                     />
-                  ) : (
-                    (selected.contact?.name || selected.contact?.phoneNumber || '?')[0].toUpperCase()
-                  )}
-                </div>
+                  </button>
+                ) : (
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-200 text-sm font-bold text-slate-600 sm:h-10 sm:w-10 dark:bg-slate-700 dark:text-slate-300">
+                    {(selected.contact?.name || selected.contact?.phoneNumber || '?')[0].toUpperCase()}
+                  </div>
+                )}
                 <div className="min-w-0 flex-1">
                   <h2 className="font-bold text-slate-800 dark:text-slate-100 truncate">
                     {selected.contact?.name || selected.contact?.phoneNumber || 'Contato'}
@@ -1292,6 +1319,14 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
           <StartConversationDialog
             onClose={() => setNewChatOpen(false)}
             onStarted={(conversationId) => { void fetchConversations(true); setSelectedId(conversationId); }}
+          />
+        )}
+
+        {avatarPreview && (
+          <AvatarPreviewDialog
+            avatarUrl={avatarPreview.url}
+            contactName={avatarPreview.name}
+            onClose={() => setAvatarPreview(null)}
           />
         )}
 
