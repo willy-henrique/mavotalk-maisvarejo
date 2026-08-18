@@ -390,21 +390,36 @@ test("botão de assinatura controla texto, link e imagem do compositor", async (
 });
 
 test("sincronização da agenda busca e exibe fotos de perfil com limite", async () => {
-  const [whatsapp, repository, contacts] = await Promise.all([
+  const [whatsapp, repository, contacts, inbox, statusRoute, packageJson] = await Promise.all([
     read("lib/whatsapp-client.ts"),
     read("lib/supabase-repo.ts"),
     read("frontend/components/Contacts.tsx"),
+    read("frontend/components/InboxConversations.tsx"),
+    read("app/api/whatsapp/status/route.ts"),
+    read("package.json"),
   ]);
 
   assert.match(whatsapp, /scheduleWhatsappContactAvatarSync/);
-  assert.match(whatsapp, /sock\.profilePictureUrl\(jid, "image"\)/);
+  assert.match(
+    whatsapp,
+    /sock\.profilePictureUrl\(jid, "image", WA_CONTACT_AVATAR_TIMEOUT_MS\)/,
+  );
   assert.match(whatsapp, /WA_CONTACT_AVATAR_CONCURRENCY/);
   assert.match(whatsapp, /recentlySyncedAvatarAt\.clear\(\)/);
+  assert.match(whatsapp, /listContactPhoneNumbersForAvatarSync/);
+  assert.match(whatsapp, /"manual-contact-resync"/);
+  assert.match(whatsapp, /avatarJidForMessage\(msg, fromPhone\)/);
   assert.match(repository, /updateWhatsappContactAvatarsByPhone/);
+  assert.match(repository, /listContactPhoneNumbersForAvatarSync/);
   assert.match(repository, /contact\.avatar_url IS DISTINCT FROM incoming\.avatar_url/);
   assert.match(repository, /c\.avatar_url/);
   assert.match(contacts, /const ContactAvatar/);
   assert.match(contacts, /contact\.avatarUrl/);
+  assert.match(inbox, /referrerPolicy="no-referrer"/);
+  assert.match(statusRoute, /contactAvatars: getWhatsappContactAvatarSyncStatus\(\)/);
+  // rc13 montava o tctoken fora do nó <picture> e as consultas expiravam; rc14
+  // contém a correção oficial do protocolo de foto de perfil.
+  assert.match(packageJson, /"@whiskeysockets\/baileys": "7\.0\.0-rc14"/);
 });
 
 test("limpeza da agenda importada preserva quem tem historico", async () => {

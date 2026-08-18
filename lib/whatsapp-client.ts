@@ -25,6 +25,7 @@ import {
   updateConversationById,
   updateTicketByConversation,
   updateWhatsappContactAvatarsByPhone,
+  listContactPhoneNumbersForAvatarSync,
   recordSatisfactionRatingByPhone,
   upsertWhatsappDirectoryEntries,
   findWhatsappDirectoryName,
@@ -336,7 +337,10 @@ function scheduleWhatsappContactAvatarSync(
     try {
       const result = await syncWhatsappContactAvatars({
         targets: scheduled,
-        profilePictureUrl: (jid) => sock.profilePictureUrl(jid, "image"),
+        // O timeout também precisa chegar ao Baileys. Só o Promise.race externo
+        // liberava nosso worker, mas deixava a consulta antiga presa no socket.
+        profilePictureUrl: (jid) =>
+          sock.profilePictureUrl(jid, "image", WA_CONTACT_AVATAR_TIMEOUT_MS),
         persist: (updates) =>
           updateWhatsappContactAvatarsByPhone(DEFAULT_ORGANIZATION_ID, updates),
         concurrency: WA_CONTACT_AVATAR_CONCURRENCY,
@@ -374,6 +378,13 @@ export function getWhatsappContactAvatarSyncStatus() {
     ...lastContactAvatarSync,
     pending: queuedAvatarPhones.size,
   };
+}
+
+function avatarJidForMessage(msg: WAMessage, phoneNumber: string): string {
+  const messageJid = [msg.key?.remoteJid, msg.key?.remoteJidAlt]
+    .map((jid) => String(jid || ""))
+    .find(isDirectUserJid);
+  return messageJid || phoneToChatId(phoneNumber);
 }
 
 export async function waitForWhatsappContactAvatarSync(timeoutMs = 3_000) {
@@ -831,7 +842,7 @@ async function processHistoricalInboundMessage(
   );
   scheduleWhatsappContactAvatarSync(
     sock,
-    [{ phoneNumber: fromPhone, jid: phoneToChatId(fromPhone) }],
+    [{ phoneNumber: fromPhone, jid: avatarJidForMessage(msg, fromPhone) }],
     "messaging-history.set",
   );
   logger.info(
@@ -957,7 +968,7 @@ async function handleInboundViaBotTriagem(
   // perder o UPDATE no modo de triagem usado atualmente no Render.
   scheduleWhatsappContactAvatarSync(
     sock,
-    [{ phoneNumber: fromPhone, jid: phoneToChatId(fromPhone) }],
+    [{ phoneNumber: fromPhone, jid: avatarJidForMessage(msg, fromPhone) }],
     "messages.upsert",
   );
 
@@ -1138,7 +1149,7 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
 
   scheduleWhatsappContactAvatarSync(
     sock,
-    [{ phoneNumber: fromPhone, jid: phoneToChatId(fromPhone) }],
+    [{ phoneNumber: fromPhone, jid: avatarJidForMessage(msg, fromPhone) }],
     "messages.upsert",
   );
 
@@ -2188,6 +2199,28 @@ export async function resyncWhatsappContacts(): Promise<void> {
   await sock.resyncAppState(
     ["critical_block", "critical_unblock_low", "regular_high", "regular_low", "regular"],
     true,
+  );
+
+  // O app state pode não emitir novamente a agenda em uma sessão já assentada.
+  // Nesse caso ainda precisamos consultar as fotos dos contatos que o Mavo já
+  // conhece; sem isso a operação respondia `requested: 0` mesmo com contatos.
+  const phoneNumbers = await listContactPhoneNumbersForAvatarSync(
+    DEFAULT_ORGANIZATION_ID,
+  );
+  const existingTargets = phoneNumbers
+    .map((phoneNumber) => ({
+      phoneNumber,
+      jid: phoneToChatId(phoneNumber),
+    }))
+    .filter((target) => Boolean(whatsappPhoneFromJid(target.jid)));
+  scheduleWhatsappContactAvatarSync(
+    sock,
+    existingTargets,
+    "manual-contact-resync",
+  );
+  logger.info(
+    { contacts: phoneNumbers.length, avatarTargets: existingTargets.length },
+    "Existing Mavo contacts queued for WhatsApp avatar sync",
   );
 }
 

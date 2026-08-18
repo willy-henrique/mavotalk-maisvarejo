@@ -34,7 +34,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@prisma/client": "^6.19.3",
     "@supabase/supabase-js": "^2.110.8",
-    "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "@whiskeysockets/baileys": "7.0.0-rc14",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.81.0",
     "cloudinary": "^2.10.0",

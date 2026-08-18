@@ -913,6 +913,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                         <img
                           src={c.contact.avatarUrl}
                           alt={c.contact.name || c.contact.phoneNumber || 'Contato'}
+                          referrerPolicy="no-referrer"
                           className="w-full h-full object-cover"
                         />
                       ) : (
@@ -975,6 +976,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                     <img
                       src={selected.contact.avatarUrl}
                       alt={selected.contact.name || selected.contact.phoneNumber || 'Contato'}
+                      referrerPolicy="no-referrer"
                       className="w-full h-full object-cover"
                     />
                   ) : (

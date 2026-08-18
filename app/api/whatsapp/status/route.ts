@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireMenuPermission, requireSession } from "@/lib/api";
 import {
+  getWhatsappContactAvatarSyncStatus,
   getWhatsappMessageSyncDiagnostics,
   getWhatsappState,
 } from "@/lib/whatsapp-client";
@@ -15,5 +16,6 @@ export async function GET() {
     provider: process.env.WHATSAPP_PROVIDER || "twilio",
     state: getWhatsappState(),
     messageSync: getWhatsappMessageSyncDiagnostics(),
+    contactAvatars: getWhatsappContactAvatarSyncStatus(),
   });
 }

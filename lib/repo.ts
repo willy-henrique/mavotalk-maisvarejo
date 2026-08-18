@@ -71,6 +71,7 @@ export {
   updateContact,
   updateContactAvatar,
   updateWhatsappContactAvatarsByPhone,
+  listContactPhoneNumbersForAvatarSync,
   listContacts,
   listContactsPage,
   getOrCreateOpenConversation,

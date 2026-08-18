@@ -1309,6 +1309,35 @@ export async function updateWhatsappContactAvatarsByPhone(
   return result.rows.length;
 }
 
+/**
+ * Retorna somente os telefones necessários para atualizar fotos de perfil.
+ *
+ * A sincronização manual não pode depender de o WhatsApp reenviar a agenda: em
+ * sessões já conectadas esse evento pode não acontecer. Uma consulta dedicada
+ * também evita carregar conversas e mensagens apenas para descobrir os números.
+ */
+export async function listContactPhoneNumbersForAvatarSync(
+  organizationId: string,
+): Promise<string[]> {
+  const orgId = requireOrganizationId(organizationId);
+  const result = await queryTenantDatabase<{ phone_number: string }>(
+    orgId,
+    `SELECT phone_number
+       FROM contacts
+      WHERE organization_id = $1
+        AND NULLIF(BTRIM(phone_number), '') IS NOT NULL
+      ORDER BY updated_at DESC, id`,
+    [orgId],
+  );
+  return [
+    ...new Set(
+      result.rows
+        .map((row) => String(row.phone_number).trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
 export async function listContacts(organizationId: string): Promise<ListContactItem[]> {
   const orgId = requireOrganizationId(organizationId);
   const { data: contactRows, error } = await supa(orgId)
