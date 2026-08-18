@@ -390,12 +390,21 @@ test("botão de assinatura controla texto, link e imagem do compositor", async (
 });
 
 test("sincronização da agenda busca e exibe fotos de perfil com limite", async () => {
-  const [whatsapp, repository, contacts, inbox, statusRoute, packageJson] = await Promise.all([
+  const [
+    whatsapp,
+    repository,
+    contacts,
+    inbox,
+    statusRoute,
+    syncRoute,
+    packageJson,
+  ] = await Promise.all([
     read("lib/whatsapp-client.ts"),
     read("lib/supabase-repo.ts"),
     read("frontend/components/Contacts.tsx"),
     read("frontend/components/InboxConversations.tsx"),
     read("app/api/whatsapp/status/route.ts"),
+    read("app/api/contacts/sync-whatsapp/route.ts"),
     read("package.json"),
   ]);
 
@@ -409,6 +418,11 @@ test("sincronização da agenda busca e exibe fotos de perfil com limite", async
   assert.match(whatsapp, /listContactPhoneNumbersForAvatarSync/);
   assert.match(whatsapp, /"manual-contact-resync"/);
   assert.match(whatsapp, /avatarJidForMessage\(msg, fromPhone\)/);
+  assert.match(whatsapp, /resolveWhatsappDataOrganizationId/);
+  assert.match(
+    whatsapp,
+    /updateWhatsappContactAvatarsByPhone\(targetOrganizationId, updates\)/,
+  );
   assert.match(repository, /updateWhatsappContactAvatarsByPhone/);
   assert.match(repository, /listContactPhoneNumbersForAvatarSync/);
   assert.match(repository, /contact\.avatar_url IS DISTINCT FROM incoming\.avatar_url/);
@@ -417,6 +431,9 @@ test("sincronização da agenda busca e exibe fotos de perfil com limite", async
   assert.match(contacts, /contact\.avatarUrl/);
   assert.match(inbox, /referrerPolicy="no-referrer"/);
   assert.match(statusRoute, /contactAvatars: getWhatsappContactAvatarSyncStatus\(\)/);
+  // A sessão do WhatsApp é global, mas a gravação deve usar o tenant autenticado.
+  // Em produção a consulta encontrou fotos e as salvou na organização órfã do env.
+  assert.match(syncRoute, /resyncWhatsappContacts\(organizationId\)/);
   // rc13 montava o tctoken fora do nó <picture> e as consultas expiravam; rc14
   // contém a correção oficial do protocolo de foto de perfil.
   assert.match(packageJson, /"@whiskeysockets\/baileys": "7\.0\.0-rc14"/);

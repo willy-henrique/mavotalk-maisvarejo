@@ -26,6 +26,7 @@ import {
   updateTicketByConversation,
   updateWhatsappContactAvatarsByPhone,
   listContactPhoneNumbersForAvatarSync,
+  resolveDefaultOrganizationId,
   recordSatisfactionRatingByPhone,
   upsertWhatsappDirectoryEntries,
   findWhatsappDirectoryName,
@@ -300,7 +301,7 @@ const WA_CONTACT_AVATAR_REFRESH_MS = Math.max(
   Number(process.env.WA_CONTACT_AVATAR_REFRESH_MS) || 24 * 60 * 60 * 1000,
 );
 
-const queuedAvatarPhones = new Set<string>();
+const queuedAvatarTargets = new Set<string>();
 const recentlySyncedAvatarAt = new Map<string, number>();
 let contactAvatarSyncTail: Promise<void> = Promise.resolve();
 let lastContactAvatarSync: WhatsappAvatarSyncResult & { completedAt: string | null } = {
@@ -315,13 +316,19 @@ function scheduleWhatsappContactAvatarSync(
   sock: WASocket,
   targets: WhatsappAvatarTarget[],
   source: string,
+  organizationId: string,
 ) {
+  const targetOrganizationId =
+    String(organizationId || "").trim() || DEFAULT_ORGANIZATION_ID;
+  const queueKey = (phoneNumber: string) =>
+    `${targetOrganizationId}\u001f${phoneNumber}`;
   const now = Date.now();
   const unique = new Map<string, WhatsappAvatarTarget>();
   for (const target of targets) {
-    const lastAttempt = recentlySyncedAvatarAt.get(target.phoneNumber) || 0;
+    const key = queueKey(target.phoneNumber);
+    const lastAttempt = recentlySyncedAvatarAt.get(key) || 0;
     if (
-      queuedAvatarPhones.has(target.phoneNumber) ||
+      queuedAvatarTargets.has(key) ||
       now - lastAttempt < WA_CONTACT_AVATAR_REFRESH_MS
     ) {
       continue;
@@ -330,7 +337,9 @@ function scheduleWhatsappContactAvatarSync(
   }
   const scheduled = [...unique.values()];
   if (!scheduled.length) return;
-  for (const target of scheduled) queuedAvatarPhones.add(target.phoneNumber);
+  for (const target of scheduled) {
+    queuedAvatarTargets.add(queueKey(target.phoneNumber));
+  }
 
   const run = async () => {
     let completed = false;
@@ -342,7 +351,7 @@ function scheduleWhatsappContactAvatarSync(
         profilePictureUrl: (jid) =>
           sock.profilePictureUrl(jid, "image", WA_CONTACT_AVATAR_TIMEOUT_MS),
         persist: (updates) =>
-          updateWhatsappContactAvatarsByPhone(DEFAULT_ORGANIZATION_ID, updates),
+          updateWhatsappContactAvatarsByPhone(targetOrganizationId, updates),
         concurrency: WA_CONTACT_AVATAR_CONCURRENCY,
         timeoutMs: WA_CONTACT_AVATAR_TIMEOUT_MS,
       });
@@ -351,15 +360,27 @@ function scheduleWhatsappContactAvatarSync(
         completedAt: new Date().toISOString(),
       };
       completed = true;
-      logger.info({ source, ...result }, "WhatsApp contact avatars synchronized");
+      logger.info(
+        { source, organizationId: targetOrganizationId, ...result },
+        "WhatsApp contact avatars synchronized",
+      );
     } catch (err) {
-      logger.warn({ err, source, requested: scheduled.length }, "Failed to sync WhatsApp contact avatars");
+      logger.warn(
+        {
+          err,
+          source,
+          organizationId: targetOrganizationId,
+          requested: scheduled.length,
+        },
+        "Failed to sync WhatsApp contact avatars",
+      );
     } finally {
       const attemptedAt = Date.now();
       for (const target of scheduled) {
-        queuedAvatarPhones.delete(target.phoneNumber);
+        const key = queueKey(target.phoneNumber);
+        queuedAvatarTargets.delete(key);
         // Falha de banco/rede deve poder ser tentada novamente no próximo evento.
-        if (completed) recentlySyncedAvatarAt.set(target.phoneNumber, attemptedAt);
+        if (completed) recentlySyncedAvatarAt.set(key, attemptedAt);
       }
       if (recentlySyncedAvatarAt.size > 20_000) {
         const cutoff = attemptedAt - WA_CONTACT_AVATAR_REFRESH_MS;
@@ -376,8 +397,12 @@ function scheduleWhatsappContactAvatarSync(
 export function getWhatsappContactAvatarSyncStatus() {
   return {
     ...lastContactAvatarSync,
-    pending: queuedAvatarPhones.size,
+    pending: queuedAvatarTargets.size,
   };
+}
+
+async function resolveWhatsappDataOrganizationId(): Promise<string> {
+  return resolveDefaultOrganizationId(DEFAULT_ORGANIZATION_ID);
 }
 
 function avatarJidForMessage(msg: WAMessage, phoneNumber: string): string {
@@ -629,7 +654,7 @@ async function processOutboundMessageFromDevice(
   const diagnostics = messageSyncDiagnostics();
   diagnostics.outboundDeviceMessagesReceived += 1;
 
-  const organizationId = DEFAULT_ORGANIZATION_ID;
+  const organizationId = await resolveWhatsappDataOrganizationId();
   const externalId = String(msg.key?.id || "").trim() || undefined;
   const fromBot = recentBotSends.has(to);
   if (fromBot) recentBotSends.delete(to);
@@ -785,7 +810,7 @@ async function processHistoricalInboundMessage(
   if (msg.key?.fromMe || !isDirectUserChat(remoteJid)) return;
   if (shouldIgnoreInboundWhatsApp(msg)) return;
 
-  const organizationId = DEFAULT_ORGANIZATION_ID;
+  const organizationId = await resolveWhatsappDataOrganizationId();
   const externalId = String(msg.key?.id || "").trim() || undefined;
   if (externalId) {
     const existing = await findMessageByExternalId(organizationId, externalId);
@@ -844,6 +869,7 @@ async function processHistoricalInboundMessage(
     sock,
     [{ phoneNumber: fromPhone, jid: avatarJidForMessage(msg, fromPhone) }],
     "messaging-history.set",
+    organizationId,
   );
   logger.info(
     {
@@ -859,9 +885,11 @@ async function processHistoricalInboundMessage(
 async function handleInboundViaBotTriagem(
   sock: WASocket,
   msg: WAMessage,
-  options?: { suppressReply?: boolean },
+  options?: { suppressReply?: boolean; organizationId?: string },
 ) {
   const remoteJid = String(msg.key?.remoteJid || "");
+  const dataOrganizationId =
+    options?.organizationId || (await resolveWhatsappDataOrganizationId());
   const fromPhone = await resolveMessagePhone(sock, msg);
   if (!fromPhone) {
     logger.error(
@@ -885,7 +913,7 @@ async function handleInboundViaBotTriagem(
   // O nome salvo pela loja vale mais que o pushName: é ele que identifica o cliente
   // recorrente para quem atende.
   const directoryName = await findWhatsappDirectoryName(
-    DEFAULT_ORGANIZATION_ID,
+    dataOrganizationId,
     fromPhone,
   ).catch(() => null);
   const contactName = directoryName || msg.pushName || "Cliente";
@@ -964,14 +992,6 @@ async function handleInboundViaBotTriagem(
     return;
   }
 
-  // O ticket-upsert já criou/resolveu o contato. Buscar a foto depois dele evita
-  // perder o UPDATE no modo de triagem usado atualmente no Render.
-  scheduleWhatsappContactAvatarSync(
-    sock,
-    [{ phoneNumber: fromPhone, jid: avatarJidForMessage(msg, fromPhone) }],
-    "messages.upsert",
-  );
-
   const decision = result.data as {
     shouldReply?: unknown;
     replyText?: unknown;
@@ -979,6 +999,17 @@ async function handleInboundViaBotTriagem(
     conversationId?: unknown;
     organizationId?: unknown;
   };
+  const decisionOrganizationId = String(
+    decision.organizationId || dataOrganizationId,
+  ).trim();
+  // O ticket-upsert já criou/resolveu o contato. Buscar a foto depois dele evita
+  // perder o UPDATE no modo de triagem usado atualmente no Render.
+  scheduleWhatsappContactAvatarSync(
+    sock,
+    [{ phoneNumber: fromPhone, jid: avatarJidForMessage(msg, fromPhone) }],
+    "messages.upsert",
+    decisionOrganizationId,
+  );
   if (
     !options?.suppressReply &&
     decision.shouldReply === true &&
@@ -993,10 +1024,8 @@ async function handleInboundViaBotTriagem(
       true,
     );
     const conversationId = String(decision.conversationId || "").trim();
-    const organizationId = String(
-      decision.organizationId || DEFAULT_ORGANIZATION_ID,
-    ).trim();
-    if (conversationId && organizationId === DEFAULT_ORGANIZATION_ID) {
+    const organizationId = decisionOrganizationId;
+    if (conversationId && organizationId === dataOrganizationId) {
       await addOutboundMessage(
         organizationId,
         conversationId,
@@ -1061,6 +1090,7 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
     logger.debug({ from: remoteJid }, "Ignoring inbound with no body and no media");
     return;
   }
+  const organizationId = await resolveWhatsappDataOrganizationId();
 
   // A resposta da pesquisa de satisfação precisa ser tratada antes de qualquer
   // triagem: seguindo adiante, o "5" vira uma mensagem comum, o ticket-upsert abre
@@ -1070,7 +1100,7 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
     let rated = false;
     try {
       rated = await recordSatisfactionRatingByPhone(
-        DEFAULT_ORGANIZATION_ID,
+        organizationId,
         ratingPhone,
         bodyRaw,
       );
@@ -1096,11 +1126,11 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
   if (isPreConnectionQueued || n8nOnlyMode || aiTriageOnlyMode) {
     await handleInboundViaBotTriagem(sock, msg, {
       suppressReply: isPreConnectionQueued,
+      organizationId,
     });
     return;
   }
 
-  const organizationId = DEFAULT_ORGANIZATION_ID;
   const externalId = msg.key?.id || undefined;
   if (externalId) {
     try {
@@ -1151,6 +1181,7 @@ async function processInboundMessage(sock: WASocket, msg: WAMessage) {
     sock,
     [{ phoneNumber: fromPhone, jid: avatarJidForMessage(msg, fromPhone) }],
     "messages.upsert",
+    organizationId,
   );
 
   let mediaUrl: string | null = null;
@@ -1826,27 +1857,36 @@ export async function initWhatsappClient(options?: { pairingMode?: boolean }) {
           "WhatsApp contact event received",
         );
         if (!entries.length) return;
-        void Promise.all([
-          upsertWhatsappDirectoryEntries(DEFAULT_ORGANIZATION_ID, entries)
-            .then((saved) => {
-              if (saved) logger.info({ saved }, "Synced WhatsApp directory entries");
-            })
-            .catch((err) => {
-              logger.warn({ err }, "Failed to sync WhatsApp directory entries");
-            }),
-          // A agenda também vira contato na plataforma, para a loja encontrar o
-          // número sem depender de a pessoa ter escrito antes.
-          importWhatsappContacts(DEFAULT_ORGANIZATION_ID, entries)
-            .then((created) => {
-              if (created) logger.info({ created }, "Imported WhatsApp contacts");
-            })
-            .catch((err) => {
-              logger.warn({ err }, "Failed to import WhatsApp contacts");
-            }),
-        ]).then(() => {
+        void (async () => {
+          const organizationId = await resolveWhatsappDataOrganizationId();
+          await Promise.all([
+            upsertWhatsappDirectoryEntries(organizationId, entries)
+              .then((saved) => {
+                if (saved) logger.info({ saved }, "Synced WhatsApp directory entries");
+              })
+              .catch((err) => {
+                logger.warn({ err }, "Failed to sync WhatsApp directory entries");
+              }),
+            // A agenda também vira contato na plataforma, para a loja encontrar o
+            // número sem depender de a pessoa ter escrito antes.
+            importWhatsappContacts(organizationId, entries)
+              .then((created) => {
+                if (created) logger.info({ created }, "Imported WhatsApp contacts");
+              })
+              .catch((err) => {
+                logger.warn({ err }, "Failed to import WhatsApp contacts");
+              }),
+          ]);
           // Esperar a importação evita a corrida em que a foto chega antes de o
           // contato existir. O processamento segue em segundo plano e com limite.
-          scheduleWhatsappContactAvatarSync(sock, entries, source);
+          scheduleWhatsappContactAvatarSync(
+            sock,
+            entries,
+            source,
+            organizationId,
+          );
+        })().catch((err) => {
+          logger.warn({ err, source }, "Failed to synchronize WhatsApp directory");
         });
       };
 
@@ -2041,15 +2081,16 @@ export async function destroyWhatsappClient(options?: { logout?: boolean }) {
       // A agenda importada pertence ao número que está saindo: mantê-la deixaria
       // contatos de outra conta no painel depois de conectar um número diferente.
       // Quem já tem conversa é preservado — apagar levaria o histórico junto.
+      const organizationId = await resolveWhatsappDataOrganizationId();
       await Promise.all([
-        deleteImportedWhatsappContacts(DEFAULT_ORGANIZATION_ID)
+        deleteImportedWhatsappContacts(organizationId)
           .then((removed) => {
             if (removed) logger.info({ removed }, "Removed imported WhatsApp contacts on disconnect");
           })
           .catch((err) => {
             logger.warn({ err }, "Failed to remove imported WhatsApp contacts");
           }),
-        clearWhatsappDirectory(DEFAULT_ORGANIZATION_ID).catch((err) => {
+        clearWhatsappDirectory(organizationId).catch((err) => {
           logger.warn({ err }, "Failed to clear WhatsApp directory");
         }),
       ]);
@@ -2167,7 +2208,9 @@ export async function requestWhatsappPairingCode(phone: string): Promise<{
  * `messaging-history.set`, que já gravam a agenda e criam os contatos — então esta
  * função dispara e aguarda o assentamento, sem duplicar a lógica de importação.
  */
-export async function resyncWhatsappContacts(): Promise<void> {
+export async function resyncWhatsappContacts(
+  organizationId?: string,
+): Promise<void> {
   const provider = process.env.WHATSAPP_PROVIDER || "twilio";
   if (provider !== "unofficial") {
     throw new Error(
@@ -2181,6 +2224,9 @@ export async function resyncWhatsappContacts(): Promise<void> {
       "Conecte o WhatsApp antes de sincronizar os contatos do celular.",
     );
   }
+  const targetOrganizationId =
+    String(organizationId || "").trim() ||
+    (await resolveWhatsappDataOrganizationId());
 
   // O clique manual significa atualização explícita. Permitir nova consulta mesmo
   // para contatos vistos recentemente captura uma foto alterada no WhatsApp.
@@ -2205,7 +2251,7 @@ export async function resyncWhatsappContacts(): Promise<void> {
   // Nesse caso ainda precisamos consultar as fotos dos contatos que o Mavo já
   // conhece; sem isso a operação respondia `requested: 0` mesmo com contatos.
   const phoneNumbers = await listContactPhoneNumbersForAvatarSync(
-    DEFAULT_ORGANIZATION_ID,
+    targetOrganizationId,
   );
   const existingTargets = phoneNumbers
     .map((phoneNumber) => ({
@@ -2217,9 +2263,14 @@ export async function resyncWhatsappContacts(): Promise<void> {
     sock,
     existingTargets,
     "manual-contact-resync",
+    targetOrganizationId,
   );
   logger.info(
-    { contacts: phoneNumbers.length, avatarTargets: existingTargets.length },
+    {
+      organizationId: targetOrganizationId,
+      contacts: phoneNumbers.length,
+      avatarTargets: existingTargets.length,
+    },
     "Existing Mavo contacts queued for WhatsApp avatar sync",
   );
 }

@@ -22,7 +22,7 @@ export async function POST() {
   const before = await countWhatsappDirectory(organizationId).catch(() => 0);
 
   try {
-    await resyncWhatsappContacts();
+    await resyncWhatsappContacts(organizationId);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Não foi possível sincronizar os contatos.";
