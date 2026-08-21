@@ -184,6 +184,17 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     });
   }, [setSearchParams]);
 
+  /**
+   * Puxar muda o chamado para "em atendimento", e ele some da lista de aguardando —
+   * o atendente ficava olhando para uma lista onde o chamado não estava mais. Levar
+   * para Abertas > Atendendo, com a conversa aberta, é onde o chamado passou a existir.
+   */
+  const focusAssignedConversation = useCallback((id: string) => {
+    setTabAbertas('abertas');
+    setStatusFilter('em_atendimento');
+    selectConversation(id);
+  }, [selectConversation]);
+
   const clearSelectedConversation = useCallback(() => {
     setSelectedId(null);
     setSearchParams((previous) => {
@@ -688,6 +699,12 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     setOperationError('');
     try {
       await apiPost(`/api/conversations/${selectedId}/assign`, {});
+      // Mesmo otimismo do botão da lista: sem isto o chamado só aparece em Atendendo
+      // depois do reload, e a lista pisca vazia logo após puxar.
+      setConversations((prev) =>
+        prev.map((c) => (c.id === selectedId ? { ...c, status: 'em_atendimento' as ConversationStatus } : c)),
+      );
+      focusAssignedConversation(selectedId);
       // Realtime + otimismo já atualizam; não bloquear a UI esperando reload completo.
       void fetchConversations(false);
     } catch {
@@ -701,7 +718,9 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     setAssigning(true);
     setOperationError('');
     const previousSelected = selectedId;
-    selectConversation(id);
+    const previousTab = tabAbertas;
+    const previousStatusFilter = statusFilter;
+    focusAssignedConversation(id);
     // Otimismo: marca como em_atendimento imediatamente
     setConversations((prev) =>
       prev.map((c) => (c.id === id ? { ...c, status: 'em_atendimento' as ConversationStatus } : c)),
@@ -715,6 +734,8 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
       setConversations((prev) =>
         prev.map((c) => (c.id === id ? { ...c, status: 'aguardando' as ConversationStatus } : c)),
       );
+      setTabAbertas(previousTab);
+      setStatusFilter(previousStatusFilter);
       if (previousSelected) selectConversation(previousSelected);
       else clearSelectedConversation();
     } finally {
