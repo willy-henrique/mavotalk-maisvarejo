@@ -778,6 +778,9 @@ export async function listConversations(organizationId: string, status?: Convers
       mediaUrl: m.media_url,
       mimeType: m.mime_type,
       cloudinaryPublicId: m.cloudinary_public_id,
+      // Só o valor gravado no envio diz se o cliente viu o nome; o padrão da
+      // organização pode ter mudado depois que a mensagem saiu.
+      withSignature: m.with_signature !== false,
       createdAt: iso(m.created_at),
     };
     if (m.direction === "outbound" && m.author_id) {
@@ -922,13 +925,16 @@ export async function addOutboundMessage(
     mediaUrl?: string | null;
     mimeType?: string | null;
     cloudinaryPublicId?: string | null;
+    withSignature?: boolean;
   },
 ) {
   const orgId = requireOrganizationId(organizationId);
   if (externalId) {
     const { data: dup } = await supa(orgId)
       .from("messages")
-      .select("id, content, type, author_id, media_url, mime_type, cloudinary_public_id")
+      .select(
+        "id, content, type, author_id, media_url, mime_type, cloudinary_public_id, with_signature",
+      )
       .eq("organization_id", orgId)
       .eq("conversation_id", conversationId)
       .eq("external_id", externalId)
@@ -945,6 +951,7 @@ export async function addOutboundMessage(
         mediaUrl: dup.media_url ?? undefined,
         mimeType: dup.mime_type ?? undefined,
         cloudinaryPublicId: dup.cloudinary_public_id ?? undefined,
+        withSignature: dup.with_signature !== false,
       };
     }
   }
@@ -963,6 +970,7 @@ export async function addOutboundMessage(
     media_url: options?.mediaUrl || null,
     mime_type: options?.mimeType || null,
     cloudinary_public_id: options?.cloudinaryPublicId || null,
+    with_signature: options?.withSignature ?? true,
   });
   if (insertError) {
     logger.error(
@@ -998,6 +1006,7 @@ export async function addOutboundMessage(
     mediaUrl: options?.mediaUrl,
     mimeType: options?.mimeType,
     cloudinaryPublicId: options?.cloudinaryPublicId,
+    withSignature: options?.withSignature ?? true,
   };
 }
 

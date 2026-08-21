@@ -20,6 +20,8 @@ type ApiMessage = {
   cloudinaryPublicId?: string | null;
   authorId?: string | null;
   authorName?: string | null;
+  /** Se o cliente recebeu o nome do atendente antes do texto. */
+  withSignature?: boolean;
   externalId?: string | null;
 };
 
@@ -87,6 +89,32 @@ async function validatedPdfBlob(response: Response): Promise<Blob> {
     : new Blob([blob], { type: 'application/pdf' });
 }
 
+/**
+ * A assinatura é escolha de quem atende, então precisa sobreviver à recarga: sem
+ * guardar, o botão voltava ao padrão da loja e o nome do atendente reaparecia sem
+ * ninguém pedir. Fica por atendente, no próprio navegador.
+ */
+function signatureStorageKey(userId: string): string {
+  return `willtalk.assinatura.${userId}`;
+}
+
+function readStoredSignature(userId: string): boolean | null {
+  try {
+    const value = window.localStorage.getItem(signatureStorageKey(userId));
+    return value === 'on' ? true : value === 'off' ? false : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeSignature(userId: string, enabled: boolean): void {
+  try {
+    window.localStorage.setItem(signatureStorageKey(userId), enabled ? 'on' : 'off');
+  } catch {
+    // Navegador sem storage (aba anônima restrita): a assinatura só não persiste.
+  }
+}
+
 function pdfDownloadName(message: ApiMessage): string {
   const base = documentTitle(message)
     .replace(/\.pdf$/i, '')
@@ -110,9 +138,10 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const [statusFilter, setStatusFilter] = useState<'em_atendimento' | 'aguardando' | 'pendente_cliente' | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState('');
-  /** Assinatura deste envio. Começa no padrão da organização e o atendente pode
-   * inverter aqui sem alterar a configuração dos demais. */
-  const [signatureOn, setSignatureOn] = useState(true);
+  /** Assinatura deste envio. Começa na escolha guardada do atendente e, se não
+   * houver nenhuma, no padrão da organização — sem alterar a configuração dos demais. */
+  const [storedSignature] = useState(() => readStoredSignature(currentUser.id));
+  const [signatureOn, setSignatureOn] = useState(storedSignature ?? true);
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
@@ -141,7 +170,9 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
 
   const toggleSignature = () => {
     signatureTouchedRef.current = true;
-    setSignatureOn((value) => !value);
+    const next = !signatureOn;
+    storeSignature(currentUser.id, next);
+    setSignatureOn(next);
   };
 
   const selectConversation = useCallback((id: string) => {
@@ -577,6 +608,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
         if (
           active &&
           !signatureTouchedRef.current &&
+          storedSignature === null &&
           data &&
           typeof data.agentSignatureEnabled === 'boolean'
         ) {
@@ -587,7 +619,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     return () => {
       active = false;
     };
-  }, []);
+  }, [storedSignature]);
 
   // Na aba Abertas, não manter conversa encerrada selecionada — só em Resolvidos
   useEffect(() => {
@@ -1097,7 +1129,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                       </a>
                     ) : m.type === 'document' && m.mediaUrl ? (
                       <div className="min-w-[220px] max-w-sm">
-                        {m.direction === 'outbound' && m.authorName && (
+                        {m.withSignature && m.authorName && (
                           <span className="mb-2 block font-semibold">{m.authorName}:</span>
                         )}
                         <div className={`flex items-center gap-3 rounded-xl border p-3 ${
@@ -1161,7 +1193,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                           )}
                         </div>
                       </div>
-                    ) : m.direction === 'outbound' && m.authorName ? (
+                    ) : m.withSignature && m.authorName ? (
                       <>
                         <span className="font-semibold block mb-1">{m.authorName}:</span>
                         {m.content}

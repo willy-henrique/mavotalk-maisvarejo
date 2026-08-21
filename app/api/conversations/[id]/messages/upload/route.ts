@@ -139,6 +139,7 @@ export async function POST(
       mediaUrl: upload.secure_url,
       mimeType: attachment.mimeType,
       cloudinaryPublicId: upload.public_id,
+      withSignature: useSignature,
     },
   );
 

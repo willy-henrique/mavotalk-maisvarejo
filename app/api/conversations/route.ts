@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
     String(conversation.id),
     message,
     externalId,
-    { authorId: auth.session.userId },
+    { authorId: auth.session.userId, withSignature: agentSignatureEnabled },
   );
 
   await createAuditLog(

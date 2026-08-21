@@ -143,6 +143,7 @@ CREATE TABLE IF NOT EXISTS messages (
   media_url             TEXT,
   mime_type             TEXT,
   cloudinary_public_id  TEXT,
+  with_signature        BOOLEAN NOT NULL DEFAULT TRUE,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_messages_conversation

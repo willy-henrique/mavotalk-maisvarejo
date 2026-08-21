@@ -122,7 +122,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     id,
     resolvedContent,
     externalId,
-    { authorId },
+    { authorId, withSignature: useSignature },
   );
 
   emitRealtime(auth.session.organizationId, "message.created", { conversationId: id, message });

@@ -131,10 +131,9 @@ export async function uploadBufferToCloudinary(buffer: Buffer, mimeType?: string
   });
 }
 
-/** Gera URL assinada (validação de acesso). */
+/** Gera URL assinada de imagem (validação de acesso). */
 export function generateSignedUrl(publicId: string): string {
-  if (!cloudName || !apiKey || !apiSecret) return "";
-  return cloudinary.url(publicId, { sign_url: true, secure: true });
+  return signedDeliveryUrl(publicId, "image");
 }
 
 /** Remove recursos do Cloudinary. */
@@ -144,4 +143,48 @@ export async function deleteCloudinaryResources(
 ): Promise<void> {
   if (!cloudName || !apiKey || !apiSecret || publicIds.length === 0) return;
   await cloudinary.api.delete_resources(publicIds, { resource_type: resourceType });
+}
+
+export type CloudinaryResourceType = "image" | "raw" | "video";
+
+/**
+ * O tipo do recurso está no segundo segmento da URL de entrega
+ * (`/<cloud>/raw/upload/...`). Assinar com o tipo errado devolve 404, então o valor
+ * guardado na mensagem é a única fonte confiável: PDF do WhatsApp entra como `raw` e
+ * o PDF antigo, vindo do Twilio, entra como `image`.
+ */
+export function cloudinaryResourceTypeFromUrl(
+  value: string | null | undefined,
+): CloudinaryResourceType | null {
+  try {
+    const url = new URL(String(value || ""));
+    if (url.hostname !== "res.cloudinary.com") return null;
+    const segment = url.pathname.split("/").filter(Boolean)[1];
+    return segment === "image" || segment === "raw" || segment === "video"
+      ? segment
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * URL assinada para qualquer tipo de recurso. A conta recusa a entrega pública de
+ * PDF; a assinatura é o que autoriza o download — é por isso que a imagem, que já
+ * passava por aqui, sempre abriu, e o PDF, buscado pela URL crua, não.
+ */
+export function signedDeliveryUrl(
+  publicId: string,
+  resourceType: CloudinaryResourceType = "image",
+): string {
+  if (!cloudName || !apiKey || !apiSecret || !publicId) return "";
+  // O `raw` já guarda a extensão no public_id; o `image` precisa dela para entregar PDF.
+  const needsPdfFormat = resourceType === "image" && !/\.pdf$/i.test(publicId);
+  return cloudinary.url(publicId, {
+    resource_type: resourceType,
+    type: "upload",
+    sign_url: true,
+    secure: true,
+    ...(needsPdfFormat ? { format: "pdf" } : {}),
+  });
 }

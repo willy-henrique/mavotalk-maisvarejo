@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireMenuPermission, requireSession } from "@/lib/api";
 import { getMessageMediaForConversation } from "@/lib/repo";
+import {
+  cloudinaryResourceTypeFromUrl,
+  signedDeliveryUrl,
+} from "@/lib/cloudinary";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -96,18 +100,69 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // A conta recusa a entrega pública de PDF: a URL guardada na mensagem só abre
+  // assinada — é o mesmo caminho que a imagem já usa em /api/media/signed e o motivo
+  // de a imagem sempre abrir e o PDF não. A URL crua fica como segunda tentativa,
+  // para mensagens antigas que ficaram sem public_id.
+  const resourceType = cloudinaryResourceTypeFromUrl(media.mediaUrl) ?? "raw";
+  const signedUrl = media.cloudinaryPublicId
+    ? signedDeliveryUrl(media.cloudinaryPublicId, resourceType)
+    : "";
+  const attempts = [
+    ...(signedUrl ? [{ source: "signed" as const, url: signedUrl }] : []),
+    { source: "stored" as const, url: media.mediaUrl },
+  ];
+
   try {
-    const upstream = await fetch(media.mediaUrl, {
-      redirect: "error",
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!upstream.ok) {
+    let upstream: Response | null = null;
+    const failures: Array<{ source: string; status: number; cldError: string }> = [];
+
+    for (const attempt of attempts) {
+      let response: Response;
+      try {
+        response = await fetch(attempt.url, {
+          redirect: "error",
+          signal: AbortSignal.timeout(20_000),
+        });
+      } catch (error) {
+        // Timeout ou redirect recusado numa tentativa não pode impedir a seguinte.
+        failures.push({
+          source: attempt.source,
+          status: 0,
+          cldError: error instanceof Error ? error.message : "fetch falhou",
+        });
+        continue;
+      }
+      if (response.ok) {
+        upstream = response;
+        break;
+      }
+      // O `x-cld-error` é onde o Cloudinary explica a recusa ("PDF delivery is
+      // disabled", assinatura inválida). Sem ele o diagnóstico exigia outro deploy.
+      failures.push({
+        source: attempt.source,
+        status: response.status,
+        cldError: response.headers.get("x-cld-error") || "",
+      });
+      await response.body?.cancel();
+    }
+
+    if (!upstream) {
+      const upstreamStatus = failures[0]?.status ?? 0;
       logger.warn(
-        { status: upstream.status, conversationId, messageId },
+        {
+          failures,
+          resourceType,
+          hasPublicId: Boolean(media.cloudinaryPublicId),
+          conversationId,
+          messageId,
+        },
         "Cloudinary PDF download failed",
       );
       return NextResponse.json(
-        { error: "Não foi possível carregar o PDF armazenado." },
+        {
+          error: `Não foi possível carregar o PDF armazenado (Cloudinary ${upstreamStatus}).`,
+        },
         { status: 502 },
       );
     }
