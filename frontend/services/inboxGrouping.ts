@@ -182,6 +182,13 @@ export function isCountCapped(loadedTotal: number): boolean {
   return loadedTotal >= CONVERSATION_FETCH_LIMIT;
 }
 
+/**
+ * Zero nunca leva "+".
+ *
+ * "0+" não quer dizer nada para quem lê: sugere que há algo escondido quando o
+ * que existe é a ausência. O "+" só faz sentido admitindo que um número real
+ * pode ser maior do que o mostrado.
+ */
 export function formatCount(value: number, capped: boolean): string {
-  return capped ? `${value}+` : String(value);
+  return capped && value > 0 ? `${value}+` : String(value);
 }

@@ -667,22 +667,10 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const statusOptions = [
     { value: 'em_atendimento' as const, label: 'Atendendo', total: countAtendendo, dotClass: 'bg-blue-500' },
     { value: 'aguardando' as const, label: 'Aguardando', total: countAguardando, dotClass: 'bg-red-500' },
-    { value: 'pendente_cliente' as const, label: 'Em triagem', total: countTriagem, dotClass: 'bg-amber-500' },
+    { value: 'pendente_cliente' as const, label: 'Triagem', total: countTriagem, dotClass: 'bg-amber-500' },
   ];
 
-  const activeFilterCount = (statusFilter ? 1 : 0) + (queueFilter ? 1 : 0);
-  const activeFilterLabel = [
-    statusOptions.find((option) => option.value === statusFilter)?.label,
-    queueChips.find((chip) => chip.queueId === queueFilter)?.name,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-
-  const clearFilters = () => {
-    setStatusFilter(null);
-    setQueueFilter(null);
-  };
-
+  const selectedQueueChip = queueChips.find((chip) => chip.queueId === queueFilter) ?? null;
   useEffect(() => {
     if (!filtersOpen) return;
     const botao = filtersButtonRef.current;
@@ -961,11 +949,12 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
               RESOLVIDOS
             </button>
           </div>
-          {/* Uma linha só de filtros.
-              Antes eram três — contador, chips de status e chips de fila. Numa
-              coluna estreita isso empurrava a primeira conversa para fora da tela:
-              o atendente abria a Caixa de entrada e via controles, não atendimentos. */}
-          <div className="mt-3 flex items-center gap-2">
+          {/* Situação fica à vista; fila vai para o menu.
+              A versão anterior mandou as duas para dentro do menu e escondeu o
+              AGUARDANDO — o número que o atendente olha o dia inteiro para saber
+              quem está esperando ser puxado. Filtro de fila é navegação e cabe num
+              menu; contagem de quem espera é sinal operacional e não cabe. */}
+          <div className="mt-3 grid grid-cols-[auto_1fr_1.15fr_1fr_auto] items-center gap-1.5">
             <div className="relative shrink-0">
               <button
                 type="button"
@@ -973,28 +962,47 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                 onClick={() => setFiltersOpen((open) => !open)}
                 aria-expanded={filtersOpen}
                 aria-haspopup="menu"
-                className={`relative z-40 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
-                  filtersOpen || activeFilterCount > 0
+                className={`relative z-40 flex max-w-[11rem] items-center gap-1.5 rounded-lg py-2 text-xs font-bold transition-colors ${selectedQueueChip ? 'px-2.5' : 'px-1.5'} ${
+                  filtersOpen || queueFilter
                     ? 'bg-blue-600 text-white shadow-md'
                     : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
                 }`}
-                title="Filtrar por situação e por fila"
+                title={selectedQueueChip ? `Fila: ${selectedQueueChip.name}` : 'Filtrar por fila'}
               >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0">
                   <path fillRule="evenodd" d="M2 4.75A.75.75 0 0 1 2.75 4h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 4.75Zm0 5A.75.75 0 0 1 2.75 9h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 9.75Zm0 5a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z" clipRule="evenodd" />
                 </svg>
-                FILTROS
-                {activeFilterCount > 0 && (
-                  <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-white/25 px-1.5 text-[10px]">
-                    {activeFilterCount}
-                  </span>
+                {/* Só o ícone enquanto nenhuma fila está escolhida: assim os três
+                    contadores de situação cabem na mesma linha. Escolhida uma fila, o
+                    botão passa a exibi-la — a essa altura o atendente filtrou de
+                    propósito e ver o nome importa mais do que economizar espaço. */}
+                {selectedQueueChip && (
+                  <>
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-white/80" />
+                    <span className="min-w-0 truncate">{selectedQueueChip.name}</span>
+                  </>
                 )}
               </button>
 
+              {/* Limpar a fila fica fora do botão: clicar no botão abre o menu, e
+                  misturar as duas ações num alvo só faria o atendente reabrir o
+                  menu toda vez que quisesse voltar a ver tudo. */}
+              {queueFilter && !filtersOpen && (
+                <button
+                  type="button"
+                  onClick={() => setQueueFilter(null)}
+                  aria-label="Mostrar todas as filas"
+                  title="Mostrar todas as filas"
+                  className="absolute -right-1.5 -top-1.5 z-40 flex h-4 w-4 items-center justify-center rounded-full bg-slate-700 text-white shadow ring-2 ring-slate-100 transition-colors hover:bg-slate-900 dark:ring-slate-900"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-2.5 w-2.5">
+                    <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                  </svg>
+                </button>
+              )}
+
               {filtersOpen && (
                 <>
-                  {/* Clicar fora fecha. Sem isso o menu prende o atendente, que é
-                      justamente quem está com pressa. */}
                   <button
                     type="button"
                     aria-label="Fechar filtros"
@@ -1004,111 +1012,85 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                   <div
                     role="menu"
                     style={{ maxHeight: filtersMaxHeight }}
-                    className="absolute left-0 z-40 mt-2 w-64 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+                    className="absolute left-0 z-40 mt-2 w-60 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
                   >
-                    <p className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                      Situação
-                    </p>
-                    {statusOptions.map((option) => {
-                      const active = statusFilter === option.value;
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={queueFilter === null}
+                      onClick={() => { setQueueFilter(null); setFiltersOpen(false); }}
+                      className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium transition-colors ${
+                        queueFilter === null
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-600/20 dark:text-blue-200'
+                          : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                      }`}
+                    >
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-400" />
+                      <span className="min-w-0 flex-1 truncate">Todas as filas</span>
+                    </button>
+                    {queueChips.map((chip) => {
+                      const active = queueFilter === chip.queueId;
                       return (
                         <button
-                          key={option.value}
+                          key={chip.queueId}
                           type="button"
                           role="menuitemradio"
                           aria-checked={active}
-                          onClick={() => { setStatusFilter((prev) => (prev === option.value ? null : option.value)); setFiltersOpen(false); }}
+                          onClick={() => { setQueueFilter((prev) => (prev === chip.queueId ? null : chip.queueId)); setFiltersOpen(false); }}
                           className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium transition-colors ${
                             active
                               ? 'bg-blue-50 text-blue-700 dark:bg-blue-600/20 dark:text-blue-200'
                               : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                           }`}
                         >
-                          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${option.dotClass}`} />
-                          <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: chip.colorHex }} />
+                          <span className="min-w-0 flex-1 truncate">{chip.name}</span>
                           <span className="shrink-0 text-[10px] font-bold text-slate-400">
-                            {formatCount(option.total, countsCapped)}
+                            {formatCount(chip.total, countsCapped)}
                           </span>
                         </button>
                       );
                     })}
-
-                    {queueChips.length > 1 && (
-                      <>
-                        <p className="mt-1 border-t border-slate-200 px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:border-slate-700">
-                          Fila
-                        </p>
-                        <button
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={queueFilter === null}
-                          onClick={() => { setQueueFilter(null); setFiltersOpen(false); }}
-                          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium transition-colors ${
-                            queueFilter === null
-                              ? 'bg-blue-50 text-blue-700 dark:bg-blue-600/20 dark:text-blue-200'
-                              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-                          }`}
-                        >
-                          <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-400" />
-                          <span className="min-w-0 flex-1 truncate">Todas as filas</span>
-                        </button>
-                        {queueChips.map((chip) => {
-                          const active = queueFilter === chip.queueId;
-                          return (
-                            <button
-                              key={chip.queueId}
-                              type="button"
-                              role="menuitemradio"
-                              aria-checked={active}
-                              onClick={() => { setQueueFilter((prev) => (prev === chip.queueId ? null : chip.queueId)); setFiltersOpen(false); }}
-                              className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium transition-colors ${
-                                active
-                                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-600/20 dark:text-blue-200'
-                                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-                              }`}
-                            >
-                              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: chip.colorHex }} />
-                              <span className="min-w-0 flex-1 truncate">{chip.name}</span>
-                              <span className="shrink-0 text-[10px] font-bold text-slate-400">
-                                {formatCount(chip.total, countsCapped)}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </>
-                    )}
                   </div>
                 </>
               )}
             </div>
 
-            {/* O que está filtrando precisa aparecer fora do menu: filtro escondido
-                vira lista vazia sem explicação, e o atendente acha que quebrou. */}
-            {activeFilterCount > 0 && (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="flex min-w-0 items-center gap-1 rounded-lg bg-slate-200 px-2 py-1.5 text-[11px] font-bold text-slate-700 transition-colors hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
-                title="Limpar filtros"
-              >
-                <span className="min-w-0 truncate">{activeFilterLabel}</span>
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 shrink-0">
-                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-                </svg>
-              </button>
-            )}
+            {/* Os três estados do atendimento, sempre visíveis. Clicar filtra.
+              A coluna do meio é 15% mais larga porque Aguardando é a palavra mais
+              longa e, não por acaso, o contador mais consultado: é a fila de quem
+              está esperando ser puxado. Com colunas iguais o rótulo dela cortava. */}
+            {statusOptions.map((option) => {
+              const active = statusFilter === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setStatusFilter((prev) => (prev === option.value ? null : option.value))}
+                  className={`flex min-w-0 items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[10px] font-bold transition-all ${
+                    active
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                  }`}
+                  title={active ? 'Mostrar todas as situações' : `Filtrar por ${option.label.toLowerCase()}`}
+                >
+                  <span className={`flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[10px] text-white ${active ? 'bg-white/25' : option.dotClass}`}>
+                    {formatCount(option.total, countsCapped)}
+                  </span>
+                  <span className="min-w-0 truncate">{option.label}</span>
+                </button>
+              );
+            })}
 
-            <span className="ml-auto shrink-0 text-xs font-bold text-slate-500 dark:text-slate-400">
-              {formatCount(filtered.length, countsCapped)} {tabAbertas === 'resolvidos' ? 'resolvidas' : tabAbertas === 'minhas' ? 'minhas' : 'abertas'}
-            </span>
-
+            {/* O total só aparece quando algum filtro está ligado: aí o número da
+                aba deixa de descrever o que está na tela. */}
             {/* Conectado é o estado esperado, então vira só um ponto. O texto aparece
                 quando há problema — que é quando o atendente precisa saber. */}
             {socketStatus === 'connected' ? (
-              <span title="Atualização em tempo real" className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
+              <span title="Atualização em tempo real" className="ml-auto h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
             ) : (
               <span
-                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium ${
+                className={`ml-auto flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium ${
                   socketStatus === 'offline'
                     ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-200'
                     : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-100'

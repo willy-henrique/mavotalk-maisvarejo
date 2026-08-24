@@ -81,7 +81,10 @@ test("contadores do Inbox admitem o teto do servidor em vez de mentir", async ()
   assert.match(source, /formatCount\(countMinhas, countsCapped\)/);
   assert.match(source, /formatCount\(chip\.total, countsCapped\)/);
   assert.match(source, /formatCount\(group\.conversations\.length, countsCapped\)/);
-  assert.match(source, /formatCount\(filtered\.length, countsCapped\)/);
+  // Os contadores de situação são os mais consultados do painel; se algum dia
+  // deixarem de passar pelo formatador, voltam a exibir número exato sobre uma
+  // carga truncada.
+  assert.match(source, /formatCount\(option\.total, countsCapped\)/);
 });
 
 /**
@@ -102,15 +105,20 @@ test("filtros do Inbox cabem em um menu, não em fileiras de chips", async () =>
   );
   assert.ok(cabecalho.length > 0, "não localizei o cabeçalho da lista");
 
-  // Um disclosure só, com as duas facetas dentro.
+  // Menu só para fila. Situação NÃO pode morar aqui: o contador de quem está
+  // esperando ser puxado é o que o atendente olha o dia inteiro, e escondê-lo
+  // atrás de um clique foi o erro da versão anterior.
   assert.match(cabecalho, /aria-haspopup="menu"/);
-  assert.match(cabecalho, /Situação/);
-  assert.match(cabecalho, /Fila/);
   assert.match(cabecalho, /Todas as filas/);
+
+  // Os três estados ficam visíveis, fora do menu.
+  assert.match(cabecalho, /statusOptions\.map\(/);
+  const menu = cabecalho.slice(cabecalho.indexOf('role="menu"'), cabecalho.indexOf('statusOptions.map('));
+  assert.doesNotMatch(menu, /statusOptions/, 'situação não pode voltar para dentro do menu');
 
   // Escolher fecha: quem atende quer filtrar e seguir, não administrar um painel.
   const fechamentos = cabecalho.match(/setFiltersOpen\(false\)/g) || [];
-  assert.ok(fechamentos.length >= 4, `esperava fechar ao clicar fora e nas 3 escolhas, veio ${fechamentos.length}`);
+  assert.ok(fechamentos.length >= 3, `esperava fechar ao clicar fora e nas escolhas de fila, veio ${fechamentos.length}`);
 
   // O teto do menu é medido, não fixo: ele nasce por volta de 470px do topo, e um
   // valor grande o bastante para caber dez filas passaria do rodapé em janela
@@ -118,7 +126,8 @@ test("filtros do Inbox cabem em um menu, não em fileiras de chips", async () =>
   assert.match(cabecalho, /style=\{\{ maxHeight: filtersMaxHeight \}\}/);
   assert.match(cabecalho, /overflow-y-auto/);
 
-  // Filtro ativo aparece fora do menu: escondido, vira lista vazia sem explicação.
-  assert.match(cabecalho, /activeFilterLabel/);
-  assert.match(cabecalho, /onClick=\{clearFilters\}/);
+  // A fila ativa aparece no próprio botão, com um "×" que limpa sem reabrir o
+  // menu. Filtro escondido vira lista vazia sem explicação.
+  assert.match(cabecalho, /selectedQueueChip/);
+  assert.match(cabecalho, /Mostrar todas as filas/);
 });

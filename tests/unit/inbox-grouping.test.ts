@@ -173,3 +173,10 @@ test("no teto o número admite que pode haver mais", () => {
   assert.equal(isCountCapped(CONVERSATION_FETCH_LIMIT), true);
   assert.equal(formatCount(12, true), "12+");
 });
+
+test("zero não leva mais, nem no teto", () => {
+  // "0+" sugere algo escondido onde existe ausência. A aba Minhas de quem nunca
+  // puxou nada exibia exatamente isso.
+  assert.equal(formatCount(0, true), "0");
+  assert.equal(formatCount(0, false), "0");
+});
