@@ -1655,6 +1655,61 @@ export async function getOpenConversationByContactId(
   return getOpenConversation(organizationId, contactId);
 }
 
+/**
+ * Última conversa do contato, **aberta ou encerrada**.
+ *
+ * Existe para o eco das mensagens que o próprio sistema envia. `getOpenConversation`
+ * enxerga apenas os status abertos, o que é correto para quem precisa de um chamado
+ * ativo — mas faz o aviso de encerramento e o agradecimento pela avaliação caírem no
+ * caminho de criação, já que o chamado que os originou acabou de ser fechado.
+ *
+ * Os aliases de telefone são consultados pelo mesmo motivo de
+ * `getOrCreateContactAndOpenConversation`: contatos gravados por versões antigas usam
+ * `5562...` enquanto o inbound usa `whatsapp:+5562...`, e procurar só a forma canônica
+ * deixaria o histórico legado de fora.
+ */
+export async function getLatestConversationByPhone(
+  organizationId: string,
+  contactPhone: string,
+): Promise<FireConversation | null> {
+  const orgId = requireOrganizationId(organizationId);
+  const canonicalPhone = toWhatsAppAddress(contactPhone) || contactPhone.trim();
+  if (!canonicalPhone) return null;
+  const aliases = whatsappPhoneStorageAliases(canonicalPhone);
+
+  const { data: contacts, error: contactError } = await supa(orgId)
+    .from("contacts")
+    .select("id")
+    .eq("organization_id", orgId)
+    .in("phone_number", aliases);
+  if (contactError) throw contactError;
+
+  const contactIds = (contacts ?? []).map((item) => String(item.id));
+  if (!contactIds.length) return null;
+
+  const { data, error } = await supa(orgId)
+    .from("conversations")
+    .select("*")
+    .eq("organization_id", orgId)
+    .in("contact_id", contactIds)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+
+  return {
+    id: String(data.id),
+    organizationId: String(data.organization_id),
+    contactId: String(data.contact_id),
+    contactPhone: data.contact_phone ?? undefined,
+    queueId: data.queue_id ?? null,
+    status: String(data.status ?? "aguardando") as ConversationStatus,
+    triageCompleted: Boolean(data.triage_completed),
+    menuAttempts: Number(data.menu_attempts ?? 0),
+  };
+}
+
 export async function getOrCreateOpenConversation(
   organizationId: string,
   contactId: string,

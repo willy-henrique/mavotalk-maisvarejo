@@ -22,6 +22,8 @@ import {
   findMessageByExternalId,
   getContactInboundPolicy,
   getOrCreateContactAndOpenConversation,
+  getLatestConversationByPhone,
+  getConversation,
   isContactBlocked,
   updateConversationById,
   updateTicketByConversation,
@@ -57,7 +59,10 @@ import {
   whatsappPhoneFromJid,
 } from "@/lib/whatsapp-addressing";
 import { selectRecentWhatsappHistoryMessages } from "@/lib/whatsapp-message-history";
-import { statusAfterInboundMessage } from "@/lib/conversation-state";
+import {
+  resolveOutboundEchoTarget,
+  statusAfterInboundMessage,
+} from "@/lib/conversation-state";
 import {
   configuredWhatsappAuthPersistence,
   configuredWhatsappAuthStore,
@@ -695,11 +700,48 @@ async function processOutboundMessageFromDevice(
     toPhone,
   ).catch(() => null);
 
-  const { conversation } = await getOrCreateContactAndOpenConversation(
-    organizationId,
-    toPhone,
-    savedName || "Contato",
-  );
+  // Quem escreveu decide onde a mensagem entra. O aviso de encerramento e o
+  // agradecimento pela avaliação saem do próprio sistema e voltam aqui como
+  // `fromMe`; como o chamado que os originou acabou de ser fechado, não existe
+  // conversa aberta e o caminho de criação abria uma nova em `aguardando` só para
+  // hospedar a despedida — o chamado fantasma que aparecia na Caixa de entrada.
+  // As guardas de `encerrado` mais abaixo não pegavam isso porque inspecionavam
+  // justamente a conversa recém-criada.
+  const echoTarget = resolveOutboundEchoTarget({
+    fromBot,
+    latestConversation: fromBot
+      ? await getLatestConversationByPhone(organizationId, toPhone)
+      : null,
+  });
+
+  if (echoTarget.action === "skip") {
+    logger.info(
+      { organizationId, reason: echoTarget.reason, id: externalId },
+      "Ignoring bot message echo with no conversation to attach to",
+    );
+    return;
+  }
+
+  const conversation =
+    echoTarget.action === "attach"
+      ? await getConversation(organizationId, echoTarget.conversationId).then(
+          (found) => (found ? { ...found, isNew: false } : null),
+        )
+      : (
+          await getOrCreateContactAndOpenConversation(
+            organizationId,
+            toPhone,
+            savedName || "Contato",
+          )
+        ).conversation;
+
+  if (!conversation) {
+    logger.warn(
+      { organizationId, id: externalId },
+      "Conversation resolved for outbound echo disappeared before persistence",
+    );
+    return;
+  }
 
   const detectedMedia = detectInboundMedia(msg.message);
   const type = detectedMedia.kind || "text";

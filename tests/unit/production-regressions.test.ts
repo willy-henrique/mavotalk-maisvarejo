@@ -300,6 +300,30 @@ test("resposta humana pelo proprio WhatsApp desliga o bot", async () => {
   assert.doesNotMatch(outbound, /if \(conversation\.isNew && !fromBot\) \{/);
 });
 
+test("despedida do bot nao abre chamado fantasma depois do encerramento", async () => {
+  const client = await read("lib/whatsapp-client.ts");
+  const outbound = client.slice(
+    client.indexOf("async function processOutboundMessageFromDevice"),
+    client.indexOf("async function handleInboundViaBotTriagem"),
+  );
+
+  // O destino do eco precisa ser decidido antes de qualquer criacao. As guardas de
+  // `encerrado` que existiam adiante inspecionavam a conversa recem-criada e por isso
+  // nunca disparavam: o aviso de encerramento e o agradecimento pela avaliacao
+  // nasciam em um chamado novo em `aguardando`.
+  assert.match(outbound, /resolveOutboundEchoTarget\(\{/);
+  assert.ok(
+    outbound.indexOf("resolveOutboundEchoTarget") <
+      outbound.indexOf("getOrCreateContactAndOpenConversation"),
+    "a decisao do eco precisa vir antes do caminho que cria conversa",
+  );
+
+  // Mensagem do proprio bot so pode se anexar ao historico existente.
+  assert.match(outbound, /latestConversation: fromBot/);
+  assert.match(outbound, /getLatestConversationByPhone\(organizationId, toPhone\)/);
+  assert.match(outbound, /echoTarget\.action === "skip"/);
+});
+
 test("conversas feitas no aplicativo do WhatsApp são espelhadas no Inbox", async () => {
   const [client, statusRoute] = await Promise.all([
     read("lib/whatsapp-client.ts"),

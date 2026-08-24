@@ -78,6 +78,7 @@ export {
   getOrCreateOpenConversation,
   getOrCreateContactAndOpenConversation,
   getOpenConversationByContactId,
+  getLatestConversationByPhone,
   updateTicketByConversation,
   dashboardMetrics,
   getBusinessHour,
