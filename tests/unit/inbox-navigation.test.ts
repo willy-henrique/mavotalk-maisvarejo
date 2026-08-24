@@ -33,3 +33,92 @@ test("puxar atendimento leva para Abertas > Atendendo com a conversa aberta", as
   assert.match(source, /setTabAbertas\(previousTab\)/);
   assert.match(source, /setStatusFilter\(previousStatusFilter\)/);
 });
+
+/**
+ * O Inbox misturava, numa lista só, quem falava com o RH e quem falava com o
+ * delivery. A organização por fila e por dono do atendimento é o que separa isso.
+ *
+ * A regra de recorte mora em frontend/services/inboxGrouping e é testada por
+ * comportamento em inbox-grouping.test.ts. Aqui o que se trava é a fiação: que a
+ * tela use aquela regra em vez de reinventar o filtro no meio do JSX.
+ */
+test("Inbox organiza por fila e por dono, usando a regra testada", async () => {
+  const source = await readFile("frontend/components/InboxConversations.tsx", "utf8");
+
+  assert.match(source, /from '\.\.\/services\/inboxGrouping'/);
+  assert.match(source, /selectByTab\(conversations, tabAbertas, currentUser\.id\)/);
+  assert.match(source, /applyInboxFilters\(inTab, \{ statusFilter, queueId: queueFilter \}\)/);
+  assert.match(source, /groupByQueue\(filtered\)/);
+
+  // Terceira aba, com o mesmo recorte da regra.
+  assert.match(source, /setTabAbertas\('minhas'\)/);
+
+  // Chips e cabeçalhos precisam sair do recorte da aba, não da lista já filtrada:
+  // senão clicar em "RH" zeraria o contador das outras filas.
+  assert.match(source, /queueChipsFor\(inTab\)/);
+
+  // Trocar de aba limpa os dois filtros; deixar um para trás mostraria lista vazia
+  // sem motivo aparente.
+  const trocasDeAba = source.match(/setStatusFilter\(null\); setQueueFilter\(null\)/g) || [];
+  assert.equal(trocasDeAba.length, 3, `as tres abas precisam limpar os filtros, veio ${trocasDeAba.length}`);
+
+  // Grupos recolhíveis, com a escolha guardada por atendente.
+  assert.match(source, /toggleGroup\(group\.queueId\)/);
+  assert.match(source, /collapsedGroups\.includes\(group\.queueId\)/);
+  assert.match(source, /storeCollapsedGroups\(currentUser\.id/);
+});
+
+/**
+ * A API devolve no máximo 80 conversas. No teto, um número exato ao lado do nome
+ * da fila seria mentira — e é justamente esse número que decide remanejar equipe.
+ */
+test("contadores do Inbox admitem o teto do servidor em vez de mentir", async () => {
+  const source = await readFile("frontend/components/InboxConversations.tsx", "utf8");
+
+  assert.match(source, /const countsCapped = isCountCapped\(conversations\.length\)/);
+  // Todo contador visível passa pelo formatador, inclusive o de cada grupo e chip.
+  assert.match(source, /formatCount\(countAbertas, countsCapped\)/);
+  assert.match(source, /formatCount\(countMinhas, countsCapped\)/);
+  assert.match(source, /formatCount\(chip\.total, countsCapped\)/);
+  assert.match(source, /formatCount\(group\.conversations\.length, countsCapped\)/);
+  assert.match(source, /formatCount\(filtered\.length, countsCapped\)/);
+});
+
+/**
+ * A primeira versão do agrupamento empilhou três linhas de controle — contador,
+ * chips de status e chips de fila — acima da lista. Numa coluna estreita isso
+ * empurrava a primeira conversa para fora da tela: o atendente abria a Caixa de
+ * entrada e via controles, não atendimentos.
+ *
+ * Os filtros passaram a caber num menu só. Este teste existe para que ninguém
+ * volte a espalhá-los pelo cabeçalho.
+ */
+test("filtros do Inbox cabem em um menu, não em fileiras de chips", async () => {
+  const source = await readFile("frontend/components/InboxConversations.tsx", "utf8");
+
+  const cabecalho = source.slice(
+    source.indexOf('<div className="grid grid-cols-3 gap-1 mb-4">'),
+    source.indexOf('<div className="flex-1 overflow-y-auto'),
+  );
+  assert.ok(cabecalho.length > 0, "não localizei o cabeçalho da lista");
+
+  // Um disclosure só, com as duas facetas dentro.
+  assert.match(cabecalho, /aria-haspopup="menu"/);
+  assert.match(cabecalho, /Situação/);
+  assert.match(cabecalho, /Fila/);
+  assert.match(cabecalho, /Todas as filas/);
+
+  // Escolher fecha: quem atende quer filtrar e seguir, não administrar um painel.
+  const fechamentos = cabecalho.match(/setFiltersOpen\(false\)/g) || [];
+  assert.ok(fechamentos.length >= 4, `esperava fechar ao clicar fora e nas 3 escolhas, veio ${fechamentos.length}`);
+
+  // O teto do menu é medido, não fixo: ele nasce por volta de 470px do topo, e um
+  // valor grande o bastante para caber dez filas passaria do rodapé em janela
+  // baixa, deixando as últimas filas inalcançáveis.
+  assert.match(cabecalho, /style=\{\{ maxHeight: filtersMaxHeight \}\}/);
+  assert.match(cabecalho, /overflow-y-auto/);
+
+  // Filtro ativo aparece fora do menu: escondido, vira lista vazia sem explicação.
+  assert.match(cabecalho, /activeFilterLabel/);
+  assert.match(cabecalho, /onClick=\{clearFilters\}/);
+});

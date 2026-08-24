@@ -6,6 +6,17 @@ import { apiFetch, apiPatch, apiPost, getAccessToken, getApiBaseUrl, getApiUrl, 
 import { Dialog } from './ui/Dialog';
 import { AvatarPreviewDialog } from './ui/AvatarPreviewDialog';
 import StartConversationDialog from './StartConversationDialog';
+import {
+  applyInboxFilters,
+  formatCount,
+  groupByQueue,
+  isCountCapped,
+  queueChipsFor,
+  selectByTab,
+  NO_QUEUE_ID,
+  type InboxStatusFilter,
+  type InboxTab,
+} from '../services/inboxGrouping';
 
 type ConversationStatus = 'aguardando' | 'em_atendimento' | 'pendente_cliente' | 'encerrado';
 
@@ -115,6 +126,31 @@ function storeSignature(userId: string, enabled: boolean): void {
   }
 }
 
+function collapsedGroupsStorageKey(userId: string): string {
+  return `willtalk.inbox.grupos-recolhidos.${userId}`;
+}
+
+function readCollapsedGroups(userId: string): string[] {
+  try {
+    const raw = window.localStorage.getItem(collapsedGroupsStorageKey(userId));
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    // Storage é editável pelo usuário e sobrevive a mudanças de formato. Validar a
+    // forma evita que um valor antigo derrube a montagem do Inbox inteiro.
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function storeCollapsedGroups(userId: string, groupIds: string[]): void {
+  try {
+    window.localStorage.setItem(collapsedGroupsStorageKey(userId), JSON.stringify(groupIds));
+  } catch {
+    // Navegador sem storage: os grupos só voltam abertos no próximo carregamento.
+  }
+}
+
 function pdfDownloadName(message: ApiMessage): string {
   const base = documentTitle(message)
     .replace(/\.pdf$/i, '')
@@ -133,9 +169,28 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const [loadError, setLoadError] = useState('');
   const [operationError, setOperationError] = useState('');
   const [socketStatus, setSocketStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'offline'>('connecting');
-  const [tabAbertas, setTabAbertas] = useState<'abertas' | 'resolvidos'>('abertas');
+  const [tabAbertas, setTabAbertas] = useState<InboxTab>('abertas');
   /** Filtro por status dentro de "Abertas": null = todos. */
-  const [statusFilter, setStatusFilter] = useState<'em_atendimento' | 'aguardando' | 'pendente_cliente' | null>(null);
+  const [statusFilter, setStatusFilter] = useState<InboxStatusFilter>(null);
+  /** Filtro por fila: null = todas. Combina com o de status, não o substitui. */
+  const [queueFilter, setQueueFilter] = useState<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersButtonRef = useRef<HTMLButtonElement>(null);
+  /**
+   * Altura maxima do menu, medida a cada abertura.
+   *
+   * Um teto fixo em rem nao serve: o menu nasce por volta de 470px do topo, e
+   * qualquer valor grande o bastante para caber dez filas passaria do rodape em
+   * janela baixa — deixando as ultimas filas inalcancaveis.
+   */
+  const [filtersMaxHeight, setFiltersMaxHeight] = useState<number | undefined>(undefined);
+  /**
+   * Grupos recolhidos, por atendente. Quem cuida de uma fila só recolhe o resto
+   * uma vez; reabrir tudo a cada carregamento tornaria o recurso inútil.
+   */
+  const [collapsedGroups, setCollapsedGroups] = useState<string[]>(() =>
+    readCollapsedGroups(currentUser.id),
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState('');
   /** Assinatura deste envio. Começa na escolha guardada do atendente e, se não
@@ -580,23 +635,73 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     return msgs[msgs.length - 1];
   };
   const normalizedListSearch = listSearch.trim().toLowerCase();
-  const filtered =
-    (tabAbertas === 'abertas'
-      ? conversations
-          .filter((c) => openStatuses.includes(c.status))
-          .filter((c) => (statusFilter ? c.status === statusFilter : true))
-      : conversations.filter((c) => c.status === 'encerrado'))
-      .filter((c) => {
-        if (!normalizedListSearch) return true;
-        const last = lastMessage(c);
-        return [c.contact?.name, c.contact?.phoneNumber, c.queue?.name, last?.content, c.id]
-          .filter(Boolean)
-          .some((value) => String(value).toLowerCase().includes(normalizedListSearch));
-      });
+  // O recorte da aba e a composição dos filtros vivem em services/inboxGrouping,
+  // testados sem React. Aqui fica só a busca por texto, que depende do estado da tela.
+  const inTab = selectByTab(conversations, tabAbertas, currentUser.id);
+  const filtered = applyInboxFilters(inTab, { statusFilter, queueId: queueFilter })
+    .filter((c) => {
+      if (!normalizedListSearch) return true;
+      const last = lastMessage(c);
+      return [c.contact?.name, c.contact?.phoneNumber, c.queue?.name, last?.content, c.id]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(normalizedListSearch));
+    });
+
+  // Chips e cabeçalhos derivam do mesmo recorte da aba, e não da lista já
+  // filtrada: senão clicar em "RH" zeraria os contadores das outras filas e o
+  // operador perderia a visão de carga que é o motivo do agrupamento existir.
+  const queueChips = queueChipsFor(inTab);
+  const groups = groupByQueue(filtered);
+  // A API devolve no máximo 80 conversas; no teto todo número derivado pode ser
+  // menor que a realidade, e um número falso ao lado da fila levaria a decisão
+  // errada sobre remanejar equipe.
+  const countsCapped = isCountCapped(conversations.length);
+
   const selected = conversations.find((c) => c.id === selectedId);
-  const countAtendendo = conversations.filter((c) => c.status === 'em_atendimento').length;
-  const countAguardando = conversations.filter((c) => c.status === 'aguardando').length;
-  const countTriagem = conversations.filter((c) => c.status === 'pendente_cliente').length;
+  const countAtendendo = inTab.filter((c) => c.status === 'em_atendimento').length;
+  const countAguardando = inTab.filter((c) => c.status === 'aguardando').length;
+  const countTriagem = inTab.filter((c) => c.status === 'pendente_cliente').length;
+  const countAbertas = conversations.filter((c) => openStatuses.includes(c.status)).length;
+  const countMinhas = selectByTab(conversations, 'minhas', currentUser.id).length;
+
+  const statusOptions = [
+    { value: 'em_atendimento' as const, label: 'Atendendo', total: countAtendendo, dotClass: 'bg-blue-500' },
+    { value: 'aguardando' as const, label: 'Aguardando', total: countAguardando, dotClass: 'bg-red-500' },
+    { value: 'pendente_cliente' as const, label: 'Em triagem', total: countTriagem, dotClass: 'bg-amber-500' },
+  ];
+
+  const activeFilterCount = (statusFilter ? 1 : 0) + (queueFilter ? 1 : 0);
+  const activeFilterLabel = [
+    statusOptions.find((option) => option.value === statusFilter)?.label,
+    queueChips.find((chip) => chip.queueId === queueFilter)?.name,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const clearFilters = () => {
+    setStatusFilter(null);
+    setQueueFilter(null);
+  };
+
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const botao = filtersButtonRef.current;
+    if (!botao) return;
+    const espacoAbaixo = window.innerHeight - botao.getBoundingClientRect().bottom - 24;
+    // Piso de 180px: abaixo disso o menu deixa de ser utilizavel e e melhor
+    // rolar dentro dele do que espremer os itens.
+    setFiltersMaxHeight(Math.max(180, espacoAbaixo));
+  }, [filtersOpen]);
+
+  const toggleGroup = (queueId: string) => {
+    setCollapsedGroups((prev) => {
+      const next = prev.includes(queueId)
+        ? prev.filter((item) => item !== queueId)
+        : [...prev, queueId];
+      storeCollapsedGroups(currentUser.id, next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     const conversationFromUrl = searchParams.get('conversation');
@@ -632,9 +737,10 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     };
   }, [storedSignature]);
 
-  // Na aba Abertas, não manter conversa encerrada selecionada — só em Resolvidos
+  // Conversa encerrada só continua selecionada em Resolvidos. Vale igualmente para
+  // Minhas: encerrar dali tem que tirar o chamado da lista de trabalho.
   useEffect(() => {
-    if (tabAbertas === 'abertas' && selected?.status === 'encerrado') {
+    if (tabAbertas !== 'resolvidos' && selected?.status === 'encerrado') {
       clearSelectedConversation();
     }
   }, [clearSelectedConversation, tabAbertas, selected?.id, selected?.status]);
@@ -801,11 +907,11 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
             <button type="button" onClick={() => void fetchConversations(false)} className="shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800" title="Atualizar conversas" aria-label="Atualizar conversas"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path fillRule="evenodd" d="M15.312 5.312a8 8 0 1 0 1.883 8.237.75.75 0 0 0-1.436-.433A6.5 6.5 0 1 1 14.25 7.25V5.5a.75.75 0 0 0-1.5 0V9a.75.75 0 0 0 .75.75H17a.75.75 0 0 0 0-1.5h-1.688V5.312Z" clipRule="evenodd" /></svg></button>
           </div>
           <label className="relative block mb-4"><span className="sr-only">Pesquisar conversas</span><input value={listSearch} onChange={(event) => setListSearch(event.target.value)} placeholder="Buscar por nome, telefone ou mensagem" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 py-2.5 pl-9 pr-3 text-xs text-slate-800 dark:text-white outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400"><path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.447 9.785l2.634 2.634a.75.75 0 1 0 1.06-1.06l-2.633-2.634A5.5 5.5 0 0 0 9 3.5ZM5 9a4 4 0 1 1 8 0 4 4 0 0 1-8 0Z" clipRule="evenodd" /></svg></label>
-          <div className="flex items-center gap-1 mb-4">
+          <div className="grid grid-cols-3 gap-1 mb-4">
             <button
               type="button"
-              onClick={() => { setTabAbertas('abertas'); setStatusFilter(null); }}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-bold transition-all ${
+              onClick={() => { setTabAbertas('abertas'); setStatusFilter(null); setQueueFilter(null); }}
+              className={`flex items-center justify-center gap-1.5 min-w-0 px-2 py-2.5 rounded-t-lg text-xs font-bold transition-all ${
                 tabAbertas === 'abertas'
                   ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
                   : 'bg-slate-200 text-slate-600 hover:text-slate-800 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
@@ -815,11 +921,35 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                 <path fillRule="evenodd" d="M5.625 1.5H9a3.75 3.75 0 013.75 3.75v1.875c0 1.036.84 1.875 1.875 1.875H16.5a3.75 3.75 0 013.75 3.75v7.875c0 1.035-.84 1.875-1.875 1.875H5.625a1.875 1.875 0 01-1.875-1.875V3.375c0-1.036.84-1.875 1.875-1.875zm6 16.5c.66 0 1.277-.19 1.797-.518L12 13.439l-1.422 1.043c-.52.328-1.137.518-1.797.518-.825 0-1.5-.675-1.5-1.5s.675-1.5 1.5-1.5c.66 0 1.277.19 1.797.518L12 11.061l1.422-1.043C13.863 9.69 14.478 9.5 15.139 9.5c.825 0 1.5.675 1.5 1.5s-.675 1.5-1.5 1.5z" clipRule="evenodd" />
               </svg>
               ABERTAS
+              {/* O contador fica na aba de propósito: quem está trabalhando dentro de
+                  MINHAS precisa perceber que chegou coisa nova na fila geral sem
+                  ter que trocar de aba para descobrir. */}
+              <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-white/25 px-1.5 text-[10px]">
+                {formatCount(countAbertas, countsCapped)}
+              </span>
             </button>
             <button
               type="button"
-              onClick={() => { setTabAbertas('resolvidos'); setStatusFilter(null); }}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-bold transition-all ${
+              onClick={() => { setTabAbertas('minhas'); setStatusFilter(null); setQueueFilter(null); }}
+              className={`flex items-center justify-center gap-1.5 min-w-0 px-2 py-2.5 rounded-t-lg text-xs font-bold transition-all ${
+                tabAbertas === 'minhas'
+                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
+                  : 'bg-slate-200 text-slate-600 hover:text-slate-800 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+              title="Chamados em aberto que você puxou"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
+                <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" clipRule="evenodd" />
+              </svg>
+              MINHAS
+              <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-white/25 px-1.5 text-[10px]">
+                {formatCount(countMinhas, countsCapped)}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setTabAbertas('resolvidos'); setStatusFilter(null); setQueueFilter(null); }}
+              className={`flex items-center justify-center gap-1.5 min-w-0 px-2 py-2.5 rounded-t-lg text-xs font-bold transition-all ${
                 tabAbertas === 'resolvidos'
                   ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
                   : 'bg-slate-200 text-slate-600 hover:text-slate-800 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
@@ -831,61 +961,163 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
               RESOLVIDOS
             </button>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              className="px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-            >
-              {filtered.length} {tabAbertas === 'abertas' ? 'abertas' : 'resolvidas'}
-            </button>
-            <button type="button" onClick={() => setListSearch('')} className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 hover:text-slate-800 dark:hover:text-white transition-colors" aria-label="Limpar busca" title="Limpar busca">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                <path fillRule="evenodd" d="M5.25 9a6.75 6.75 0 0113.5 0v.75c0 2.123.8 4.057 2.118 5.52a.75.75 0 01-.297 1.206c-1.544.57-3.16.99-4.831 1.243a3.75 3.75 0 11-7.48 0 24.585 24.585 0 01-4.831-1.244.75.75 0 01-.298-1.206A8.217 8.217 0 005.25 9.75V9z" clipRule="evenodd" />
-              </svg>
-            </button>
-            <span className={`flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium ${socketStatus === 'connected' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-200' : socketStatus === 'reconnecting' || socketStatus === 'connecting' ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-100' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-200'}`}><span className={`h-2 w-2 shrink-0 rounded-full ${socketStatus === 'connected' ? 'bg-emerald-500' : socketStatus === 'offline' ? 'bg-rose-500' : 'bg-amber-500'}`} />{socketStatus === 'connected' ? 'Atualização em tempo real' : socketStatus === 'reconnecting' ? 'Reconectando atualização' : socketStatus === 'connecting' ? 'Conectando atualização' : 'Atualização indisponível'}</span>
-          </div>
-          <div className="flex items-center gap-3 mt-3">
-            <button
-              type="button"
-              onClick={() => setStatusFilter((prev) => (prev === 'em_atendimento' ? null : 'em_atendimento'))}
-              className={`flex items-center gap-2 text-xs font-bold rounded-lg px-3 py-2 transition-all ${
-                statusFilter === 'em_atendimento'
-                  ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-400/50 dark:ring-blue-500/50'
-                  : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'
-              }`}
-              title={statusFilter === 'em_atendimento' ? 'Mostrar todos' : 'Filtrar por em atendimento'}
-            >
-              <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-blue-600/90 px-1.5 text-[10px] text-white">{countAtendendo}</span>
-              ATENDENDO
-            </button>
-            <button
-              type="button"
-              onClick={() => setStatusFilter((prev) => (prev === 'aguardando' ? null : 'aguardando'))}
-              className={`flex items-center gap-2 text-xs font-bold rounded-lg px-3 py-2 transition-all ${
-                statusFilter === 'aguardando'
-                  ? 'bg-red-600 text-white shadow-md ring-2 ring-red-400/50 dark:ring-red-500/50'
-                  : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'
-              }`}
-              title={statusFilter === 'aguardando' ? 'Mostrar todos' : 'Filtrar por aguardando'}
-            >
-              <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500/90 px-1.5 text-[10px] text-white">{countAguardando}</span>
-              AGUARDANDO
-            </button>
-            {/* Torna visível quem está parado na triagem, em vez de deixar o ticket sem lugar na tela. */}
-            <button
-              type="button"
-              onClick={() => setStatusFilter((prev) => (prev === 'pendente_cliente' ? null : 'pendente_cliente'))}
-              className={`flex items-center gap-2 text-xs font-bold rounded-lg px-3 py-2 transition-all ${
-                statusFilter === 'pendente_cliente'
-                  ? 'bg-amber-600 text-white shadow-md ring-2 ring-amber-400/50 dark:ring-amber-500/50'
-                  : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-slate-700'
-              }`}
-              title={statusFilter === 'pendente_cliente' ? 'Mostrar todos' : 'Filtrar por triagem com o bot'}
-            >
-              <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500/90 px-1.5 text-[10px] text-white">{countTriagem}</span>
-              EM TRIAGEM
-            </button>
+          {/* Uma linha só de filtros.
+              Antes eram três — contador, chips de status e chips de fila. Numa
+              coluna estreita isso empurrava a primeira conversa para fora da tela:
+              o atendente abria a Caixa de entrada e via controles, não atendimentos. */}
+          <div className="mt-3 flex items-center gap-2">
+            <div className="relative shrink-0">
+              <button
+                type="button"
+                ref={filtersButtonRef}
+                onClick={() => setFiltersOpen((open) => !open)}
+                aria-expanded={filtersOpen}
+                aria-haspopup="menu"
+                className={`relative z-40 flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+                  filtersOpen || activeFilterCount > 0
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                }`}
+                title="Filtrar por situação e por fila"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path fillRule="evenodd" d="M2 4.75A.75.75 0 0 1 2.75 4h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 4.75Zm0 5A.75.75 0 0 1 2.75 9h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 9.75Zm0 5a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z" clipRule="evenodd" />
+                </svg>
+                FILTROS
+                {activeFilterCount > 0 && (
+                  <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-white/25 px-1.5 text-[10px]">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+
+              {filtersOpen && (
+                <>
+                  {/* Clicar fora fecha. Sem isso o menu prende o atendente, que é
+                      justamente quem está com pressa. */}
+                  <button
+                    type="button"
+                    aria-label="Fechar filtros"
+                    onClick={() => setFiltersOpen(false)}
+                    className="fixed inset-0 z-30 cursor-default"
+                  />
+                  <div
+                    role="menu"
+                    style={{ maxHeight: filtersMaxHeight }}
+                    className="absolute left-0 z-40 mt-2 w-64 overflow-y-auto overscroll-contain rounded-xl border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+                  >
+                    <p className="px-3 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      Situação
+                    </p>
+                    {statusOptions.map((option) => {
+                      const active = statusFilter === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={active}
+                          onClick={() => { setStatusFilter((prev) => (prev === option.value ? null : option.value)); setFiltersOpen(false); }}
+                          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium transition-colors ${
+                            active
+                              ? 'bg-blue-50 text-blue-700 dark:bg-blue-600/20 dark:text-blue-200'
+                              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${option.dotClass}`} />
+                          <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                          <span className="shrink-0 text-[10px] font-bold text-slate-400">
+                            {formatCount(option.total, countsCapped)}
+                          </span>
+                        </button>
+                      );
+                    })}
+
+                    {queueChips.length > 1 && (
+                      <>
+                        <p className="mt-1 border-t border-slate-200 px-3 pb-1 pt-3 text-[10px] font-bold uppercase tracking-wide text-slate-400 dark:border-slate-700">
+                          Fila
+                        </p>
+                        <button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={queueFilter === null}
+                          onClick={() => { setQueueFilter(null); setFiltersOpen(false); }}
+                          className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium transition-colors ${
+                            queueFilter === null
+                              ? 'bg-blue-50 text-blue-700 dark:bg-blue-600/20 dark:text-blue-200'
+                              : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full border border-slate-400" />
+                          <span className="min-w-0 flex-1 truncate">Todas as filas</span>
+                        </button>
+                        {queueChips.map((chip) => {
+                          const active = queueFilter === chip.queueId;
+                          return (
+                            <button
+                              key={chip.queueId}
+                              type="button"
+                              role="menuitemradio"
+                              aria-checked={active}
+                              onClick={() => { setQueueFilter((prev) => (prev === chip.queueId ? null : chip.queueId)); setFiltersOpen(false); }}
+                              className={`flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium transition-colors ${
+                                active
+                                  ? 'bg-blue-50 text-blue-700 dark:bg-blue-600/20 dark:text-blue-200'
+                                  : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                              }`}
+                            >
+                              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: chip.colorHex }} />
+                              <span className="min-w-0 flex-1 truncate">{chip.name}</span>
+                              <span className="shrink-0 text-[10px] font-bold text-slate-400">
+                                {formatCount(chip.total, countsCapped)}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* O que está filtrando precisa aparecer fora do menu: filtro escondido
+                vira lista vazia sem explicação, e o atendente acha que quebrou. */}
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="flex min-w-0 items-center gap-1 rounded-lg bg-slate-200 px-2 py-1.5 text-[11px] font-bold text-slate-700 transition-colors hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                title="Limpar filtros"
+              >
+                <span className="min-w-0 truncate">{activeFilterLabel}</span>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5 shrink-0">
+                  <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
+                </svg>
+              </button>
+            )}
+
+            <span className="ml-auto shrink-0 text-xs font-bold text-slate-500 dark:text-slate-400">
+              {formatCount(filtered.length, countsCapped)} {tabAbertas === 'resolvidos' ? 'resolvidas' : tabAbertas === 'minhas' ? 'minhas' : 'abertas'}
+            </span>
+
+            {/* Conectado é o estado esperado, então vira só um ponto. O texto aparece
+                quando há problema — que é quando o atendente precisa saber. */}
+            {socketStatus === 'connected' ? (
+              <span title="Atualização em tempo real" className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
+            ) : (
+              <span
+                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-medium ${
+                  socketStatus === 'offline'
+                    ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-200'
+                    : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-100'
+                }`}
+              >
+                <span className={`h-2 w-2 shrink-0 rounded-full ${socketStatus === 'offline' ? 'bg-rose-500' : 'bg-amber-500'}`} />
+                {socketStatus === 'reconnecting' ? 'Reconectando' : socketStatus === 'connecting' ? 'Conectando' : 'Sem atualização'}
+              </span>
+            )}
           </div>
         </div>
         <div className="flex-1 overflow-y-auto divide-y divide-slate-200 dark:divide-slate-700/80">
@@ -893,9 +1125,38 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
           {loading ? (
             <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm">Carregando...</div>
           ) : filtered.length === 0 ? (
-            <div className="p-8 text-center text-slate-500 text-sm">Nenhum ticket {tabAbertas === 'abertas' ? 'aberto' : 'resolvido'}.</div>
+            <div className="p-8 text-center text-slate-500 text-sm">
+              Nenhum ticket {tabAbertas === 'resolvidos' ? 'resolvido' : tabAbertas === 'minhas' ? 'seu em aberto' : 'aberto'}.
+            </div>
           ) : (
-            filtered.map((c) => {
+            groups.map((group) => {
+              const collapsed = collapsedGroups.includes(group.queueId);
+              return (
+                <div key={group.queueId}>
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.queueId)}
+                    aria-expanded={!collapsed}
+                    className="sticky top-0 z-10 flex w-full items-center gap-2 bg-slate-100/95 dark:bg-slate-900/95 px-4 py-2 text-left backdrop-blur transition-colors hover:bg-slate-200 dark:hover:bg-slate-800"
+                    title={collapsed ? `Abrir ${group.name}` : `Recolher ${group.name}`}
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                      className={`h-3.5 w-3.5 shrink-0 text-slate-500 transition-transform ${collapsed ? '-rotate-90' : ''}`}
+                    >
+                      <path fillRule="evenodd" d="M5.22 7.22a.75.75 0 0 1 1.06 0L10 10.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 8.28a.75.75 0 0 1 0-1.06Z" clipRule="evenodd" />
+                    </svg>
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: group.colorHex }} />
+                    <span className="min-w-0 flex-1 truncate text-[11px] font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                      {group.name}
+                    </span>
+                    <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-slate-300/70 px-1.5 text-[10px] font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                      {formatCount(group.conversations.length, countsCapped)}
+                    </span>
+                  </button>
+                  {!collapsed && group.conversations.map((c) => {
               const last = lastMessage(c);
               const isSelected = c.id === selectedId;
               const hasNewMessage = last?.direction === 'inbound' && !isSelected && c.status !== 'encerrado';
@@ -1006,6 +1267,9 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                       )}
                     </div>
                   </div>
+                </div>
+              );
+                  })}
                 </div>
               );
             })
