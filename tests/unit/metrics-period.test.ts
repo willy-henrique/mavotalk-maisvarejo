@@ -47,6 +47,30 @@ test("periodo personalizado invertido e recusado", () => {
   );
 });
 
+test("datas civis personalizadas comecam a meia-noite do fuso da organizacao", () => {
+  const p = resolvePeriod({
+    name: "custom",
+    from: "2026-08-01",
+    to: "2026-08-02",
+    timezone: FUSO,
+  });
+
+  assert.equal(p.from.toISOString(), "2026-08-01T03:00:00.000Z");
+  assert.equal(p.to.toISOString(), "2026-08-02T03:00:00.000Z");
+});
+
+test("90 dias civis personalizados continuam validos em horario de verao", () => {
+  const p = resolvePeriod({
+    name: "custom",
+    from: "2026-08-05",
+    to: "2026-11-03",
+    timezone: "America/New_York",
+  });
+
+  assert.equal(p.from.toISOString(), "2026-08-05T04:00:00.000Z");
+  assert.equal(p.to.toISOString(), "2026-11-03T05:00:00.000Z");
+});
+
 test("nome desconhecido e recusado", () => {
   assert.throws(
     () => resolvePeriod({ name: "trimestre", timezone: FUSO }),

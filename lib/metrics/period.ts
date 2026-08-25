@@ -22,6 +22,7 @@ export type ResolvedPeriod = {
 };
 
 type DataCivil = { ano: number; mes: number; dia: number };
+const PADRAO_DATA_CIVIL = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 function criarFormatador(timezone: string): Intl.DateTimeFormat {
   try {
@@ -68,6 +69,26 @@ function somaDiasCivis(data: DataCivil, dias: number): DataCivil {
   };
 }
 
+function dataCivilDaEntrada(valor: string): DataCivil | null {
+  const correspondencia = PADRAO_DATA_CIVIL.exec(valor);
+  if (!correspondencia) return null;
+
+  const data = {
+    ano: Number(correspondencia[1]),
+    mes: Number(correspondencia[2]),
+    dia: Number(correspondencia[3]),
+  };
+  const conferida = new Date(chaveDaData(data));
+  if (
+    conferida.getUTCFullYear() !== data.ano ||
+    conferida.getUTCMonth() + 1 !== data.mes ||
+    conferida.getUTCDate() !== data.dia
+  ) {
+    throw new PeriodError("invalid_period", "Datas inválidas");
+  }
+  return data;
+}
+
 /** Primeiro instante pertencente à data civil no fuso da organização. */
 function inicioDaData(data: DataCivil, formatador: Intl.DateTimeFormat): Date {
   const alvo = chaveDaData(data);
@@ -108,15 +129,23 @@ export function resolvePeriod(input: {
     if (!input.from || !input.to) {
       throw new PeriodError("invalid_period", "Período personalizado exige from e to");
     }
-    from = new Date(input.from);
-    to = new Date(input.to);
+    const fromCivil = dataCivilDaEntrada(input.from);
+    const toCivil = dataCivilDaEntrada(input.to);
+    from = fromCivil ? inicioDaData(fromCivil, formatador) : new Date(input.from);
+    to = toCivil ? inicioDaData(toCivil, formatador) : new Date(input.to);
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
       throw new PeriodError("invalid_period", "Datas inválidas");
     }
     if (to.getTime() <= from.getTime()) {
       throw new PeriodError("invalid_period", "A data final precisa ser depois da inicial");
     }
-    if (to.getTime() - from.getTime() > MAX_PERIOD_DAYS * DIA_MS) {
+    const diasCivis =
+      fromCivil && toCivil ? (chaveDaData(toCivil) - chaveDaData(fromCivil)) / DIA_MS : null;
+    const excedeTeto =
+      diasCivis === null
+        ? to.getTime() - from.getTime() > MAX_PERIOD_DAYS * DIA_MS
+        : diasCivis > MAX_PERIOD_DAYS;
+    if (excedeTeto) {
       throw new PeriodError(
         "period_too_long",
         `A consulta cobre no máximo ${MAX_PERIOD_DAYS} dias`,
