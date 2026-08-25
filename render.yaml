@@ -71,6 +71,10 @@ services:
         value: "3000"
       - key: JWT_SECRET
         generateValue: true
+      - key: MAVO_METRICS_TOKEN
+        sync: false
+      - key: MAVO_MANAGEMENT_URL
+        sync: false
       - key: SESSION_COOKIE_NAME
         value: mavo_talk_session
       - key: SESSION_COOKIE_SAME_SITE

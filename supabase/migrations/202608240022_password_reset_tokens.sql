@@ -3,6 +3,10 @@
 -- pode ser removida com DROP TABLE password_reset_tokens se ainda não houver uso.
 BEGIN;
 
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS recovery_phone TEXT
+  CHECK (recovery_phone IS NULL OR recovery_phone ~ '^[0-9]{10,15}$');
+
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_id_organization
   ON users (id, organization_id);
 

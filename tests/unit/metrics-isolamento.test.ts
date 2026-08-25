@@ -7,6 +7,8 @@ const RAIZ = "app/api/metrics/v1";
 const SEM_SESSAO = new Set([
   path.join(RAIZ, "health", "route.ts"),
   path.join(RAIZ, "auth", "login", "route.ts"),
+  path.join(RAIZ, "auth", "password", "forgot", "route.ts"),
+  path.join(RAIZ, "auth", "password", "reset", "route.ts"),
 ]);
 
 async function rotas(diretorio: string): Promise<string[]> {

@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import {
   queryDatabase,
+  queryTenantDatabase,
   requireTenantOrganizationId,
   withTenantTransaction,
 } from "@/lib/db";
@@ -14,6 +15,7 @@ export type TokenRecuperacao = {
 
 type OrganizacaoDoToken = { organization_id: string };
 type TokenConsumido = { user_id: string };
+type TelefoneRecuperacao = { recovery_phone: string | null };
 
 function instanteValido(agora: Date): Date {
   if (Number.isNaN(agora.getTime())) throw new Error("Instante de recuperação inválido");
@@ -39,6 +41,25 @@ function hashBcryptValido(hash: string): boolean {
 export function hashTokenRecuperacao(token: string): string {
   if (!token || token.length > 512) throw new Error("Token de recuperação inválido");
   return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+export async function telefoneParaRecuperacao(
+  organizationId: string,
+  userId: string,
+): Promise<string | null> {
+  const orgId = requireTenantOrganizationId(organizationId);
+  const usuarioId = idValido(userId, "Usuário");
+  const resultado = await queryTenantDatabase<TelefoneRecuperacao>(
+    orgId,
+    `SELECT recovery_phone
+       FROM users
+      WHERE organization_id = $1
+        AND id = $2
+        AND is_active = true`,
+    [orgId, usuarioId],
+  );
+  const telefone = String(resultado.rows[0]?.recovery_phone ?? "").trim();
+  return /^[0-9]{10,15}$/.test(telefone) ? telefone : null;
 }
 
 export async function criarTokenRecuperacao(
