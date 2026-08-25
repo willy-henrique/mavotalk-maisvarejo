@@ -4,6 +4,8 @@ import type { MetricsErrorCode, MetricsMeta } from "@/lib/metrics/types";
 const STATUS: Record<MetricsErrorCode, number> = {
   unauthenticated: 401,
   forbidden: 403,
+  not_found: 404,
+  conflict: 409,
   invalid_request: 400,
   invalid_period: 400,
   period_too_long: 400,
