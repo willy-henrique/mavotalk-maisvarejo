@@ -22,6 +22,7 @@ test("envelope carrega data e meta juntos", async () => {
 test("cada código de erro tem o status HTTP certo", async () => {
   assert.equal(metricsError("unauthenticated", "x").status, 401);
   assert.equal(metricsError("forbidden", "x").status, 403);
+  assert.equal(metricsError("invalid_request", "x").status, 400);
   assert.equal(metricsError("invalid_period", "x").status, 400);
   assert.equal(metricsError("period_too_long", "x").status, 400);
   assert.equal(metricsError("rate_limited", "x").status, 429);

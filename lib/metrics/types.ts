@@ -12,6 +12,7 @@ export type MetricsMeta = {
 export type MetricsErrorCode =
   | "unauthenticated"
   | "forbidden"
+  | "invalid_request"
   | "invalid_period"
   | "period_too_long"
   | "rate_limited"
