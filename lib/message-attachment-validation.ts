@@ -7,12 +7,54 @@ const ALLOWED_IMAGE_TYPES = new Set([
   "image/gif",
 ]);
 
+/**
+ * Só Ogg/Opus.
+ *
+ * O WhatsApp reproduz nota de voz em ogg/opus; webm, que é o que o Chrome grava
+ * nativamente, chega quebrado no celular do cliente. Aceitar aqui um formato que
+ * o destino não toca seria empurrar a falha para o fim da linha, onde ninguém
+ * consegue diagnosticar.
+ */
+const ALLOWED_AUDIO_TYPES = new Set(["audio/ogg", "audio/opus"]);
+
+export type MessageAttachmentKind = "image" | "document" | "audio";
+
 export type ValidMessageAttachment = {
-  kind: "image" | "document";
+  kind: MessageAttachmentKind;
   mimeType: string;
   fileName: string;
-  placeholder: "[imagem]" | "[documento]";
+  placeholder: "[imagem]" | "[documento]" | "[audio]";
 };
+
+/**
+ * Onde cada anexo vive no Cloudinary.
+ *
+ * Áudio sobe como `video` — é o tipo de recurso que o Cloudinary usa para tudo
+ * que tem linha do tempo. Limpar um áudio órfão como `image` não apagaria nada,
+ * e o recurso ficaria pago e esquecido, em silêncio.
+ */
+export function cloudinaryResourceTypeForAttachment(
+  kind: MessageAttachmentKind,
+): "image" | "raw" | "video" {
+  if (kind === "document") return "raw";
+  if (kind === "audio") return "video";
+  return "image";
+}
+
+/** "audio/ogg; codecs=opus" e "audio/ogg" são o mesmo container. */
+function baseMimeType(value: string): string {
+  return String(value || "").split(";")[0].trim().toLowerCase();
+}
+
+function hasOggSignature(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 4 &&
+    bytes[0] === 0x4f &&
+    bytes[1] === 0x67 &&
+    bytes[2] === 0x67 &&
+    bytes[3] === 0x53
+  );
+}
 
 function hasPdfSignature(bytes: Uint8Array): boolean {
   return (
@@ -49,6 +91,22 @@ export function validateMessageAttachment(
       mimeType: file.type,
       fileName: sanitizeAttachmentFileName(file.name, "imagem"),
       placeholder: "[imagem]",
+    };
+  }
+
+  const audioType = baseMimeType(file.type);
+  if (ALLOWED_AUDIO_TYPES.has(audioType)) {
+    if (!hasOggSignature(bytes)) {
+      throw new Error("O arquivo enviado não é um áudio válido.");
+    }
+    const baseName = sanitizeAttachmentFileName(file.name, "audio.ogg");
+    return {
+      kind: "audio",
+      // Normalizado: o que vai para o WhatsApp e para o Cloudinary não deve
+      // depender de qual navegador gravou.
+      mimeType: "audio/ogg",
+      fileName: /\.ogg$/i.test(baseName) ? baseName : `${baseName}.ogg`,
+      placeholder: "[audio]",
     };
   }
 

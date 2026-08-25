@@ -20,7 +20,10 @@ import {
  * não está olhando as conversas. Este componente mantém a própria conexão para não
  * depender da rota aberta.
  */
-const SystemNotifications: React.FC = () => {
+/** Teto de um ping de atividade por minuto, por conexão. */
+const ACTIVITY_PING_MS = 60_000;
+
+const SystemNotifications: React.FC<{ currentUserId?: string }> = ({ currentUserId }) => {
   const navigate = useNavigate();
   const [permission, setPermission] = useState<NotificationPermissionState>(() => notificationSupport());
   const [sound, setSound] = useState<boolean>(() => soundEnabled());
@@ -56,6 +59,23 @@ const SystemNotifications: React.FC = () => {
       });
     });
 
+    socket.on(
+      'conversation.transferred',
+      (payload: { conversationId?: string; toUserId?: string | null; fromUserName?: string; note?: string }) => {
+        // O evento vai para a organização inteira, mas o aviso é de quem
+        // recebeu: notificar todo mundo transformaria cada transferência em
+        // ruído para quem não tem nada a ver com ela.
+        if (!currentUserId || payload?.toUserId !== currentUserId) return;
+        const conversationId = payload?.conversationId;
+        showSystemNotification({
+          title: 'Mavo Talk — chamado transferido para você',
+          body: `${payload?.fromUserName || 'Um colega'}: ${String(payload?.note || '').slice(0, 120)}`,
+          tag: conversationId ? `transfer:${conversationId}` : 'transfer',
+          onClick: () => navigate(conversationId ? `/inbox?conversation=${conversationId}` : '/inbox'),
+        });
+      },
+    );
+
     socket.on('conversation.created', () => {
       showSystemNotification({
         title: 'Mavo Talk — novo atendimento',
@@ -65,12 +85,30 @@ const SystemNotifications: React.FC = () => {
       });
     });
 
+    // Ping de presença. Este componente é o único socket montado em toda tela do
+    // painel, então é daqui que dá para afirmar "esta pessoa está interagindo",
+    // e não apenas "deixou uma aba aberta". Um por minuto no máximo: a diferença
+    // entre 10s e 60s não muda nenhuma decisão de quem coordena, e o tráfego a
+    // mais sairia caro numa instância gratuita.
+    let ultimoPing = 0;
+    const marcarAtividade = () => {
+      if (document.visibilityState === 'hidden') return;
+      const agora = Date.now();
+      if (agora - ultimoPing < ACTIVITY_PING_MS) return;
+      ultimoPing = agora;
+      socket.emit('presence:activity');
+    };
+    const eventos: Array<keyof DocumentEventMap> = ['pointerdown', 'keydown', 'visibilitychange'];
+    eventos.forEach((evento) => document.addEventListener(evento, marcarAtividade, { passive: true }));
+    socket.on('connect', marcarAtividade);
+
     return () => {
+      eventos.forEach((evento) => document.removeEventListener(evento, marcarAtividade));
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [navigate]);
+  }, [navigate, currentUserId]);
 
   const enableNotifications = useCallback(async () => {
     // Precisa acontecer dentro do clique: o navegador ignora pedido automático, e o

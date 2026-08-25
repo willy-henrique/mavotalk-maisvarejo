@@ -2,7 +2,7 @@
 
 **Data:** 25/08/2026
 **Origem:** pedido do cliente final
-**Status:** desenhado, não implementado
+**Status:** Partes B e C implementadas em 25/08/2026. Parte A ainda no papel.
 
 ---
 
@@ -202,6 +202,32 @@ Gravação em si (captura do microfone, permissão, WASM) não entra em teste un
 - **Áudio no bot.** O bot continua respondendo só em texto.
 - **Gravação no celular do atendente.** O painel é usado no desktop; suporte móvel ao
   microfone entra se for pedido.
+
+## O que a implementação descobriu
+
+Duas coisas que o desenho não previu, e que teriam feito o gravador falhar em
+produção enquanto funcionava no desenvolvimento:
+
+**`Permissions-Policy: microphone=()`** no `render.yaml`. Lista vazia proíbe o
+microfone inclusive para a própria origem: `getUserMedia` seria rejeitado antes
+de o navegador perguntar qualquer coisa ao atendente. Corrigido para
+`microphone=(self)`; câmera, geolocalização e pagamento continuam bloqueados.
+
+**CSP sem `'wasm-unsafe-eval'`**, em dois lugares: o header do site estático e
+uma meta tag no `frontend/index.html`. Os dois são aplicados, e vale o mais
+restritivo de cada diretiva — corrigir só um lado deixaria o encoder bloqueado
+do mesmo jeito. Ambos ganharam `'wasm-unsafe-eval'` e `worker-src 'self'`.
+`'wasm-unsafe-eval'` permite instanciar WebAssembly e **não** libera `eval()`
+de JavaScript.
+
+Verificado no navegador, sob o CSP real: WebAssembly instancia, o Worker de
+mesma origem é criado, o `opus-recorder` carrega e nenhuma violação de CSP
+aparece no console.
+
+Sobre o Baileys 7: `ptt: true` basta. A duração sai do `music-metadata`, que já
+vem instalado; a waveform depende do `audio-decode`, que é peer opcional e não
+está instalado — a falha é capturada e registrada, e a nota de voz vai assim
+mesmo, sem as barrinhas.
 
 ## Ordem de implementação
 

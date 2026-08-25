@@ -256,7 +256,10 @@ services:
         value: max-age=31536000; includeSubDomains
       - path: /*
         name: Permissions-Policy
-        value: camera=(), microphone=(), geolocation=(), payment=()
+        # microphone=(self): o atendente grava nota de voz pelo painel. A lista
+        # vazia proibia o microfone inclusive para a propria origem, e o pedido
+        # falhava antes mesmo de o navegador perguntar ao usuario.
+        value: camera=(), microphone=(self), geolocation=(), payment=()
       - path: /*
         name: Cross-Origin-Opener-Policy
         value: same-origin
@@ -265,7 +268,7 @@ services:
         value: none
       - path: /*
         name: Content-Security-Policy
-        value: "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https: wss:"
+        value: "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https: wss:"
     routes:
       - type: rewrite
         source: /*

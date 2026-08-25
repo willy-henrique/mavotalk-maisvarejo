@@ -9,7 +9,6 @@ import makeWASocket, {
   Browsers,
   type WASocket,
   type WAMessage,
-  type AnyMessageContent,
   proto,
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
@@ -38,6 +37,7 @@ import {
   clearWhatsappDirectory,
 } from "@/lib/repo";
 import { logger } from "@/lib/logger";
+import { buildOutboundMediaContent } from "@/lib/outbound-media-content";
 import { emitRealtime } from "@/lib/realtime";
 import { invokeTicketUpsertLocal } from "@/lib/n8n-ticket-upsert-client";
 import {
@@ -2510,39 +2510,6 @@ export async function sendTypingIndicator(contactPhone: string): Promise<void> {
   } catch {
     // ignora erro (ex: chat não encontrado)
   }
-}
-
-function buildOutboundMediaContent(
-  mediaUrl: string,
-  caption?: string,
-  options?: { mimeType?: string; fileName?: string },
-): AnyMessageContent {
-  const clean = mediaUrl.split("?")[0].toLowerCase();
-  const declaredMimeType = String(options?.mimeType || "").toLowerCase();
-  if (declaredMimeType.startsWith("image/") || /\.(jpe?g|png|gif|webp)$/.test(clean)) {
-    return { image: { url: mediaUrl }, caption: caption || undefined };
-  }
-  if (declaredMimeType.startsWith("video/") || /\.(mp4|3gp|mov)$/.test(clean)) {
-    return { video: { url: mediaUrl }, caption: caption || undefined };
-  }
-  if (declaredMimeType.startsWith("audio/") || /\.(mp3|ogg|oga|m4a|wav|opus)$/.test(clean)) {
-    return { audio: { url: mediaUrl }, mimetype: declaredMimeType || "audio/mpeg" };
-  }
-  const fileName = options?.fileName || mediaUrl.split("/").pop() || "arquivo";
-  const extMatch = /\.([a-z0-9]+)$/.exec(clean);
-  const documentMimeTypes: Record<string, string> = {
-    pdf: "application/pdf",
-    doc: "application/msword",
-    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    xls: "application/vnd.ms-excel",
-    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    txt: "text/plain",
-  };
-  const mimetype =
-    declaredMimeType ||
-    (extMatch && documentMimeTypes[extMatch[1]]) ||
-    "application/octet-stream";
-  return { document: { url: mediaUrl }, mimetype, fileName, caption: caption || undefined };
 }
 
 /** Envio via Baileys (QR). Triagem/bot e `fromBot` usam apenas este caminho.

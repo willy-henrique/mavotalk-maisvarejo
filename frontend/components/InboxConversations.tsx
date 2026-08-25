@@ -6,6 +6,9 @@ import { apiFetch, apiPatch, apiPost, getAccessToken, getApiBaseUrl, getApiUrl, 
 import { Dialog } from './ui/Dialog';
 import { AvatarPreviewDialog } from './ui/AvatarPreviewDialog';
 import StartConversationDialog from './StartConversationDialog';
+import AudioRecorderButton from './AudioRecorderButton';
+import TransferTicketDialog from './TransferTicketDialog';
+import { transferBannerFor } from '../services/transfer';
 import {
   applyInboxFilters,
   formatCount,
@@ -13,6 +16,7 @@ import {
   isCountCapped,
   queueChipsFor,
   selectByTab,
+  sortByLastInbound,
   NO_QUEUE_ID,
   type InboxStatusFilter,
   type InboxTab,
@@ -44,7 +48,13 @@ type ApiConversation = {
   updatedAt: string;
   contact: { id: string; name: string | null; phoneNumber: string | null; avatarUrl?: string | null };
   queue: { id: string; name: string; colorHex?: string } | null;
-  ticket: Record<string, unknown> | null;
+  ticket: {
+    assignee?: { id: string; name?: string | null } | null;
+    transferredAt?: string | null;
+    transferNote?: string | null;
+    transferredFrom?: { id: string; name: string | null } | null;
+    [key: string]: unknown;
+  } | null;
   messages: ApiMessage[];
 };
 
@@ -198,6 +208,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   const [storedSignature] = useState(() => readStoredSignature(currentUser.id));
   const [signatureOn, setSignatureOn] = useState(storedSignature ?? true);
   const [newChatOpen, setNewChatOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const [assigning, setAssigning] = useState(false);
@@ -563,21 +574,18 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
     pdfObjectUrlsRef.current.clear();
   }, []);
 
-  const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    const isAllowed = Boolean(file && (file.type.startsWith('image/') || file.type === 'application/pdf' || /\.pdf$/i.test(file.name)));
-    if (!file || !selectedId || !isAllowed || uploadingAttachment) {
-      if (file && !isAllowed) setSendError('Envie uma imagem ou um arquivo PDF.');
-      e.target.value = '';
-      return;
-    }
+  /**
+   * Caminho único de envio de anexo: o seletor de arquivo e o gravador de áudio
+   * passam os dois por aqui. Devolve se a entrega deu certo, para quem gravou
+   * saber se pode descartar a gravação.
+   */
+  const uploadAttachment = async (file: File): Promise<boolean> => {
+    if (!selectedId || uploadingAttachment) return false;
     if (file.size > 16 * 1024 * 1024) {
       setSendError('O anexo deve ter no máximo 16 MB.');
-      e.target.value = '';
-      return;
+      return false;
     }
     setUploadingAttachment(true);
-    e.target.value = '';
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -589,16 +597,30 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
       if (res.ok) {
         setSendError('');
         await fetchConversations(false);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        const msg = (data as { error?: string }).error || 'Erro ao enviar anexo';
-        setSendError(msg);
+        return true;
       }
+      const data = await res.json().catch(() => ({}));
+      const msg = (data as { error?: string }).error || 'Erro ao enviar anexo';
+      setSendError(msg);
+      return false;
     } catch {
       setSendError('Falha ao enviar anexo. Verifique a conexão do WhatsApp.');
+      return false;
     } finally {
       setUploadingAttachment(false);
     }
+  };
+
+  const handleAttachmentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const isAllowed = Boolean(file && (file.type.startsWith('image/') || file.type === 'application/pdf' || /\.pdf$/i.test(file.name)));
+    e.target.value = '';
+    if (!file) return;
+    if (!isAllowed) {
+      setSendError('Envie uma imagem ou um arquivo PDF.');
+      return;
+    }
+    await uploadAttachment(file);
   };
 
   const handleMessageKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -638,14 +660,20 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
   // O recorte da aba e a composição dos filtros vivem em services/inboxGrouping,
   // testados sem React. Aqui fica só a busca por texto, que depende do estado da tela.
   const inTab = selectByTab(conversations, tabAbertas, currentUser.id);
-  const filtered = applyInboxFilters(inTab, { statusFilter, queueId: queueFilter })
-    .filter((c) => {
-      if (!normalizedListSearch) return true;
-      const last = lastMessage(c);
-      return [c.contact?.name, c.contact?.phoneNumber, c.queue?.name, last?.content, c.id]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(normalizedListSearch));
-    });
+  // Ordem final: quem mandou mensagem por último vem primeiro. O servidor
+  // entrega em `updated_at desc`, e `updated_at` sobe com qualquer mexida no
+  // registro — puxar, encerrar, trocar de fila —, então a conversa que acabou
+  // de chegar não parava no topo. A regra vive em services/inboxGrouping.
+  const filtered = sortByLastInbound(
+    applyInboxFilters(inTab, { statusFilter, queueId: queueFilter })
+      .filter((c) => {
+        if (!normalizedListSearch) return true;
+        const last = lastMessage(c);
+        return [c.contact?.name, c.contact?.phoneNumber, c.queue?.name, last?.content, c.id]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(normalizedListSearch));
+      }),
+  );
 
   // Chips e cabeçalhos derivam do mesmo recorte da aba, e não da lista já
   // filtrada: senão clicar em "RH" zeraria os contadores das outras filas e o
@@ -1350,6 +1378,16 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                     {assigning ? 'Assumindo...' : <><span className="sm:hidden">Puxar</span><span className="hidden sm:inline">Puxar Atendimento</span></>}
                   </button>
                 )}
+                {selected.status !== 'encerrado' && (
+                  <button
+                    type="button"
+                    onClick={() => setTransferOpen(true)}
+                    title="Transferir para outro técnico ou devolver para a fila"
+                    className="bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-100 px-3 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-600"
+                  >
+                    Transferir
+                  </button>
+                )}
                 {selected.status === 'em_atendimento' && (
                   <button
                     type="button"
@@ -1363,6 +1401,20 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
               </div>
             </header>
             <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 sm:p-6 space-y-3 min-h-0 flex flex-col">
+              {(() => {
+                // Chegou transferido: quem recebeu precisa do motivo antes de
+                // começar a ler a conversa, não depois.
+                const faixa = transferBannerFor(selected.ticket, currentUser.id);
+                if (!faixa) return null;
+                return (
+                  <div className="mb-1 shrink-0 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40">
+                    <p className="font-bold text-amber-900 dark:text-amber-200">
+                      Transferido por {faixa.fromName}
+                    </p>
+                    <p className="mt-0.5 text-amber-800 dark:text-amber-100">{faixa.note}</p>
+                  </div>
+                );
+              })()}
               {[...(selected.messages || [])].sort(
                 (a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime(),
               ).map((m) => (
@@ -1377,8 +1429,16 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                         : 'bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-slate-100'
                     }`}
                   >
-                    {m.type === 'audio' && m.mediaUrl ? (
-                      <audio controls src={m.mediaUrl} className="max-w-full h-10" preload="metadata">
+                    {m.type === 'audio' && (m.cloudinaryPublicId || m.mediaUrl) ? (
+                      // Pela rota assinada, como imagem e PDF. A URL crua do
+                      // Cloudinary é pública: quem tivesse o link ouviria o áudio
+                      // do cliente sem nem estar logado no painel.
+                      <audio
+                        controls
+                        src={m.cloudinaryPublicId ? getApiUrl(`/api/media/signed?publicId=${encodeURIComponent(m.cloudinaryPublicId)}&conversationId=${encodeURIComponent(selected.id)}`) : m.mediaUrl || ''}
+                        className="max-w-full h-10"
+                        preload="metadata"
+                      >
                         Seu navegador não suporta áudio.
                       </audio>
                     ) : m.type === 'image' && (m.cloudinaryPublicId || m.mediaUrl) ? (
@@ -1532,6 +1592,11 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                       <path fillRule="evenodd" d="M1 5.25A2.25 2.25 0 013.25 3h13.5A2.25 2.25 0 0119 5.25v9.5A2.25 2.25 0 0116.75 17H3.25A2.25 2.25 0 011 14.75v-9.5zm1.5 5.81v3.69c0 .414.336.75.75.75h13.5a.75.75 0 00.75-.75v-3.69l-2.97-2.97a.75.75 0 00-1.06 0l-1.5 1.5a.75.75 0 01-1.06 0l-2.44-2.44a.75.75 0 00-1.06 0l-3.09 3.1z" clipRule="evenodd" />
                     </svg>
                   </label>
+                  <AudioRecorderButton
+                    disabled={sending || uploadingAttachment}
+                    onSend={(file) => uploadAttachment(file)}
+                    onError={setSendError}
+                  />
                   <button
                     type="button"
                     onClick={() => setLinkModalOpen(true)}
@@ -1612,6 +1677,21 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
               </div>
             )}
           </>
+        )}
+
+        {transferOpen && selected && (
+          <TransferTicketDialog
+            conversationId={selected.id}
+            currentUserId={currentUser.id}
+            queueName={selected.queue?.name ?? null}
+            onClose={() => setTransferOpen(false)}
+            onTransferred={(destino) => {
+              // Devolvido para a fila, o chamado deixa de ser seu: fechar a
+              // conversa aberta evita ficar olhando algo que não é mais seu.
+              if (destino === 'queue') clearSelectedConversation();
+              void fetchConversations(false);
+            }}
+          />
         )}
 
         {newChatOpen && (

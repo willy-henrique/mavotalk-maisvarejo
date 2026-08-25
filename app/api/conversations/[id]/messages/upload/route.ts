@@ -13,6 +13,7 @@ import {
 import { logger } from "@/lib/logger";
 import {
   MAX_MESSAGE_ATTACHMENT_BYTES,
+  cloudinaryResourceTypeForAttachment,
   validateMessageAttachment,
 } from "@/lib/message-attachment-validation";
 
@@ -48,7 +49,7 @@ export async function POST(
   const file = formData.get("file") as File | null;
   if (!file) {
     return NextResponse.json(
-      { error: "Selecione uma imagem ou um arquivo PDF" },
+      { error: "Selecione uma imagem, um PDF ou um áudio" },
       { status: 400 },
     );
   }
@@ -118,7 +119,7 @@ export async function POST(
     );
     await deleteCloudinaryResources(
       [upload.public_id],
-      attachment.kind === "document" ? "raw" : "image",
+      cloudinaryResourceTypeForAttachment(attachment.kind),
     ).catch((cleanupError) => {
       logger.warn({ err: cleanupError, publicId: upload.public_id }, "Failed to clean orphaned upload");
     });

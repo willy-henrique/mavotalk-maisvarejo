@@ -208,6 +208,68 @@ export async function listUsersPage(
   };
 }
 
+export type TeamMemberForPresence = {
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+  lastSeenAt: string | null;
+  openConversations: number;
+};
+
+/**
+ * A equipe ativa, com a carga de cada um.
+ *
+ * A carga vem junto porque "online" sozinho não decide nada: online com sete
+ * chamados abertos e online com zero pedem ações opostas de quem coordena.
+ *
+ * Só entram usuários ativos. Quem foi desativado não volta para a lista de
+ * quem está trabalhando só porque tem `last_seen_at` de ontem.
+ */
+export async function listTeamForPresence(
+  organizationId: string,
+): Promise<TeamMemberForPresence[]> {
+  const orgId = requireOrganizationId(organizationId);
+  type Row = {
+    id: string;
+    name: string | null;
+    email: string | null;
+    role: Role | null;
+    last_seen_at: string | null;
+    open_conversations: string | null;
+  };
+  const result = await queryTenantDatabase<Row>(
+    orgId,
+    `SELECT u.id, u.name, u.email, u.role, u.last_seen_at,
+            COALESCE(carga.total, 0)::text AS open_conversations
+       FROM users u
+       LEFT JOIN (
+         SELECT t.assignee_id, COUNT(*) AS total
+           FROM tickets t
+           JOIN conversations c
+             ON c.id = t.conversation_id
+            AND c.organization_id = t.organization_id
+          WHERE t.organization_id = $1
+            AND t.closed_at IS NULL
+            AND c.status <> 'encerrado'
+            AND t.assignee_id IS NOT NULL
+          GROUP BY t.assignee_id
+       ) carga ON carga.assignee_id = u.id
+      WHERE u.organization_id = $1
+        AND u.is_active = true
+      ORDER BY u.name, u.id`,
+    [orgId],
+  );
+  return result.rows.map((row) => ({
+    id: String(row.id),
+    name: String(row.name ?? ""),
+    email: String(row.email ?? ""),
+    role: (row.role ?? "atendente") as Role,
+    lastSeenAt: row.last_seen_at ?? null,
+    openConversations: Number(row.open_conversations || 0),
+  }));
+}
+
 export async function createUser(
   organizationId: string,
   payload: { name: string; email: string; passwordHash: string; role: Role; isActive?: boolean },
@@ -845,6 +907,17 @@ export async function listConversations(organizationId: string, status?: Convers
             updatedAt: iso(ticket.updated_at),
             closedAt: ticket.closed_at ? iso(ticket.closed_at) : null,
             assignee: assigneeId && assigneeName ? { id: assigneeId, name: assigneeName } : null,
+            // Quem recebeu o chamado precisa saber de quem veio e por quê, sem
+            // ter que reler a conversa inteira. O histórico completo fica no
+            // audit; aqui vai só a transferência mais recente.
+            transferredAt: ticket.transferred_at ? iso(ticket.transferred_at) : null,
+            transferNote: ticket.transfer_note ? String(ticket.transfer_note) : null,
+            transferredFrom: ticket.transferred_from
+              ? {
+                  id: String(ticket.transferred_from),
+                  name: userNames.get(String(ticket.transferred_from)) ?? null,
+                }
+              : null,
           }
         : null,
       messages: msgByConv.get(item.id) || [],
@@ -889,6 +962,55 @@ export async function assignConversation(organizationId: string, conversationId:
   await supa(orgId)
     .from("tickets")
     .update({ assignee_id: userId, first_response_at: now, updated_at: now })
+    .eq("conversation_id", conversationId)
+    .eq("organization_id", orgId);
+}
+
+/**
+ * Passa o chamado adiante, para uma pessoa ou de volta para a fila.
+ *
+ * **Não toca em `first_response_at`.** É a diferença que justifica esta função
+ * existir em vez de reusar `assignConversation`, que grava aquele instante toda
+ * vez: transferir não é responder, e cada transferência reescreveria a hora da
+ * primeira resposta, falsificando o SLA que alimenta a Visão da operação.
+ *
+ * `triage_completed` fica true nos dois caminhos, inclusive na devolução para a
+ * fila. Sem isso o bot voltaria a exibir o menu para um cliente que já está
+ * conversando com gente — o mesmo motivo documentado em `assignConversation`.
+ */
+export async function transferConversation(
+  organizationId: string,
+  conversationId: string,
+  input: {
+    fromUserId: string;
+    /** `null` devolve o chamado para a fila, sem dono. */
+    toUserId: string | null;
+    note: string;
+  },
+): Promise<void> {
+  const orgId = requireOrganizationId(organizationId);
+  const now = new Date().toISOString();
+
+  await supa(orgId)
+    .from("conversations")
+    .update({
+      // Sem dono, o chamado volta a aguardar para quem estiver livre puxar.
+      status: input.toUserId ? "em_atendimento" : "aguardando",
+      triage_completed: true,
+      updated_at: now,
+    })
+    .eq("id", conversationId)
+    .eq("organization_id", orgId);
+
+  await supa(orgId)
+    .from("tickets")
+    .update({
+      assignee_id: input.toUserId,
+      transferred_from: input.fromUserId,
+      transferred_at: now,
+      transfer_note: input.note,
+      updated_at: now,
+    })
     .eq("conversation_id", conversationId)
     .eq("organization_id", orgId);
 }
@@ -1079,18 +1201,36 @@ export async function findMessageByExternalId(
   return { id: String(data.id), conversationId: String(data.conversation_id) };
 }
 
-export async function getCloudinaryPublicIdsForConversation(
+export type ConversationMediaAsset = {
+  publicId: string;
+  mediaUrl: string | null;
+};
+
+/**
+ * As mídias que pertencem a uma conversa.
+ *
+ * A URL guardada vem junto porque é dela que se descobre com que tipo de recurso
+ * o Cloudinary guardou o arquivo — e assinar com o tipo errado devolve 404.
+ * Deixar o cliente informar o tipo seria entregar uma alavanca para sondar o
+ * armazenamento; o banco já sabe a resposta.
+ */
+export async function getCloudinaryAssetsForConversation(
   organizationId: string,
   conversationId: string,
-): Promise<string[]> {
+): Promise<ConversationMediaAsset[]> {
   const orgId = requireOrganizationId(organizationId);
   const { data } = await supa(orgId)
     .from("messages")
-    .select("cloudinary_public_id")
+    .select("cloudinary_public_id, media_url")
     .eq("organization_id", orgId)
     .eq("conversation_id", conversationId)
     .not("cloudinary_public_id", "is", null);
-  return (data ?? []).map((r) => String(r.cloudinary_public_id)).filter(Boolean);
+  return (data ?? [])
+    .map((r) => ({
+      publicId: String(r.cloudinary_public_id || ""),
+      mediaUrl: r.media_url ? String(r.media_url) : null,
+    }))
+    .filter((asset) => asset.publicId);
 }
 
 export async function getMessageMediaForConversation(

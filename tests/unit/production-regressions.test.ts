@@ -19,7 +19,9 @@ test("upload valida imagem/PDF, persiste MIME e remove órfão quando a entrega 
   assert.match(route, /validateMessageAttachment/);
   assert.match(route, /attachment\.mimeType/);
   assert.match(route, /attachment\.fileName/);
-  assert.match(route, /attachment\.kind === "document" \? "raw" : "image"/);
+  // Áudio vive como `video` no Cloudinary: o mapeamento saiu do ternário para
+  // cloudinaryResourceTypeForAttachment, que é afirmado em teste próprio.
+  assert.match(route, /cloudinaryResourceTypeForAttachment\(attachment\.kind\)/);
   assert.match(route, /status:\s*413/);
   assert.match(route, /status:\s*503/);
 });
@@ -28,8 +30,10 @@ test("mídia assinada exige vínculo da conversa com o tenant autenticado", asyn
   const route = await read("app/api/media/signed/route.ts");
   assert.match(route, /conversationId/);
   assert.match(route, /auth\.session\.organizationId/);
-  assert.match(route, /getCloudinaryPublicIdsForConversation/);
-  assert.match(route, /allowedPublicIds\.includes\(publicId\)/);
+  assert.match(route, /getCloudinaryAssetsForConversation/);
+  // A posse deixou de ser uma lista de ids e virou o próprio registro da mídia,
+  // porque a URL guardada é que diz com que tipo de recurso assinar.
+  assert.match(route, /assets\.find\(\(item\) => item\.publicId === publicId\)/);
 });
 
 test("visualizador de PDF usa mensagem vinculada ao tenant e não aceita URL do cliente", async () => {
@@ -550,4 +554,51 @@ test("preset do supermercado só faz bootstrap quando o tenant não tem nenhuma 
 
   const setup = await read("lib/supermarket-setup.ts");
   assert.doesNotMatch(setup, /isSupermarketQueuePresetApplied/);
+});
+
+test("a rota de mídia assinada tira o tipo do recurso do banco, não do cliente", async () => {
+  const route = await read("app/api/media/signed/route.ts");
+  // Um parâmetro de tipo vindo na query seria uma alavanca para sondar o
+  // armazenamento; a URL guardada na mensagem é a fonte confiável.
+  assert.match(route, /cloudinaryResourceTypeFromUrl\(asset\.mediaUrl\)/);
+  assert.doesNotMatch(route, /searchParams\.get\("resourceType"\)/);
+  // A posse continua conferida: o publicId precisa pertencer àquela conversa.
+  assert.match(route, /getCloudinaryAssetsForConversation/);
+  assert.match(route, /status:\s*404/);
+});
+
+test("áudio recebido é tocado pela rota assinada, não pela URL pública", async () => {
+  const inbox = await read("frontend/components/InboxConversations.tsx");
+  const player = inbox.slice(inbox.indexOf("m.type === 'audio'"));
+  const trecho = player.slice(0, player.indexOf("</audio>"));
+  assert.match(trecho, /api\/media\/signed/);
+});
+
+test("transferir chamado não reescreve a hora da primeira resposta", async () => {
+  const repo = await read("lib/supabase-repo.ts");
+  const inicio = repo.indexOf("export async function transferConversation(");
+  const fim = repo.indexOf("export async function closeConversation(");
+  assert.ok(inicio >= 0 && fim > inicio);
+  const corpo = repo.slice(inicio, fim);
+
+  // `assignConversation` grava first_response_at toda vez. Se a transferência
+  // reusasse esse caminho, cada repasse falsificaria o SLA de primeira resposta
+  // que alimenta os cartões da Visão da operação — e ninguém perceberia.
+  assert.doesNotMatch(corpo, /first_response_at/);
+  assert.match(corpo, /assignee_id: input\.toUserId/);
+  // Devolver para a fila não pode fazer o bot reexibir o menu para um cliente
+  // que já está falando com gente.
+  assert.match(corpo, /triage_completed: true/);
+  assert.match(corpo, /status: input\.toUserId \? "em_atendimento" : "aguardando"/);
+});
+
+test("a rota de transferência valida o destinatário contra a equipe do tenant", async () => {
+  const route = await read("app/api/conversations/[id]/transfer/route.ts");
+  assert.match(route, /requireMenuPermission\(auth\.session, "inbox", "update"\)/);
+  // O id do destinatário vem do cliente: sem conferir contra a equipe da
+  // organização, daria para empurrar um chamado para outro tenant.
+  assert.match(route, /listTeamForPresence\(auth\.session\.organizationId\)/);
+  assert.match(route, /parseTransferRequest/);
+  assert.match(route, /createAuditLog/);
+  assert.match(route, /"transfer_ticket"/);
 });

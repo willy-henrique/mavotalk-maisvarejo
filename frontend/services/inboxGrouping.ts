@@ -93,6 +93,62 @@ export function applyInboxFilters<T extends GroupableConversation>(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Ordenação
+// ---------------------------------------------------------------------------
+
+/** Conversa com o bastante para saber quando o cliente falou por último. */
+export type ActivityConversation = GroupableConversation & {
+  updatedAt?: string;
+  messages?: readonly { direction?: string; createdAt?: string }[];
+};
+
+function timeOf(value?: string): number {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+/**
+ * Momento em que o cliente falou pela última vez.
+ *
+ * Só conta `inbound`. Resposta de atendente não é sinal de que alguém está
+ * esperando: se contasse, responder uma conversa a jogaria para o topo e
+ * empurraria para baixo justamente quem acabou de escrever e ainda não foi
+ * atendido.
+ *
+ * Sem mensagem do cliente na carga, cai para `updatedAt`. A API devolve só as
+ * 200 mensagens mais recentes da organização (ver lib/supabase-repo.ts), então
+ * uma conversa sem mensagem carregada é, por construção, mais antiga que todas
+ * as que têm — e o `updatedAt` a coloca no fim, que é onde ela pertence.
+ */
+export function lastInboundAt(conversation: ActivityConversation): number {
+  let latest = 0;
+  for (const message of conversation.messages ?? []) {
+    if (message.direction !== "inbound") continue;
+    const time = timeOf(message.createdAt);
+    if (time > latest) latest = time;
+  }
+  return latest || timeOf(conversation.updatedAt);
+}
+
+/**
+ * Quem mandou mensagem por último aparece primeiro.
+ *
+ * O servidor devolve em `updated_at desc`, e `updated_at` sobe com qualquer
+ * mexida no registro — puxar o atendimento, trocar de fila, encerrar. A lista
+ * então se reordenava por motivos invisíveis para quem olha, e a mensagem que
+ * acabou de chegar aparecia no meio, sem nada que a distinguisse.
+ *
+ * Empate preserva a ordem recebida: `sort` é estável, então conversas sem
+ * mensagem do cliente mantêm entre si o `updated_at desc` do servidor.
+ */
+export function sortByLastInbound<T extends ActivityConversation>(
+  conversations: readonly T[],
+): T[] {
+  return [...conversations].sort((a, b) => lastInboundAt(b) - lastInboundAt(a));
+}
+
 export type InboxGroup<T extends GroupableConversation = GroupableConversation> = {
   queueId: string;
   name: string;

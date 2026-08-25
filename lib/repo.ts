@@ -41,6 +41,7 @@ export {
   recordUserLogin,
   listUsers,
   listUsersPage,
+  listTeamForPresence,
   createUser,
   updateUser,
   deactivateUser,
@@ -57,12 +58,13 @@ export {
   listConversations,
   getConversation,
   assignConversation,
+  transferConversation,
   closeConversation,
   updateConversationById,
   addOutboundMessage,
   addInboundMessage,
   findMessageByExternalId,
-  getCloudinaryPublicIdsForConversation,
+  getCloudinaryAssetsForConversation,
   getMessageMediaForConversation,
   getContactById,
   getContactByPhone,
@@ -92,3 +94,5 @@ export {
   clearWhatsappDirectory,
   countWhatsappDirectory,
 } from "@/lib/supabase-repo";
+
+export type { TeamMemberForPresence, ConversationMediaAsset } from "@/lib/supabase-repo";

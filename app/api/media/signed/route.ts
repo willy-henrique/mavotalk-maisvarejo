@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/api";
-import { generateSignedUrl } from "@/lib/cloudinary";
-import { getCloudinaryPublicIdsForConversation } from "@/lib/repo";
+import { cloudinaryResourceTypeFromUrl, signedDeliveryUrl } from "@/lib/cloudinary";
+import { getCloudinaryAssetsForConversation } from "@/lib/repo";
 
 export async function GET(request: NextRequest) {
   const auth = await requireSession();
@@ -16,15 +16,21 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const allowedPublicIds = await getCloudinaryPublicIdsForConversation(
+  const assets = await getCloudinaryAssetsForConversation(
     auth.session.organizationId,
     conversationId,
   );
-  if (!allowedPublicIds.includes(publicId)) {
+  const asset = assets.find((item) => item.publicId === publicId);
+  if (!asset) {
     return NextResponse.json({ error: "Midia nao encontrada" }, { status: 404 });
   }
 
-  const signedUrl = generateSignedUrl(publicId);
+  // O tipo do recurso sai da URL guardada na mensagem, nunca de um parâmetro do
+  // cliente: imagem e PDF antigo entram como `image`, PDF do WhatsApp como `raw`
+  // e áudio como `video`. Assinar com o tipo errado devolve 404 do Cloudinary,
+  // que era o que acontecia com áudio quando tudo era assinado como imagem.
+  const resourceType = cloudinaryResourceTypeFromUrl(asset.mediaUrl) ?? "image";
+  const signedUrl = signedDeliveryUrl(publicId, resourceType);
   if (!signedUrl) {
     return NextResponse.json({ error: "Cloudinary nao configurado" }, { status: 503 });
   }

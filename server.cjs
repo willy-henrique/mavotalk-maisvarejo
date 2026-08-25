@@ -14,6 +14,7 @@ const {
   isAllowedRequestOrigin,
   rejectsCookieMutationWithoutOrigin,
 } = require("./lib/config/cors.cjs");
+const { getPresenceRegistry } = require("./lib/presence.cjs");
 
 function parseCookies(value) {
   return Object.fromEntries(
@@ -184,10 +185,71 @@ app
     }
 
     global.__io = io;
+    const presence = getPresenceRegistry();
+
+    // O estado de presenca muda por conexao, mas quem olha o painel quer ver a
+    // equipe inteira. Emitir a lista da organizacao evita que o cliente tenha
+    // que remontar o quadro a partir de eventos soltos e ficar dessincronizado
+    // se perder um deles.
+    function broadcastPresence(organizationId) {
+      if (!organizationId) return;
+      io.to(`organization:${organizationId}`).emit("presence.updated", {
+        organizationId,
+        members: presence.snapshot({ organizationId, at: Date.now() }),
+        generatedAt: new Date().toISOString(),
+      });
+    }
+
     io.on("connection", (socket) => {
       const room = `organization:${socket.data.organizationId}`;
       socket.join(room);
       socket.emit("connected", { ok: true });
+
+      presence.connect({
+        organizationId: socket.data.organizationId,
+        userId: socket.data.userId,
+        socketId: socket.id,
+        at: Date.now(),
+      });
+      broadcastPresence(socket.data.organizationId);
+
+      // Ping de interacao. O cliente limita a um por minuto; aqui so se registra
+      // o instante, sem retransmitir: um broadcast por interacao de cada
+      // atendente inundaria a sala sem mudar o que a tela mostra.
+      socket.on("presence:activity", () => {
+        presence.activity({
+          organizationId: socket.data.organizationId,
+          userId: socket.data.userId,
+          at: Date.now(),
+        });
+      });
+
+      socket.on("disconnect", () => {
+        const at = Date.now();
+        const saida = presence.disconnect({
+          organizationId: socket.data.organizationId,
+          userId: socket.data.userId,
+          socketId: socket.id,
+          at,
+        });
+        broadcastPresence(socket.data.organizationId);
+        // Só persiste quando a ultima aba fecha. Falha de escrita nao pode
+        // derrubar o socket: o pior efeito e um "visto por ultimo" defasado.
+        if (!saida.stillConnected) {
+          import("./lib/presence-store.mjs")
+            .then(({ saveLastSeen }) =>
+              saveLastSeen(socket.data.organizationId, socket.data.userId, at),
+            )
+            .catch((error) => {
+              console.error(
+                JSON.stringify({
+                  event: "presence_last_seen_failed",
+                  message: String((error && error.message) || error),
+                }),
+              );
+            });
+        }
+      });
       socket.on("typing:start", (data) => {
         const conversationId = String(data?.conversationId || "").slice(0, 200);
         if (!conversationId) return;
@@ -226,6 +288,10 @@ app
           await inlineWorkers.close().catch(() => undefined);
           inlineWorkers = null;
         }
+        // Pool aberto segura o processo vivo depois do io.close().
+        await import("./lib/presence-store.mjs")
+          .then(({ closePresenceStore }) => closePresenceStore())
+          .catch(() => undefined);
         if (global.__waClient) {
           // Baileys expõe `end`, não o `destroy` do antigo whatsapp-web.js.
           try {

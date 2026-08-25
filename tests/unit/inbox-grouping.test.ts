@@ -9,6 +9,8 @@ import {
   isCountCapped,
   queueChipsFor,
   selectByTab,
+  sortByLastInbound,
+  type ActivityConversation,
   type GroupableConversation,
 } from "../../frontend/services/inboxGrouping";
 
@@ -179,4 +181,142 @@ test("zero não leva mais, nem no teto", () => {
   // puxou nada exibia exatamente isso.
   assert.equal(formatCount(0, true), "0");
   assert.equal(formatCount(0, false), "0");
+});
+
+// ---------------------------------------------------------------------------
+// Ordenação por última mensagem do cliente
+// ---------------------------------------------------------------------------
+
+function comAtividade(
+  id: string,
+  updatedAt: string,
+  messages: Array<{ direction: "inbound" | "outbound"; createdAt: string }>,
+  queue: GroupableConversation["queue"] = null,
+): ActivityConversation {
+  return { id, status: "aguardando", queue, ticket: null, updatedAt, messages };
+}
+
+test("quem acabou de mandar mensagem aparece primeiro", () => {
+  const lista = [
+    comAtividade("antiga", "2026-08-25T08:00:00Z", [
+      { direction: "inbound", createdAt: "2026-08-25T08:00:00Z" },
+    ]),
+    comAtividade("agora", "2026-08-25T09:30:00Z", [
+      { direction: "inbound", createdAt: "2026-08-25T09:30:00Z" },
+    ]),
+    comAtividade("meio", "2026-08-25T09:00:00Z", [
+      { direction: "inbound", createdAt: "2026-08-25T09:00:00Z" },
+    ]),
+  ];
+
+  assert.deepEqual(
+    sortByLastInbound(lista).map((c) => c.id),
+    ["agora", "meio", "antiga"],
+  );
+});
+
+test("resposta do atendente não empurra a conversa para o topo", () => {
+  // O atendente respondeu agora numa conversa cujo cliente falou de manhã.
+  // Quem escreveu às 09:30 e ainda não foi respondido continua na frente.
+  const lista = [
+    comAtividade("respondida-agora", "2026-08-25T10:00:00Z", [
+      { direction: "inbound", createdAt: "2026-08-25T08:00:00Z" },
+      { direction: "outbound", createdAt: "2026-08-25T10:00:00Z" },
+    ]),
+    comAtividade("esperando", "2026-08-25T09:30:00Z", [
+      { direction: "inbound", createdAt: "2026-08-25T09:30:00Z" },
+    ]),
+  ];
+
+  assert.deepEqual(
+    sortByLastInbound(lista).map((c) => c.id),
+    ["esperando", "respondida-agora"],
+  );
+});
+
+test("conversa sem mensagem carregada cai para updatedAt", () => {
+  // A API devolve só as 200 mensagens mais recentes: conversa sem nenhuma
+  // mensagem na carga é mais antiga que todas as que têm.
+  const lista = [
+    comAtividade("sem-mensagem", "2026-08-25T09:00:00Z", []),
+    comAtividade("com-mensagem", "2026-08-25T09:15:00Z", [
+      { direction: "inbound", createdAt: "2026-08-25T09:15:00Z" },
+    ]),
+  ];
+
+  assert.deepEqual(
+    sortByLastInbound(lista).map((c) => c.id),
+    ["com-mensagem", "sem-mensagem"],
+  );
+});
+
+test("empate preserva a ordem que o servidor mandou", () => {
+  const mesmoInstante = [
+    { direction: "inbound" as const, createdAt: "2026-08-25T09:00:00Z" },
+  ];
+  const lista = [
+    comAtividade("primeira", "2026-08-25T09:00:00Z", mesmoInstante),
+    comAtividade("segunda", "2026-08-25T09:00:00Z", mesmoInstante),
+    comAtividade("terceira", "2026-08-25T09:00:00Z", mesmoInstante),
+  ];
+
+  assert.deepEqual(
+    sortByLastInbound(lista).map((c) => c.id),
+    ["primeira", "segunda", "terceira"],
+  );
+});
+
+test("data inválida vai para o fim em vez de bagunçar a lista", () => {
+  const lista = [
+    comAtividade("quebrada", "nao-e-data", [
+      { direction: "inbound", createdAt: "tambem-nao-e-data" },
+    ]),
+    comAtividade("boa", "2026-08-25T09:00:00Z", [
+      { direction: "inbound", createdAt: "2026-08-25T09:00:00Z" },
+    ]),
+  ];
+
+  assert.deepEqual(
+    sortByLastInbound(lista).map((c) => c.id),
+    ["boa", "quebrada"],
+  );
+});
+
+test("ordenar não altera a lista recebida", () => {
+  const lista = [
+    comAtividade("a", "2026-08-25T08:00:00Z", [
+      { direction: "inbound", createdAt: "2026-08-25T08:00:00Z" },
+    ]),
+    comAtividade("b", "2026-08-25T09:00:00Z", [
+      { direction: "inbound", createdAt: "2026-08-25T09:00:00Z" },
+    ]),
+  ];
+
+  sortByLastInbound(lista);
+
+  assert.deepEqual(lista.map((c) => c.id), ["a", "b"]);
+});
+
+test("agrupar por fila preserva a ordenação dentro de cada fila", () => {
+  const lista = [
+    comAtividade("rh-antiga", "2026-08-25T08:00:00Z", [
+      { direction: "inbound", createdAt: "2026-08-25T08:00:00Z" },
+    ], rh),
+    comAtividade("del-agora", "2026-08-25T09:30:00Z", [
+      { direction: "inbound", createdAt: "2026-08-25T09:30:00Z" },
+    ], delivery),
+    comAtividade("rh-agora", "2026-08-25T09:20:00Z", [
+      { direction: "inbound", createdAt: "2026-08-25T09:20:00Z" },
+    ], rh),
+  ];
+
+  const grupos = groupByQueue(sortByLastInbound(lista));
+
+  assert.deepEqual(
+    grupos.map((g) => [g.name, g.conversations.map((c) => c.id)]),
+    [
+      ["RH", ["rh-agora", "rh-antiga"]],
+      ["Delivery", ["del-agora"]],
+    ],
+  );
 });
