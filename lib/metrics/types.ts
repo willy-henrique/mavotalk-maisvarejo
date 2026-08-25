@@ -6,6 +6,7 @@ export type MetricsMeta = {
   timezone: string;
   generatedAt: string;
   filters: Record<string, string | null>;
+  granularity?: "hour" | "day";
 };
 
 export type MetricsErrorCode =
