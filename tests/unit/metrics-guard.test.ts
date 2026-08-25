@@ -32,3 +32,10 @@ test("o guard registra a auditoria da consulta de negocio", async () => {
   const fonte = await readFile("lib/metrics/guard.ts", "utf8");
   assert.match(fonte, /business_query_audit|auditQuery/);
 });
+
+test("o guard invalida sessao quando status ou papel mudaram no banco", async () => {
+  const fonte = await readFile("lib/metrics/guard.ts", "utf8");
+  assert.match(fonte, /u\.is_active = true/);
+  assert.match(fonte, /u\.role = \$6/);
+  assert.match(fonte, /session\.role/);
+});

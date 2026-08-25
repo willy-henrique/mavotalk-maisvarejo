@@ -11,6 +11,8 @@ type Resultado =
   | { error: NextResponse; session: null }
   | { error: null; session: SessionPayload };
 
+class SessaoRevogadaError extends Error {}
+
 const INTENTOS_DE_METRICAS = new Set([
   "agents",
   "bot",
@@ -67,18 +69,22 @@ async function auditarConsulta(request: Request, session: SessionPayload): Promi
        NULL, $5::jsonb, '{}'::jsonb, 'success',
        NULL, 0
      FROM users u
-     WHERE u.organization_id = $1 AND u.id = $3`,
+     WHERE u.organization_id = $1
+       AND u.id = $3
+       AND u.is_active = true
+       AND u.role = $6`,
     [
       session.organizationId,
       randomUUID(),
       session.userId,
       queryTypeDaRota(request),
       JSON.stringify({ requestId: requestIdFrom(request) }),
+      session.role,
     ],
   );
 
   if (resultado.rowCount !== 1) {
-    throw new Error("Usuário da sessão não pertence à organização");
+    throw new SessaoRevogadaError("A sessão não corresponde mais ao acesso atual");
   }
 }
 
@@ -114,7 +120,13 @@ export async function requireMetricsAccess(request: Request): Promise<Resultado>
 
   try {
     await auditarConsulta(request, session);
-  } catch {
+  } catch (erro) {
+    if (erro instanceof SessaoRevogadaError) {
+      return {
+        error: metricsError("forbidden", "Seu acesso foi alterado. Entre novamente."),
+        session: null,
+      };
+    }
     return {
       error: metricsError("internal", "Não foi possível autorizar a consulta"),
       session: null,
