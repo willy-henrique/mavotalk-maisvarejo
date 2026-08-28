@@ -1,5 +1,12 @@
 # Mavo Talk - Central de Conversas WhatsApp
 
+> **Instância dedicada: Mais Varejo.** Este repositório é um fork do produto base
+> (`willy-henrique/willtalk`, disponível aqui como remote `upstream`) configurado
+> para um cliente só — Supabase, workspace Render e número de WhatsApp próprios.
+> O bot de supermercado está **desligado** nesta instância. Estado da configuração,
+> o que ainda falta e o roadmap de fila-por-webhook:
+> [`docs/CLIENTE-MAIS-VAREJO.md`](docs/CLIENTE-MAIS-VAREJO.md).
+
 Sistema profissional de atendimento com triagem numerica, fila `Aguardando`, cards por demanda e chat em tempo real.
 
 > A marca do produto agora é **Mavo Talk**. Variáveis `WILLTALK_*`, rotas de integração e identificadores persistidos foram mantidos por compatibilidade com os ambientes já configurados.

@@ -1,3 +1,17 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# INSTÂNCIA DEDICADA: MAIS VAREJO
+#
+# Fork do Mavo Talk (base: willy-henrique/willtalk, remote `upstream`).
+# Um cliente = uma instância: WhatsApp, projeto Supabase e workspace Render
+# próprios. Ver docs/CLIENTE-MAIS-VAREJO.md e docs/PROVISIONAR-NOVO-CLIENTE.md.
+#
+# Os hostnames abaixo assumem que o Render aceitou os nomes de serviço sem
+# sufixo. O hostname `.onrender.com` é GLOBAL: se o Render gerar uma URL com
+# sufixo, corrija ANTES do primeiro deploy as seis variáveis de URL —
+# MAVO_API_PUBLIC_URL, TWILIO_WEBHOOK_BASE_URL, FRONTEND_URL,
+# MAVO_ALLOWED_ORIGINS (serviço web) e VITE_API_BASE_URL / VITE_SOCKET_URL
+# (serviço estático). URL errada = CORS bloqueado e socket sem conectar.
+# ─────────────────────────────────────────────────────────────────────────────
 # Blueprint validado contra https://render.com/schema/render.yaml.json.
 # O PostgreSQL é externo (Supabase); este Blueprint não cria Render Postgres.
 #
@@ -15,7 +29,7 @@ previews:
 
 services:
   - type: web
-    name: mavo-talk-api
+    name: mavotalk-maisvarejo-api
     runtime: node
     region: virginia
     plan: free
@@ -56,7 +70,7 @@ services:
       - key: PG_IDLE_TIMEOUT_MS
         value: "30000"
       - key: PG_APPLICATION_NAME
-        value: mavo-talk-api
+        value: mavotalk-maisvarejo-api
       # Tetos das etapas de banco do build (scripts/db-common.mjs). Ajustáveis
       # pelo painel sem novo commit quando uma migration legítima demorar mais.
       - key: DB_STEP_DEADLINE_MS
@@ -80,15 +94,15 @@ services:
       - key: SESSION_COOKIE_SAME_SITE
         value: none
       - key: FRONTEND_URL
-        sync: false
+        value: https://mavotalk-maisvarejo-web.onrender.com
       - key: MAVO_ALLOWED_ORIGINS
-        sync: false
+        value: https://mavotalk-maisvarejo-web.onrender.com
       - key: MAVO_API_PUBLIC_URL
-        value: https://mavo-talk-api.onrender.com
+        value: https://mavotalk-maisvarejo-api.onrender.com
       - key: REDIS_URL
         fromService:
           type: keyvalue
-          name: mavo-talk-key-value
+          name: mavotalk-maisvarejo-key-value
           property: connectionString
       - key: MAVO_QUEUE_ENV
         value: production
@@ -109,7 +123,7 @@ services:
       - key: TWILIO_WHATSAPP_NUMBER
         sync: false
       - key: TWILIO_WEBHOOK_BASE_URL
-        value: https://mavo-talk-api.onrender.com
+        value: https://mavotalk-maisvarejo-api.onrender.com
       - key: WHATSAPP_AUTH_PATH
         value: /tmp/whatsapp_auth
       - key: WHATSAPP_AUTH_STORE
@@ -117,18 +131,18 @@ services:
       - key: WHATSAPP_AUTH_ENCRYPTION_KEY
         generateValue: true
       - key: WHATSAPP_SESSION_NAME
-        value: mavo-talk-production
+        value: mavotalk-maisvarejo
       # Somente usado pelo fallback filesystem.
       - key: WHATSAPP_ALLOW_EPHEMERAL_SESSION
         value: "false"
       - key: WHATSAPP_AUTO_CONNECT
         value: "true"
       - key: DEFAULT_ORG_ID
-        sync: false
+        value: org_maisvarejo
       - key: WILLTALK_WEBHOOK_TOKEN
         generateValue: true
       - key: WILLTALK_WEBHOOK_ORGANIZATION_ID
-        sync: false
+        value: org_maisvarejo
       - key: WILLTALK_AI_TRIAGE_ONLY
         value: "true"
       - key: WILLTALK_N8N_ONLY
@@ -136,9 +150,9 @@ services:
       - key: WILLTALK_DRY_RUN_WHATSAPP
         value: "false"
       - key: SUPERMARKET_BOT_ENABLED
-        value: "true"
+        value: "false"
       - key: SUPERMARKET_AUTO_APPLY_PRESET
-        value: "true"
+        value: "false"
       - key: SUPERMARKET_BOT_NAME
         value: Mavo
       - key: SUPERMARKET_NAME
@@ -216,7 +230,7 @@ services:
       - key: MAVO_MASTER_PASSWORD
         sync: false
       - key: MAVO_MASTER_NAME
-        value: Administrador Mavo
+        value: Administrador Mais Varejo
       - key: MAVO_AI_BASE_URL
         sync: false
       - key: MAVO_AI_TOKEN
@@ -231,16 +245,16 @@ services:
         sync: false
 
   - type: web
-    name: mavo-talk-web
+    name: mavotalk-maisvarejo-web
     runtime: static
     rootDir: frontend
     buildCommand: npm ci --include=dev && npm run typecheck && npm run build
     staticPublishPath: ./dist
     envVars:
       - key: VITE_API_BASE_URL
-        sync: false
+        value: https://mavotalk-maisvarejo-api.onrender.com
       - key: VITE_SOCKET_URL
-        sync: false
+        value: https://mavotalk-maisvarejo-api.onrender.com
     headers:
       - path: /*
         name: X-Content-Type-Options
@@ -275,7 +289,7 @@ services:
         destination: /index.html
 
   - type: keyvalue
-    name: mavo-talk-key-value
+    name: mavotalk-maisvarejo-key-value
     region: virginia
     plan: free
     ipAllowList: []
