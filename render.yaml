@@ -203,8 +203,13 @@ services:
         value: "true"
       - key: MAVO_BUSINESS_ACCESS_ENABLED
         value: "true"
+      # Canal do agente cloud que sincroniza ERP (vendas, estoque, heartbeat) de
+      # supermercado. O Mais Varejo e empresa de suporte e nao usa. Desligado,
+      # runtime-env.cjs deixa de exigir MAVO_AGENT_CREDENTIAL_ENCRYPTION_KEY no
+      # boot, e /api/agent/v1/* e /api/admin/agents/* saem do ar.
+      # Para reativar: volte para "true" E preencha a chave com 32 bytes base64.
       - key: MAVO_AGENT_API_ENABLED
-        value: "true"
+        value: "false"
       - key: MAVO_MCP_ENABLED
         value: "false"
       - key: MAVO_AGENT_CREDENTIAL_ENCRYPTION_KEY

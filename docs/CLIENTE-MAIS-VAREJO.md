@@ -56,13 +56,18 @@ o `main`. Os três serviços existem, em plano free:
 Os hostnames saíram sem sufixo, então as seis URLs fixadas no `render.yaml` estão
 corretas. A cota free é **por workspace** (750 h), confirmada na aba de billing.
 
-**Supabase** — projeto `mkzeslthjqonaajszbyc`, org `mavotalk-maisvarejo`, plano free.
+**Supabase** — projeto `azqxothepfxacafdmjoy` (nome `mavotalk-maisvarejo`),
+org `mavotalk-maisvarejo`, plano free, us-east-2.
 
 ```
-DATABASE_URL_RUNTIME    = postgresql://postgres.mkzeslthjqonaajszbyc:<SENHA>@aws-0-us-east-2.pooler.supabase.com:5432/postgres
+DATABASE_URL_RUNTIME    = postgresql://postgres.azqxothepfxacafdmjoy:<SENHA>@aws-0-us-east-2.pooler.supabase.com:5432/postgres
 DATABASE_URL_MIGRATIONS = (o mesmo)
 PG_SSL                  = true
 ```
+
+Host confirmado no painel em 31/08/2026. É o **Session pooler**: a conexão
+direta (`db.<ref>.supabase.co`) é IPv6 e a Render não alcança, e o Transaction
+pooler não mantém sessão, que as migrations exigem.
 
 É o **Session pooler**, porta 5432. A conexão direta (`db.<ref>.supabase.co`) é
 IPv6 e a Render não alcança; o pooler é proxiado em IPv4. Não troque por
@@ -88,7 +93,9 @@ problema: são ~10-12 ms por query, imperceptíveis num plano free que já hiber
    - `DATABASE_URL_RUNTIME` e `DATABASE_URL_MIGRATIONS` — a string acima com a
      senha real do banco. Se a senha tiver caractere especial, faça percent-encode.
    - `MAVO_MASTER_EMAIL` e `MAVO_MASTER_PASSWORD` — login master de `/mavo`.
-   - `MAVO_AGENT_CREDENTIAL_ENCRYPTION_KEY` — `openssl rand -base64 32`.
+   - `MAVO_AGENT_CREDENTIAL_ENCRYPTION_KEY` — **nao e mais necessaria**: a API
+     do agente cloud esta desligada (`MAVO_AGENT_API_ENABLED=false`), e o
+     validador de boot so exige a chave quando ela esta ligada.
    - Conforme o uso: `CLOUDINARY_*`, `TWILIO_*`, `MAVO_AI_*`,
      `MAVO_METRICS_TOKEN` / `MAVO_MANAGEMENT_URL`.
    - `SUPERMARKET_*`: deixe em branco, o bot está desligado.
