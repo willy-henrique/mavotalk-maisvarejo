@@ -18,9 +18,12 @@ horas de um mês. **Um serviço web acordado 24/7 já consome a cota inteira** �
 isso o cliente novo precisa do próprio workspace/conta no Render, não de mais um
 serviço no workspace atual.
 
-> Confirme na aba de billing do Render se a cota gratuita é contada por workspace
-> ou por login, e se o plano free permite um segundo Key Value. Se for por login,
-> a saída é conta separada (verifique os termos do Render) ou plano pago.
+> **Confirmado em 28/08/2026**, na aba de billing de um workspace recém-criado:
+> o painel diz que o uso incluído "applies to the entire workspace" e mostra Free
+> Instance Hours 0/750 zerado. A cota é **por workspace**, não por login — abrir
+> um workspace novo basta, conta separada não é necessária. E como o Key Value do
+> cliente novo é o primeiro daquele workspace, a dúvida sobre um segundo Key Value
+> no plano free não se aplica nesse caminho.
 
 ## 0. Insumos que você precisa ter em mãos antes de começar
 

@@ -42,29 +42,67 @@ real desta cópia e o que ainda falta.
 > O hostname `.onrender.com` é global. Se o Render gerar sufixo em algum serviço,
 > corrija as seis variáveis de URL no `render.yaml` antes do primeiro deploy.
 
+## Infraestrutura provisionada (31/08/2026)
+
+**Render** — workspace `mavotalk-maisvarejo`, Blueprint de mesmo nome sincronizando
+o `main`. Os três serviços existem, em plano free:
+
+| Serviço | Região | URL |
+| --- | --- | --- |
+| `mavotalk-maisvarejo-api` | Virginia | https://mavotalk-maisvarejo-api.onrender.com |
+| `mavotalk-maisvarejo-web` | Global (CDN) | https://mavotalk-maisvarejo-web.onrender.com |
+| `mavotalk-maisvarejo-key-value` | Virginia | interno, via `fromService` |
+
+Os hostnames saíram sem sufixo, então as seis URLs fixadas no `render.yaml` estão
+corretas. A cota free é **por workspace** (750 h), confirmada na aba de billing.
+
+**Supabase** — projeto `mkzeslthjqonaajszbyc`, org `mavotalk-maisvarejo`, plano free.
+
+```
+DATABASE_URL_RUNTIME    = postgresql://postgres.mkzeslthjqonaajszbyc:<SENHA>@aws-0-us-east-2.pooler.supabase.com:5432/postgres
+DATABASE_URL_MIGRATIONS = (o mesmo)
+PG_SSL                  = true
+```
+
+É o **Session pooler**, porta 5432. A conexão direta (`db.<ref>.supabase.co`) é
+IPv6 e a Render não alcança; o pooler é proxiado em IPv4. Não troque por
+Transaction pooler: as migrations usam sessão.
+
+`SUPABASE_URL`, `SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY` **não precisam
+ser preenchidas.** `lib/supabase-admin.ts` cai no shim sobre Postgres sempre que
+`DATABASE_URL_RUNTIME` existe, e só `scripts/seed-supabase.mjs` (dev) usa o cliente
+REST. Deixar a service_role fora do painel do Render reduz o raio de exposição.
+
+### Divergência de região, aceita conscientemente
+
+O Supabase está em **us-east-2 (Ohio)** e a Render em **Virginia (us-east-1)**.
+Região no Supabase é imutável e os serviços da Render já estavam criados com os
+hostnames certos, então recriar qualquer um dos lados custava mais do que o
+problema: são ~10-12 ms por query, imperceptíveis num plano free que já hiberna
+15 min e leva ~50 s para acordar. **Isto é uma decisão, não um bug** — não
+"corrija" recriando o projeto sem antes reler este parágrafo.
+
 ## O que falta
 
-1. **Criar o repositório** `willy-henrique/mavotalk-maisvarejo` (privado) e
-   `git push -u origin main`. O Blueprint do Render precisa de um repo.
-2. **Supabase novo**, região `us-east-1`, *Enable Data API* desmarcado.
-   Copiar a connection string do **Session pooler** (porta 5432).
-3. **Render → New → Blueprint** apontando para o repo novo.
-4. **Preencher as variáveis `sync: false`** no painel:
-   - Obrigatórias: `DATABASE_URL_RUNTIME`, `DATABASE_URL_MIGRATIONS`,
-     `MAVO_MASTER_EMAIL`, `MAVO_MASTER_PASSWORD`,
-     `MAVO_AGENT_CREDENTIAL_ENCRYPTION_KEY` (`openssl rand -base64 32`).
-   - Opcionais conforme o uso: `SUPABASE_*`, `CLOUDINARY_*` (prefira cloud ou
-     pasta separada do cliente anterior), `TWILIO_*`, `MAVO_AI_*`,
+1. **Preencher no painel do Render** (nenhuma delas passa por este repositório):
+   - `DATABASE_URL_RUNTIME` e `DATABASE_URL_MIGRATIONS` — a string acima com a
+     senha real do banco. Se a senha tiver caractere especial, faça percent-encode.
+   - `MAVO_MASTER_EMAIL` e `MAVO_MASTER_PASSWORD` — login master de `/mavo`.
+   - `MAVO_AGENT_CREDENTIAL_ENCRYPTION_KEY` — `openssl rand -base64 32`.
+   - Conforme o uso: `CLOUDINARY_*`, `TWILIO_*`, `MAVO_AI_*`,
      `MAVO_METRICS_TOKEN` / `MAVO_MANAGEMENT_URL`.
-   - `SUPERMARKET_*`: pode deixar em branco — com o bot desligado não são lidas.
+   - `SUPERMARKET_*`: deixe em branco, o bot está desligado.
    - `JWT_SECRET`, `WHATSAPP_AUTH_ENCRYPTION_KEY` e `WILLTALK_WEBHOOK_TOKEN` o
-     Render gera sozinho (`generateValue`). Não cole os do willtalk.
-5. **Cadastrar as filas reais do suporte** pelo painel `/mavo` antes de conectar
-   o WhatsApp. As opções de menu **1, 2 e 6 são filas protegidas**
-   (`isProtectedSystemQueue`): dá para renomear, não para excluir.
-6. **Ler o QR** no número exclusivo do cliente e reiniciar o serviço para
+     Render já gerou (`generateValue`). Não cole os do willtalk.
+2. **Redeployar a API.** O primeiro build falhou só em `db:migrate` por falta de
+   `DATABASE_URL_MIGRATIONS`; `npm ci` e `next build` já passam.
+3. **Data API do Supabase** ainda ligada — o passo 3 do runbook pede desligar.
+4. **Cadastrar as filas reais do suporte** em `/mavo` antes de conectar o WhatsApp.
+   As opções de menu **1, 2 e 6 são filas protegidas** (`isProtectedSystemQueue`):
+   dá para renomear, não para excluir.
+5. **Ler o QR** no número exclusivo do cliente e reiniciar o serviço para
    confirmar que a sessão persistiu no banco.
-7. **Keep-alive externo** (UptimeRobot / cron-job.org) a cada 10 min na URL nova
+6. **Keep-alive externo** (UptimeRobot / cron-job.org) a cada 10 min na URL da API
    — sem ele o serviço free hiberna em 15 min e o bot cai.
 
 ## Rodar local

@@ -155,8 +155,12 @@ services:
         value: "false"
       - key: SUPERMARKET_BOT_NAME
         value: Mavo
+      # Apesar do nome legado, esta variavel e o NOME DA ORGANIZACAO criada pelo
+      # db:bootstrap:production (scripts/db-bootstrap-common.mjs). Vazia, a org
+      # nasce como "Supermercado Mavo", e o INSERT e ON CONFLICT DO NOTHING:
+      # redeploy nao corrige. Fica fixa aqui, nao e segredo.
       - key: SUPERMARKET_NAME
-        sync: false
+        value: Mais Varejo
       - key: SUPERMARKET_ADDRESS
         sync: false
       - key: SUPERMARKET_MAPS_URL
