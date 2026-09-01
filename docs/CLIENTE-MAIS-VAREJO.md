@@ -65,13 +65,9 @@ DATABASE_URL_MIGRATIONS = (o mesmo)
 PG_SSL                  = true
 ```
 
-Host confirmado no painel em 31/08/2026. É o **Session pooler**: a conexão
-direta (`db.<ref>.supabase.co`) é IPv6 e a Render não alcança, e o Transaction
-pooler não mantém sessão, que as migrations exigem.
-
-É o **Session pooler**, porta 5432. A conexão direta (`db.<ref>.supabase.co`) é
-IPv6 e a Render não alcança; o pooler é proxiado em IPv4. Não troque por
-Transaction pooler: as migrations usam sessão.
+Host confirmado no painel em 31/08/2026. É o **Session pooler**, porta 5432: a
+conexão direta (`db.<ref>.supabase.co`) é IPv6 e a Render não alcança, e o
+Transaction pooler não mantém sessão, que as migrations exigem.
 
 `SUPABASE_URL`, `SUPABASE_ANON_KEY` e `SUPABASE_SERVICE_ROLE_KEY` **não precisam
 ser preenchidas.** `lib/supabase-admin.ts` cai no shim sobre Postgres sempre que
@@ -90,8 +86,14 @@ problema: são ~10-12 ms por query, imperceptíveis num plano free que já hiber
 ## O que falta
 
 1. **Preencher no painel do Render** (nenhuma delas passa por este repositório):
-   - `DATABASE_URL_RUNTIME` e `DATABASE_URL_MIGRATIONS` — a string acima com a
-     senha real do banco. Se a senha tiver caractere especial, faça percent-encode.
+   - `DATABASE_URL_RUNTIME` — a string acima com a senha real do banco. Se a
+     senha tiver caractere especial, faça percent-encode.
+   - `DATABASE_URL_MIGRATIONS` **não existe nesta instância, de propósito.**
+     `scripts/db-common.mjs` resolve `MIGRATIONS || RUNTIME || DATABASE_URL`, e
+     aqui as duas seriam idênticas: no Supabase free a conexão direta é IPv6 e
+     inalcançável pela Render, então migrations e runtime usam o mesmo pooler.
+     Um segredo em vez de dois, sem risco de divergirem. Se algum dia o banco
+     ganhar uma rota separada para migration, crie a variável então.
    - `MAVO_MASTER_EMAIL` e `MAVO_MASTER_PASSWORD` — login master de `/mavo`.
    - `MAVO_AGENT_CREDENTIAL_ENCRYPTION_KEY` — **nao e mais necessaria**: a API
      do agente cloud esta desligada (`MAVO_AGENT_API_ENABLED=false`), e o
@@ -101,15 +103,34 @@ problema: são ~10-12 ms por query, imperceptíveis num plano free que já hiber
    - `SUPERMARKET_*`: deixe em branco, o bot está desligado.
    - `JWT_SECRET`, `WHATSAPP_AUTH_ENCRYPTION_KEY` e `WILLTALK_WEBHOOK_TOKEN` o
      Render já gerou (`generateValue`). Não cole os do willtalk.
-2. **Redeployar a API.** O primeiro build falhou só em `db:migrate` por falta de
-   `DATABASE_URL_MIGRATIONS`; `npm ci` e `next build` já passam.
-3. **Data API do Supabase** ainda ligada — o passo 3 do runbook pede desligar.
-4. **Cadastrar as filas reais do suporte** em `/mavo` antes de conectar o WhatsApp.
-   As opções de menu **1, 2 e 6 são filas protegidas** (`isProtectedSystemQueue`):
-   dá para renomear, não para excluir.
-5. **Ler o QR** no número exclusivo do cliente e reiniciar o serviço para
+2. ~~Redeployar a API.~~ **Feito em 31/08/2026, commit `aa4c593`:** `/api/health`
+   responde `status: ok`, `database: connected`, `redis: connected`. O WhatsApp
+   está em `status: qr`, aguardando leitura.
+3. **Criar o primeiro usuário de equipe — bloqueia tudo abaixo.** `/mavo` (login
+   master) e `/login` (equipe) são contas **separadas**: o master só vê visão
+   geral de organizações, não gerencia fila nem usuário. Filas ficam atrás de
+   `/api/queues`, que exige sessão de equipe — e como `/api/admin/users` (cria
+   usuário pelo painel) também exige sessão de equipe já autenticada, não existe
+   caminho pela própria aplicação para o primeiro usuário. Rode uma vez, da sua
+   máquina, com a senha real do banco:
+   ```bash
+   TEAM_ADMIN_NAME="Seu Nome" \
+   TEAM_ADMIN_EMAIL="voce@maisvarejo.com.br" \
+   TEAM_ADMIN_PASSWORD="senha-forte-aqui" \
+   DATABASE_URL_RUNTIME="postgresql://postgres.azqxothepfxacafdmjoy:<SENHA>@aws-0-us-east-2.pooler.supabase.com:5432/postgres" \
+   npm run db:create-admin
+   ```
+   Script novo, [`scripts/create-team-admin.mjs`](../scripts/create-team-admin.mjs)
+   — não existia no produto base. Idempotente: rodar de novo com o mesmo e-mail
+   só avisa que já existe, não sobrescreve senha. Depois desse primeiro admin,
+   crie o resto da equipe pelo painel.
+4. **Data API do Supabase** ainda ligada — o passo 3 do runbook pede desligar.
+5. **Cadastrar as filas reais do suporte** em `/dashboard/queues` (equipe, não
+   `/mavo`) antes de conectar o WhatsApp. As opções de menu **1, 2 e 6 são filas
+   protegidas** (`isProtectedSystemQueue`): dá para renomear, não para excluir.
+6. **Ler o QR** no número exclusivo do cliente e reiniciar o serviço para
    confirmar que a sessão persistiu no banco.
-6. **Keep-alive externo** (UptimeRobot / cron-job.org) a cada 10 min na URL da API
+7. **Keep-alive externo** (UptimeRobot / cron-job.org) a cada 10 min na URL da API
    — sem ele o serviço free hiberna em 15 min e o bot cai.
 
 ## Rodar local

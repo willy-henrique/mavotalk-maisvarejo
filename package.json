@@ -22,6 +22,7 @@
     "db:bootstrap:production": "node scripts/db-bootstrap-production.mjs",
     "db:verify": "node scripts/db-verify.mjs",
     "db:seed:development": "node scripts/db-seed-development.mjs",
+    "db:create-admin": "node scripts/create-team-admin.mjs",
     "render:validate": "node scripts/validate-render-blueprint.mjs",
     "seed": "npm run db:seed:development",
     "seed-supabase": "node scripts/seed-supabase.mjs",

@@ -116,15 +116,35 @@ BUSINESS_HOURS_SUNDAY_CLOSED=false
 Para fechar um grupo de dias, use `true` no respectivo campo `*_CLOSED`. Um dia
 marcado como inativo no cadastro do banco nunca cai no horário padrão.
 
-## 5. Seed inicial
+## 5. Primeiro usuário de equipe
 
-O plano gratuito **não dá acesso ao Render Shell**. Rode o seed da sua máquina, apontando para o Supabase:
+`db:bootstrap:production` (etapa 4) cria só a organização. **Não use
+`db:seed:development` aqui** — mesmo apontado para o banco de produção, ele
+cria uma organização de desenvolvimento fixa e separada
+(`org_mavo_talk_development`) com 30 dias de vendas fictícias, e é bloqueado
+quando `NODE_ENV=production`.
+
+Sem um usuário na tabela `users`, ninguém consegue logar em `/login` — e como
+`/api/admin/users` (que cria usuários pelo painel) exige uma sessão de equipe
+já autenticada, a aplicação não tem como sair sozinha desse estado. O plano
+gratuito também não dá acesso ao Render Shell, então rode da sua máquina,
+apontando para o Supabase:
 
 ```bash
-DATABASE_URL_RUNTIME="<session pooler>" npm run db:seed:development
+TEAM_ADMIN_NAME="Seu Nome" \
+TEAM_ADMIN_EMAIL="voce@seudominio.com.br" \
+TEAM_ADMIN_PASSWORD="senha-forte-aqui" \
+DATABASE_URL_RUNTIME="<session pooler>" \
+npm run db:create-admin
 ```
 
-O comando é idempotente e cria/atualiza a organização, o administrador da operação e as filas do supermercado.
+É idempotente: rodar de novo com o mesmo e-mail não sobrescreve nada, só avisa
+que o usuário já existe. Depois desse primeiro admin, crie o resto da equipe
+pelo painel (`/dashboard` → Usuários), autenticado como esse usuário.
+
+`/mavo` (login master, `MAVO_MASTER_EMAIL`/`MAVO_MASTER_PASSWORD`) é uma conta
+**separada** — visão geral de organizações, não gerencia filas nem usuários de
+equipe.
 
 Depois acesse:
 
