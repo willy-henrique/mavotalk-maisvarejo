@@ -55,7 +55,12 @@ export async function requireMenuPermission(
   itemId: string,
   action: MenuPermissionAction,
 ) {
+  // A conexão WhatsApp controla a sessão operacional inteira. Mesmo que uma
+  // configuração antiga de menu tente liberá-la, atendente não pode consultar,
+  // parear ou desconectar a conta.
+  if (itemId === "painel" && session.role === "atendente") {
+    return NextResponse.json({ error: "Sem permissão" }, { status: 403 });
+  }
   const allowed = await hasMenuPermission(session.organizationId, session.role, itemId, action);
   return allowed ? null : NextResponse.json({ error: "Sem permissão" }, { status: 403 });
 }
-

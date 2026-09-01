@@ -214,6 +214,10 @@ services:
         value: "false"
       - key: MAVO_AGENT_CREDENTIAL_ENCRYPTION_KEY
         sync: false
+      # Cofre de AnyDesk/TeamViewer. Obrigatória apenas para salvar ou revelar
+      # senhas; os IDs continuam disponíveis sem ela.
+      - key: MAVO_REMOTE_ACCESS_ENCRYPTION_KEY
+        sync: false
       - key: MAVO_AGENT_CLOCK_TOLERANCE_SECONDS
         value: "300"
       - key: MAVO_AGENT_MAX_PAYLOAD_BYTES
