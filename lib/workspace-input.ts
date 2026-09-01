@@ -1,6 +1,8 @@
 import type { PersonalWorkspaceItemInput } from "@/lib/personal-workspace";
 import type { RemoteAccessInput } from "@/lib/remote-accesses";
 
+function text(value: unknown, max: number): string | undefined;
+function text(value: unknown, max: number, nullable: true): string | null | undefined;
 function text(value: unknown, max: number, nullable = false): string | null | undefined {
   if (value === undefined) return undefined;
   if (value === null && nullable) return null;
