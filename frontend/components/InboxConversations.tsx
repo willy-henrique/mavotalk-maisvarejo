@@ -915,28 +915,33 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
 
   return (
     <div className="flex flex-1 overflow-hidden min-h-0 min-w-0 bg-slate-50 dark:bg-slate-800/95 transition-colors">
-      <div className={`${selected ? 'hidden md:flex' : 'flex'} w-full md:w-80 lg:w-[22rem] flex-col border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 shrink-0 min-h-0 overflow-hidden transition-colors`}>
-        <div className="p-4 border-b border-slate-200 dark:border-slate-700">
-          <div className="flex items-start justify-between gap-3 mb-4">
-            <div><p className="text-[10px] font-black uppercase tracking-[.18em] text-blue-600 dark:text-blue-400">Operação</p><h1 className="mt-1 text-xl font-black tracking-tight text-slate-900 dark:text-white">Caixa de entrada</h1><p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Acompanhe e distribua os atendimentos.</p></div>
-            <button type="button" onClick={() => setNewChatOpen(true)} className="shrink-0 rounded-xl bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700" title="Iniciar conversa com um número novo">+ Nova conversa</button>
-            <button type="button" onClick={() => void fetchConversations(false)} className="shrink-0 rounded-xl border border-slate-200 dark:border-slate-700 p-2 text-slate-500 transition hover:bg-slate-100 hover:text-blue-600 dark:hover:bg-slate-800" title="Atualizar conversas" aria-label="Atualizar conversas"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path fillRule="evenodd" d="M15.312 5.312a8 8 0 1 0 1.883 8.237.75.75 0 0 0-1.436-.433A6.5 6.5 0 1 1 14.25 7.25V5.5a.75.75 0 0 0-1.5 0V9a.75.75 0 0 0 .75.75H17a.75.75 0 0 0 0-1.5h-1.688V5.312Z" clipRule="evenodd" /></svg></button>
+      <div className={`${selected ? 'hidden md:flex' : 'flex'} w-full md:w-[23rem] lg:w-[24rem] flex-col border-r border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/80 shrink-0 min-h-0 overflow-hidden transition-colors`}>
+        <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-700">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[.16em] text-blue-600 dark:text-blue-400">Atendimento</p>
+              <div className="mt-0.5 flex items-center gap-2">
+                <h1 className="text-base font-black tracking-tight text-slate-900 dark:text-white">Conversas</h1>
+                <span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-500/15 dark:text-blue-200">{formatCount(countAbertas, countsCapped)} abertas</span>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button type="button" onClick={() => void fetchConversations(false)} className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 dark:border-slate-700 dark:hover:border-blue-500/40 dark:hover:bg-blue-500/10" title="Atualizar conversas" aria-label="Atualizar conversas"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4"><path fillRule="evenodd" d="M15.312 5.312a8 8 0 1 0 1.883 8.237.75.75 0 0 0-1.436-.433A6.5 6.5 0 1 1 14.25 7.25V5.5a.75.75 0 0 0-1.5 0V9a.75.75 0 0 0 .75.75H17a.75.75 0 0 0 0-1.5h-1.688V5.312Z" clipRule="evenodd" /></svg></button>
+              <button type="button" onClick={() => setNewChatOpen(true)} className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white shadow-sm shadow-blue-950/20 transition hover:bg-blue-700" title="Iniciar conversa com um número novo"><span className="text-base font-medium leading-none">+</span> Nova</button>
+            </div>
           </div>
-          <label className="relative block mb-4"><span className="sr-only">Pesquisar conversas</span><input value={listSearch} onChange={(event) => setListSearch(event.target.value)} placeholder="Buscar por nome, telefone ou mensagem" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 py-2.5 pl-9 pr-3 text-xs text-slate-800 dark:text-white outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400"><path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.447 9.785l2.634 2.634a.75.75 0 1 0 1.06-1.06l-2.633-2.634A5.5 5.5 0 0 0 9 3.5ZM5 9a4 4 0 1 1 8 0 4 4 0 0 1-8 0Z" clipRule="evenodd" /></svg></label>
-          <div className="grid grid-cols-3 gap-1 mb-4">
+          <label className="relative mt-3 block"><span className="sr-only">Pesquisar conversas</span><input value={listSearch} onChange={(event) => setListSearch(event.target.value)} placeholder="Buscar conversa" className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 py-2.5 pl-9 pr-3 text-xs text-slate-800 dark:text-white outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10" /><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400"><path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 3.447 9.785l2.634 2.634a.75.75 0 1 0 1.06-1.06l-2.633-2.634A5.5 5.5 0 0 0 9 3.5ZM5 9a4 4 0 1 1 8 0 4 4 0 0 1-8 0Z" clipRule="evenodd" /></svg></label>
+          <div className="mt-3 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-950/60">
             <button
               type="button"
               onClick={() => { setTabAbertas('abertas'); setStatusFilter(null); setQueueFilter(null); }}
-              className={`flex items-center justify-center gap-1.5 min-w-0 px-2 py-2.5 rounded-t-lg text-xs font-bold transition-all ${
+              className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-bold transition-all ${
                 tabAbertas === 'abertas'
                   ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                  : 'bg-slate-200 text-slate-600 hover:text-slate-800 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  : 'text-slate-500 hover:bg-white hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
               }`}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                <path fillRule="evenodd" d="M5.625 1.5H9a3.75 3.75 0 013.75 3.75v1.875c0 1.036.84 1.875 1.875 1.875H16.5a3.75 3.75 0 013.75 3.75v7.875c0 1.035-.84 1.875-1.875 1.875H5.625a1.875 1.875 0 01-1.875-1.875V3.375c0-1.036.84-1.875 1.875-1.875zm6 16.5c.66 0 1.277-.19 1.797-.518L12 13.439l-1.422 1.043c-.52.328-1.137.518-1.797.518-.825 0-1.5-.675-1.5-1.5s.675-1.5 1.5-1.5c.66 0 1.277.19 1.797.518L12 11.061l1.422-1.043C13.863 9.69 14.478 9.5 15.139 9.5c.825 0 1.5.675 1.5 1.5s-.675 1.5-1.5 1.5z" clipRule="evenodd" />
-              </svg>
-              ABERTAS
+              Abertas
               {/* O contador fica na aba de propósito: quem está trabalhando dentro de
                   MINHAS precisa perceber que chegou coisa nova na fila geral sem
                   ter que trocar de aba para descobrir. */}
@@ -947,17 +952,14 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
             <button
               type="button"
               onClick={() => { setTabAbertas('minhas'); setStatusFilter(null); setQueueFilter(null); }}
-              className={`flex items-center justify-center gap-1.5 min-w-0 px-2 py-2.5 rounded-t-lg text-xs font-bold transition-all ${
+              className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-bold transition-all ${
                 tabAbertas === 'minhas'
                   ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                  : 'bg-slate-200 text-slate-600 hover:text-slate-800 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  : 'text-slate-500 hover:bg-white hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
               }`}
               title="Chamados em aberto que você puxou"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                <path fillRule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" clipRule="evenodd" />
-              </svg>
-              MINHAS
+              Minhas
               <span className="flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-white/25 px-1.5 text-[10px]">
                 {formatCount(countMinhas, countsCapped)}
               </span>
@@ -965,24 +967,19 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
             <button
               type="button"
               onClick={() => { setTabAbertas('resolvidos'); setStatusFilter(null); setQueueFilter(null); }}
-              className={`flex items-center justify-center gap-1.5 min-w-0 px-2 py-2.5 rounded-t-lg text-xs font-bold transition-all ${
+              className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-[11px] font-bold transition-all ${
                 tabAbertas === 'resolvidos'
                   ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30'
-                  : 'bg-slate-200 text-slate-600 hover:text-slate-800 dark:bg-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                  : 'text-slate-500 hover:bg-white hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200'
               }`}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                <path fillRule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clipRule="evenodd" />
-              </svg>
-              RESOLVIDOS
+              Resolvidos
             </button>
           </div>
-          {/* Situação fica à vista; fila vai para o menu.
-              A versão anterior mandou as duas para dentro do menu e escondeu o
-              AGUARDANDO — o número que o atendente olha o dia inteiro para saber
-              quem está esperando ser puxado. Filtro de fila é navegação e cabe num
-              menu; contagem de quem espera é sinal operacional e não cabe. */}
-          <div className="mt-3 grid grid-cols-[auto_1fr_1.15fr_1fr_auto] items-center gap-1.5">
+          {/* Fila e situação pertencem ao mesmo contexto, em uma única linha de
+              trabalho. O menu guarda a lista extensa de filas; os estados que
+              orientam a prioridade continuam visíveis. */}
+          <div className="mt-3 flex items-center gap-1.5">
             <div className="relative shrink-0">
               <button
                 type="button"
@@ -990,7 +987,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                 onClick={() => setFiltersOpen((open) => !open)}
                 aria-expanded={filtersOpen}
                 aria-haspopup="menu"
-                className={`relative z-40 flex max-w-[11rem] items-center gap-1.5 rounded-lg py-2 text-xs font-bold transition-colors ${selectedQueueChip ? 'px-2.5' : 'px-1.5'} ${
+                className={`relative z-40 flex max-w-[11rem] items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-bold transition-colors ${
                   filtersOpen || queueFilter
                     ? 'bg-blue-600 text-white shadow-md'
                     : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
@@ -1000,10 +997,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0">
                   <path fillRule="evenodd" d="M2 4.75A.75.75 0 0 1 2.75 4h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 4.75Zm0 5A.75.75 0 0 1 2.75 9h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 9.75Zm0 5a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z" clipRule="evenodd" />
                 </svg>
-                {/* Só o ícone enquanto nenhuma fila está escolhida: assim os três
-                    contadores de situação cabem na mesma linha. Escolhida uma fila, o
-                    botão passa a exibi-la — a essa altura o atendente filtrou de
-                    propósito e ver o nome importa mais do que economizar espaço. */}
+                {!selectedQueueChip && <span>Filas</span>}
                 {selectedQueueChip && (
                   <>
                     <span className="h-2 w-2 shrink-0 rounded-full bg-white/80" />
@@ -1084,10 +1078,8 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
               )}
             </div>
 
-            {/* Os três estados do atendimento, sempre visíveis. Clicar filtra.
-              A coluna do meio é 15% mais larga porque Aguardando é a palavra mais
-              longa e, não por acaso, o contador mais consultado: é a fila de quem
-              está esperando ser puxado. Com colunas iguais o rótulo dela cortava. */}
+            {/* Os três estados continuam visíveis para dar leitura imediata de
+                prioridade, sem adicionar uma nova fileira de controles. */}
             {statusOptions.map((option) => {
               const active = statusFilter === option.value;
               return (
@@ -1095,7 +1087,7 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
                   key={option.value}
                   type="button"
                   onClick={() => setStatusFilter((prev) => (prev === option.value ? null : option.value))}
-                  className={`flex min-w-0 items-center justify-center gap-1 rounded-lg px-1 py-1.5 text-[10px] font-bold transition-all ${
+                  className={`flex min-w-0 flex-1 items-center justify-center gap-1 rounded-lg px-1.5 py-1.5 text-[10px] font-bold transition-all ${
                     active
                       ? 'bg-blue-600 text-white shadow-md'
                       : 'bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
@@ -1135,8 +1127,15 @@ export const InboxConversations: React.FC<InboxConversationsProps> = ({ currentU
           {loading ? (
             <div className="p-8 text-center text-slate-500 dark:text-slate-400 text-sm">Carregando...</div>
           ) : filtered.length === 0 ? (
-            <div className="p-8 text-center text-slate-500 text-sm">
-              Nenhum ticket {tabAbertas === 'resolvidos' ? 'resolvido' : tabAbertas === 'minhas' ? 'seu em aberto' : 'aberto'}.
+            <div className="flex min-h-[18rem] flex-col items-center justify-center px-8 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6" aria-hidden="true"><path fillRule="evenodd" d="M4.848 2.771A49.144 49.144 0 0112 2.25c2.43 0 4.817.178 7.152.52 1.978.292 3.348 2.024 3.348 3.97v6.02c0 1.946-1.37 3.678-3.348 3.97-1.94.284-3.916.455-5.922.505a.803.803 0 00-.921.921 11.447 11.447 0 01.505 5.922c.292 1.978 2.024 3.348 3.97 3.348h6.02c1.946 0 3.678-1.37 3.97-3.348.284-1.94.455-3.916.505-5.922a.803.803 0 00-.921-.921 11.447 11.447 0 01-5.922-.505C18.318 18.37 16.586 17 14.63 17h-6.02c-1.946 0-3.678 1.37-3.97 3.348A11.464 11.464 0 013.381 16.18a.803.803 0 00.921.921 11.446 11.446 0 005.922.505c1.978-.292 2.43-1.978 2.43-3.97v-6.02c0-1.946-1.37-3.678-3.348-3.97A11.464 11.464 0 013.381 7.82a.803.803 0 00-.921-.921 11.446 11.446 0 01-.505-5.922c.292-1.978 2.024-3.348 3.97-3.348h6.02c1.946 0 3.678 1.37 3.97 3.348.05 1.006.121 2.032.505 3.206z" clipRule="evenodd" /></svg>
+              </div>
+              <p className="mt-4 text-sm font-bold text-slate-700 dark:text-slate-200">Tudo tranquilo por aqui</p>
+              <p className="mt-1 max-w-[16rem] text-xs leading-5 text-slate-500 dark:text-slate-400">Nenhum ticket {tabAbertas === 'resolvidos' ? 'resolvido' : tabAbertas === 'minhas' ? 'seu em aberto' : 'aberto'} nesta visão.</p>
+              {tabAbertas === 'abertas' && !listSearch && !statusFilter && !queueFilter && (
+                <button type="button" onClick={() => setNewChatOpen(true)} className="mt-4 text-xs font-bold text-blue-600 transition hover:text-blue-700 dark:text-blue-400">Iniciar nova conversa</button>
+              )}
             </div>
           ) : (
             groups.map((group) => {

@@ -100,10 +100,17 @@ test("filtros do Inbox cabem em um menu, não em fileiras de chips", async () =>
   const source = await readFile("frontend/components/InboxConversations.tsx", "utf8");
 
   const cabecalho = source.slice(
-    source.indexOf('<div className="grid grid-cols-3 gap-1 mb-4">'),
+    source.indexOf('<div className="border-b border-slate-200 px-4 py-3'),
     source.indexOf('<div className="flex-1 overflow-y-auto'),
   );
   assert.ok(cabecalho.length > 0, "não localizei o cabeçalho da lista");
+
+  // A coluna não repete mais o título grande da página e concentra suas ações
+  // no mesmo plano visual: contexto, busca, abas e filtros.
+  assert.match(cabecalho, /Atendimento/);
+  assert.match(cabecalho, /Conversas/);
+  assert.match(cabecalho, /Buscar conversa/);
+  assert.match(cabecalho, /rounded-xl bg-slate-100 p-1/);
 
   // Menu só para fila. Situação NÃO pode morar aqui: o contador de quem está
   // esperando ser puxado é o que o atendente olha o dia inteiro, e escondê-lo
