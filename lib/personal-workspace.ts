@@ -77,5 +77,5 @@ export async function deletePersonalWorkspaceItem(organizationId: string, userId
   const result = await queryTenantDatabase<{ id: string }>(organizationId,
     "DELETE FROM personal_workspace_items WHERE organization_id = $1 AND owner_user_id = $2 AND id = $3 RETURNING id",
     [organizationId, userId, id]);
-  return result.rowCount > 0;
+  return (result.rowCount ?? 0) > 0;
 }
