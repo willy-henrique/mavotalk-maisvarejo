@@ -1,16 +1,6 @@
-
 import React from 'react';
 
-type IconProps = React.SVGProps<SVGSVGElement>;
-
-export const COLORS = {
-  primary: '#2563eb',
-  secondary: '#64748b',
-  success: '#22c55e',
-  danger: '#ef4444',
-  warning: '#f59e0b',
-  info: '#3b82f6',
-};
+export type IconProps = React.SVGProps<SVGSVGElement>;
 
 export const Icons = {
   Inbox: (props: IconProps) => (
@@ -42,6 +32,11 @@ export const Icons = {
   QrCode: (props: IconProps) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 4.5a.75.75 0 0 0 0 1.5h.75v.75a.75.75 0 0 0 1.5 0v-.75h.75a.75.75 0 0 0 0-1.5h-2.25a.75.75 0 0 0-.75.75ZM3.75 9h.75v.75a.75.75 0 0 1-1.5 0V9h-.75a.75.75 0 0 1 0-1.5h.75V6.75a.75.75 0 0 1 1.5 0V9ZM6.75 4.5a.75.75 0 0 0 0 1.5h.75v.75a.75.75 0 0 0 1.5 0v-.75h.75a.75.75 0 0 0 0-1.5H6.75ZM5.25 9h.75v.75a.75.75 0 0 1-1.5 0V9H3.75a.75.75 0 0 1 0-1.5h2.25a.75.75 0 0 1 .75.75v.75ZM6.75 12v.75a.75.75 0 0 1-1.5 0v-.75H3.75a.75.75 0 0 1 0-1.5h2.25a.75.75 0 0 1 .75.75ZM9 4.5h.75v.75a.75.75 0 0 0 1.5 0v-.75H12a.75.75 0 0 0 0-1.5h-2.25a.75.75 0 0 0-.75.75V6a.75.75 0 0 0 .75.75ZM9 9h.75v.75a.75.75 0 0 1-1.5 0V9H6.75a.75.75 0 0 1 0-1.5H9a.75.75 0 0 1 .75.75V9ZM20.25 4.5a.75.75 0 0 0 0 1.5h.75v.75a.75.75 0 0 0 1.5 0v-.75h.75a.75.75 0 0 0 0-1.5h-2.25a.75.75 0 0 0-.75.75ZM20.25 9h.75v.75a.75.75 0 0 1-1.5 0V9h-.75a.75.75 0 0 1 0-1.5h.75V6.75a.75.75 0 0 1 1.5 0V9ZM3 15.75v1.5h1.5v-1.5H3ZM6 15.75v1.5h1.5v-1.5H6.75v-1.5H6ZM9 15.75v1.5h4.5v-1.5H9ZM13.5 15.75v1.5H15v-1.5h-1.5ZM15 12h1.5v1.5H15V12ZM18 15.75v1.5h1.5v-1.5H18ZM18 12h1.5v1.5H18V12ZM21 15.75v1.5h-4.5v-1.5H21ZM21 12v1.5h-1.5V12H21Z" />
+    </svg>
+  ),
+  ExternalLink: (props: IconProps) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" {...props}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
     </svg>
   ),
 };

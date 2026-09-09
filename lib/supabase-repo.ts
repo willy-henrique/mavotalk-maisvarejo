@@ -2611,3 +2611,17 @@ export async function recordSatisfactionRatingByPhone(
 
   return true;
 }
+
+export async function getOrganizationDefaultQueueId(organizationId: string): Promise<string | null> {
+  const orgId = requireOrganizationId(organizationId);
+  const { data, error } = await platformSupa()
+    .from("organizations")
+    .select("default_queue_id")
+    .eq("id", orgId)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+  return (data as { default_queue_id?: string | null }).default_queue_id || null;
+}

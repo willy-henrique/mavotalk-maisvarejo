@@ -37,7 +37,7 @@ const DEFAULT_VISIBILITY: Record<string, Record<MenuRole, boolean>> = {
   contacts: { admin: true, gestor: true, atendente: true },
   personal_workspace: { admin: true, gestor: true, atendente: true },
   painel: { admin: true, gestor: true, atendente: false },
-  remote_accesses: { admin: true, gestor: true, atendente: false },
+  remote_accesses: { admin: true, gestor: true, atendente: true },
   business_sync: { admin: true, gestor: false, atendente: false },
   business_audit: { admin: true, gestor: false, atendente: false },
   admin_business_access: { admin: true, gestor: false, atendente: false },
@@ -67,7 +67,7 @@ const DEFAULT_PERMISSIONS: Record<string, Record<MenuPermissionAction, Record<Me
   contacts: { read: EVERYONE, create: EVERYONE, update: EVERYONE, delete: NONE, admin: NONE },
   personal_workspace: { read: EVERYONE, create: EVERYONE, update: EVERYONE, delete: EVERYONE, admin: NONE },
   painel: { read: CAN_MANAGE, create: NONE, update: CAN_MANAGE, delete: NONE, admin: NONE },
-  remote_accesses: { read: CAN_MANAGE, create: CAN_MANAGE, update: CAN_MANAGE, delete: NONE, admin: CAN_MANAGE },
+  remote_accesses: { read: EVERYONE, create: CAN_MANAGE, update: CAN_MANAGE, delete: NONE, admin: CAN_MANAGE },
   business_sync: { read: CAN_MANAGE, create: ADMIN_ONLY, update: ADMIN_ONLY, delete: ADMIN_ONLY, admin: ADMIN_ONLY },
   business_audit: { read: ADMIN_ONLY, create: NONE, update: NONE, delete: NONE, admin: ADMIN_ONLY },
   admin_business_access: { read: ADMIN_ONLY, create: ADMIN_ONLY, update: ADMIN_ONLY, delete: ADMIN_ONLY, admin: ADMIN_ONLY },
@@ -240,3 +240,4 @@ export async function updateMenuPermissionOverrides(
   );
   return resolvePermissions(next);
 }
+

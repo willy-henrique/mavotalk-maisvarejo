@@ -32,6 +32,7 @@ const TAB_BY_PATH: Record<string, string> = {
   '/admin/menu-visibilidade': 'admin_menu_settings',
   '/painel': 'painel',
   '/admin/acessos-remotos': 'remote_accesses',
+  '/acessos-remotos': 'remote_accesses',
 };
 
 const menuItems = [
@@ -39,8 +40,9 @@ const menuItems = [
   { id: 'dashboard', label: 'Visão da operação', icon: Icons.Chart, path: '/dashboard', role: 'METRICS' as const },
   { id: 'contacts', label: 'Contatos', icon: Icons.Users, path: '/contacts', role: 'ANY' as const },
   { id: 'personal_workspace', label: 'Meu espaço', icon: Icons.Inbox, path: '/meu-espaco', role: 'ANY' as const },
+  { id: 'remote_accesses', label: 'Acessos remotos', icon: Icons.Vault, path: '/admin/acessos-remotos', role: 'ANY' as const },
+  { id: 'mavo_gestao', label: 'Mavo Gestão', icon: Icons.ExternalLink, path: 'https://bloco-maisvarejo.vercel.app/', role: 'ANY' as const, isExternal: true },
   { id: 'painel', label: 'Conexão WhatsApp', icon: Icons.QrCode, path: '/painel', role: 'PAINEL' as const },
-  { id: 'remote_accesses', label: 'Acessos remotos', icon: Icons.Vault, path: '/admin/acessos-remotos', role: 'PAINEL' as const },
   { id: 'business_sync', label: 'Agentes e sincronização', icon: Icons.Settings, path: '/business/sincronizacao', role: UserRole.ADMIN },
   { id: 'business_audit', label: 'Auditoria gerencial', icon: Icons.Settings, path: '/business/auditoria', role: UserRole.ADMIN },
   { id: 'admin_business_access', label: 'Acessos gerenciais', icon: Icons.Users, path: '/admin/acessos-gerenciais', role: UserRole.ADMIN },
@@ -50,6 +52,8 @@ const menuItems = [
   { id: 'admin_quick_replies', label: 'Respostas rápidas', icon: Icons.Settings, path: '/admin/respostas-rapidas', role: UserRole.ADMIN },
   { id: 'admin_menu_settings', label: 'Menu do painel', icon: Icons.Settings, path: '/admin/menu-visibilidade', role: UserRole.ADMIN },
 ];
+
+const OPERATIONAL_ITEMS = ['inbox', 'dashboard', 'contacts', 'personal_workspace', 'remote_accesses', 'mavo_gestao'];
 
 const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate }) => {
   const navigate = useNavigate();
@@ -94,15 +98,24 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
     .join('') || 'MT';
 
   const canSee = (item: (typeof menuItems)[0]) => {
+    if (item.id === 'mavo_gestao') return true;
     const roleAllowed = item.role === 'ANY'
       || (item.role === 'PAINEL' && AuthService.canAccessPainel())
       || (item.role === 'METRICS' && (user.role === UserRole.SUPERVISOR || user.role === UserRole.ADMIN))
       || user.role === item.role;
-    // Antes da resposta da API, o fallback preserva a matriz padrão para evitar
-    // piscadas de funções sensíveis. Depois dela, menu e leitura usam a mesma
-    // política por tenant que o servidor aplica à rota.
+
     if (!visibilityOverrides || !permissions) return roleAllowed;
     return Boolean(visibilityOverrides[item.id]) && Boolean(permissions[item.id]?.read);
+  };
+
+  const handleItemClick = (item: (typeof menuItems)[0]) => {
+    if (item.isExternal) {
+      window.open(item.path, '_blank', 'noopener,noreferrer');
+      onNavigate?.();
+      return;
+    }
+    navigate(item.path);
+    onNavigate?.();
   };
 
   return (
@@ -142,15 +155,12 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
 
       <nav className="flex-1 px-3 space-y-1 mt-4 overflow-x-hidden" aria-label="Navegação principal">
         {!collapsed && <p className="px-3 pb-2 text-[10px] font-black uppercase tracking-[.18em] text-slate-400">Operação</p>}
-        {menuItems.filter((item) => ['inbox', 'dashboard', 'contacts', 'personal_workspace'].includes(item.id)).filter(canSee).map((item) => {
+        {menuItems.filter((item) => OPERATIONAL_ITEMS.includes(item.id)).filter(canSee).map((item) => {
           const isActive = activeTab === item.id;
           return (
             <button
               key={item.id}
-              onClick={() => {
-                navigate(item.path);
-                onNavigate?.();
-              }}
+              onClick={() => handleItemClick(item)}
               className={`w-full flex items-center gap-3 px-3 py-3.5 rounded-2xl transition-all ${
                 isActive
                   ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20'
@@ -160,15 +170,24 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
               aria-label={collapsed ? item.label : undefined}
             >
               <item.icon className={`w-6 h-6 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-500'}`} />
-              {!collapsed && <span className="font-bold text-sm truncate">{item.label}</span>}
+              {!collapsed && (
+                <div className="flex items-center justify-between flex-1 min-w-0">
+                  <span className="font-bold text-sm truncate">{item.label}</span>
+                  {item.isExternal && (
+                    <span className="text-[10px] bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider ml-1">
+                      Abrir
+                    </span>
+                  )}
+                </div>
+              )}
             </button>
           );
         })}
         {!collapsed && <p className="px-3 pb-2 pt-6 text-[10px] font-black uppercase tracking-[.18em] text-slate-400">Administração</p>}
-        {menuItems.filter((item) => !['inbox', 'dashboard', 'contacts', 'personal_workspace'].includes(item.id)).filter(canSee).map((item) => {
+        {menuItems.filter((item) => !OPERATIONAL_ITEMS.includes(item.id)).filter(canSee).map((item) => {
           const isActive = activeTab === item.id;
           return (
-            <button key={item.id} onClick={() => { navigate(item.path); onNavigate?.(); }} className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl transition-all ${isActive ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20' : 'hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800/50 dark:hover:text-slate-200'} ${collapsed ? 'justify-center' : ''}`} title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined}>
+            <button key={item.id} onClick={() => handleItemClick(item)} className={`w-full flex items-center gap-3 px-3 py-3 rounded-2xl transition-all ${isActive ? 'bg-blue-600 text-white shadow-xl shadow-blue-500/20' : 'hover:bg-slate-100 hover:text-slate-800 dark:hover:bg-slate-800/50 dark:hover:text-slate-200'} ${collapsed ? 'justify-center' : ''}`} title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined}>
               <item.icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-white' : 'text-slate-500 dark:text-slate-500'}`} />
               {!collapsed && <span className="font-bold text-sm truncate">{item.label}</span>}
             </button>

@@ -96,3 +96,5 @@ export {
 } from "@/lib/supabase-repo";
 
 export type { TeamMemberForPresence, ConversationMediaAsset } from "@/lib/supabase-repo";
+
+export { getOrganizationDefaultQueueId } from "@/lib/supabase-repo";

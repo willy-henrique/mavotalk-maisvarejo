@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>Mavo Talk — O que o sistema faz hoje</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm 18mm; }
+  :root{
+    --navy:#0E2A47; --navy-2:#16385F; --green:#22B455; --green-d:#17803D;
+    --ink:#16202E; --muted:#5A6878; --line:#DDE4EC; --soft:#F4F7FA;
+    --amber:#B45309; --amber-bg:#FEF6E7; --red:#B42318; --red-bg:#FEF3F2;
+    --green-bg:#ECFDF3; --navy-bg:#EEF3F9;
+  }
+  *{box-sizing:border-box;}
+  html{font-size:10.2pt;}
+  body{
+    margin:0; color:var(--ink); background:#fff;
+    font-family:"Segoe UI",-apple-system,Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55; -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  h1,h2,h3,h4{ line-height:1.25; margin:0; }
+  p{margin:0 0 .7em;}
+  a{color:var(--navy); text-decoration:none;}
+  code{
+    font-family:"Cascadia Mono",Consolas,"Courier New",monospace;
+    font-size:.85em; background:var(--soft); border:1px solid var(--line);
+    border-radius:3px; padding:.05em .32em; color:#0F2942;
+  }
+
+  /* ---------- CAPA ---------- */
+  .cover{
+    height:265mm; display:flex; flex-direction:column; justify-content:space-between;
+    page-break-after:always;
+  }
+  .cover-top{ padding-top:14mm; }
+  .brandmark{ display:flex; align-items:center; gap:9px; margin-bottom:26mm; }
+  .brandmark .dot{
+    width:30px;height:30px;border-radius:50%;background:var(--navy);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .brandmark .dot span{
+    width:13px;height:13px;border-radius:50%;background:var(--green);display:block;
+  }
+  .brandmark .wordmark{ font-size:16pt; font-weight:800; color:var(--navy); letter-spacing:-.02em;}
+  .brandmark .wordmark em{ font-style:normal; color:var(--green); }
+  .cover h1{
+    font-size:33pt; font-weight:800; color:var(--navy); letter-spacing:-.025em; max-width:15cm;
+  }
+  .cover h1 .accent{ color:var(--green); }
+  .cover .lede{
+    margin-top:9mm; font-size:12.5pt; color:var(--muted); max-width:14cm; line-height:1.5;
+  }
+  .cover .rule{ width:70px; height:4px; background:var(--green); border-radius:2px; margin:9mm 0; }
+  .cover-meta{
+    border-top:2px solid var(--navy); padding-top:6mm;
+    display:grid; grid-template-columns:1fr 1fr; gap:5mm 8mm;
+  }
+  .cover-meta div{ font-size:9pt; }
+  .cover-meta dt{ color:var(--muted); text-transform:uppercase; letter-spacing:.09em; font-size:7.6pt; font-weight:700; margin-bottom:2px;}
+  .cover-meta dd{ margin:0; font-weight:600; color:var(--navy); }
+  .cover-note{
+    background:var(--navy); color:#fff; border-radius:8px; padding:6mm 7mm; margin-top:8mm;
+  }
+  .cover-note strong{ color:#7EE2A8; }
+  .cover-note p{ margin:0; font-size:9.6pt; line-height:1.6; }
+
+  /* ---------- ESTRUTURA ---------- */
+  h2.sec{
+    font-size:16pt; font-weight:800; color:var(--navy); letter-spacing:-.02em;
+    margin:0 0 1mm; padding-top:2mm;
+  }
+  .sec-wrap{ page-break-before:always; }
+  .sec-kicker{
+    font-size:7.8pt; font-weight:800; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--green-d); margin-bottom:2mm;
+  }
+  .sec-rule{ height:3px; background:var(--green); width:52px; border-radius:2px; margin:2.5mm 0 5mm; }
+  h3{ font-size:11.6pt; font-weight:750; color:var(--navy); margin:7mm 0 2mm; }
+  h4{ font-size:9.8pt; font-weight:750; color:var(--navy); margin:4mm 0 1.5mm; }
+
+  /* ---------- TABELAS ---------- */
+  table{ width:100%; border-collapse:collapse; margin:3mm 0 5mm; font-size:9pt; }
+  th{
+    background:var(--navy); color:#fff; text-align:left; font-weight:700;
+    padding:2.6mm 3mm; font-size:8.2pt; letter-spacing:.04em; text-transform:uppercase;
+  }
+  td{ padding:2.6mm 3mm; border-bottom:1px solid var(--line); vertical-align:top; }
+  tbody tr:nth-child(even){ background:#FAFCFE; }
+  td.num{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+
+  /* ---------- SELOS ---------- */
+  .badge{
+    display:inline-block; font-size:7.6pt; font-weight:800; letter-spacing:.05em;
+    text-transform:uppercase; padding:1.1mm 2.4mm; border-radius:3px; white-space:nowrap;
+  }
+  .b-ok{ background:var(--green-bg); color:var(--green-d); border:1px solid #A7E5C0; }
+  .b-part{ background:var(--amber-bg); color:var(--amber); border:1px solid #F3D08B; }
+  .b-no{ background:var(--red-bg); color:var(--red); border:1px solid #F4B9B4; }
+  .b-off{ background:var(--navy-bg); color:var(--navy); border:1px solid #B9CCE2; }
+
+  /* ---------- BLOCOS ---------- */
+  .card{
+    border:1px solid var(--line); border-left:4px solid var(--green);
+    border-radius:0 6px 6px 0; padding:4mm 5mm; margin:4mm 0; background:#fff;
+    page-break-inside:avoid;
+  }
+  .card.warn{ border-left-color:#E9A23B; background:#FFFCF6; }
+  .card.stop{ border-left-color:#D5453B; background:#FFFAFA; }
+  .card.info{ border-left-color:var(--navy); background:var(--navy-bg); }
+  .card h4{ margin:0 0 1.5mm; }
+  .card p:last-child{ margin-bottom:0; }
+
+  .claim{
+    border:1px solid var(--line); border-radius:7px; overflow:hidden;
+    margin:5mm 0; page-break-inside:avoid;
+  }
+  .claim-head{
+    background:var(--navy); color:#fff; padding:3.2mm 4.5mm;
+    display:flex; justify-content:space-between; align-items:center; gap:5mm;
+  }
+  .claim-head h3{ margin:0; color:#fff; font-size:11pt; }
+  .claim-head .n{
+    background:var(--green); color:#06301A; width:20px; height:20px; border-radius:50%;
+    display:inline-flex; align-items:center; justify-content:center;
+    font-size:9pt; font-weight:800; margin-right:3mm; flex:none;
+  }
+  .claim-body{ padding:4mm 4.5mm 3mm; }
+  .quote{
+    background:var(--soft); border-radius:5px; padding:3mm 4mm; margin:0 0 3.5mm;
+    font-size:8.9pt; color:#33465C; font-style:italic;
+  }
+  .quote b{ font-style:normal; color:var(--navy); }
+
+  ul,ol{ margin:0 0 .8em; padding-left:5mm; }
+  li{ margin-bottom:1.6mm; }
+  li::marker{ color:var(--green-d); font-weight:700; }
+  .ev{ font-size:8.2pt; color:var(--muted); }
+  .ev code{ font-size:8pt; background:#fff; }
+
+  .kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:3mm; margin:4mm 0 6mm; }
+  .kpi{ border:1px solid var(--line); border-radius:6px; padding:3.5mm; text-align:center; background:#fff;}
+  .kpi .v{ font-size:17pt; font-weight:800; color:var(--navy); letter-spacing:-.02em; line-height:1.1;}
+  .kpi .l{ font-size:7.6pt; color:var(--muted); text-transform:uppercase; letter-spacing:.07em; font-weight:700; margin-top:1mm;}
+
+  .footnote{ font-size:8.2pt; color:var(--muted); border-top:1px solid var(--line); padding-top:3mm; margin-top:6mm; }
+  .reply{
+    background:var(--soft); border:1px solid var(--line); border-radius:7px;
+    padding:5mm 6mm; margin:4mm 0; font-size:9.6pt; line-height:1.65;
+  }
+  .reply p{ margin:0 0 .8em; }
+  .reply p:last-child{ margin:0; }
+</style>
+</head>
+<body>
+
+<!-- ================= CAPA ================= -->
+<section class="cover">
+  <div class="cover-top">
+    <div class="brandmark">
+      <div class="dot"><span></span></div>
+      <div class="wordmark">Mavo <em>Talk</em></div>
+    </div>
+    <h1>O que o sistema<br>faz <span class="accent">hoje</span></h1>
+    <div class="rule"></div>
+    <p class="lede">
+      Verificação técnica, ponto a ponto, das seis vantagens anunciadas no material
+      comercial — o que já está no ar, o que está no ar pela metade e o que ainda é roadmap.
+    </p>
+    <div class="cover-note">
+      <p>
+        Este documento responde à pergunta <strong>“temos essas diferenças em relação ao WhatsApp?”</strong>
+        sem arredondar nada. Cada afirmação foi conferida lendo o código-fonte que está em produção,
+        e cada veredito traz o arquivo onde ele pode ser reconferido.
+      </p>
+    </div>
+  </div>
+
+  <div>
+    <div class="cover-meta">
+      <div>
+        <dt>Instância verificada</dt>
+        <dd>mavotalk-maisvarejo · commit <code>aa4c593</code></dd>
+      </div>
+      <div>
+        <dt>Produto base</dt>
+        <dd>willy-henrique/willtalk · commit <code>89f3516</code></dd>
+      </div>
+      <div>
+        <dt>Método</dt>
+        <dd>Leitura do código + execução da suíte de testes</dd>
+      </div>
+      <div>
+        <dt>Data da verificação</dt>
+        <dd>31 de agosto de 2026</dd>
+      </div>
+    </div>
+    <p class="footnote" style="margin-top:5mm;">
+      Documento técnico interno. Preparado por Willy Henrique, responsável técnico do Mavo Talk.
+    </p>
+  </div>
+</section>
+
+<!-- ================= 1. RESUMO ================= -->
+<section>
+  <div class="sec-kicker">Seção 1</div>
+  <h2 class="sec">Resumo executivo</h2>
+  <div class="sec-rule"></div>
+
+  <p>
+    O material lista <strong>seis vantagens</strong> do Mavo Talk sobre o WhatsApp comum.
+    Conferindo uma a uma contra o código em produção: <strong>duas estão inteiramente entregues</strong>,
+    <strong>duas estão entregues em parte</strong>, <strong>uma existe no produto mas está desligada</strong>
+    nesta instância por decisão de configuração, e <strong>uma ainda não existe</strong> — e o próprio
+    material já a escreve no futuro (“<em>será possível</em>”).
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:6%">#</th>
+        <th style="width:31%">Vantagem anunciada</th>
+        <th style="width:19%">Situação hoje</th>
+        <th>Leitura honesta</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="num">1</td>
+        <td><strong>Atendimento colaborativo e monitorado</strong></td>
+        <td><span class="badge b-ok">Entregue</span></td>
+        <td>Várias pessoas atuam no mesmo chat, em tempo real, com presença da equipe, transferência, assinatura de quem respondeu, SLA e nota de satisfação.</td>
+      </tr>
+      <tr>
+        <td class="num">2</td>
+        <td><strong>Mais facilidade para automação</strong></td>
+        <td><span class="badge b-part">Parcial</span></td>
+        <td>Fluxos e respostas automáticas: sim. <strong>Disparos</strong> (campanha, envio em massa): <strong>não existem em produção</strong>. É o único ponto do material que promete algo ainda inexistente sem avisar.</td>
+      </tr>
+      <tr>
+        <td class="num">3</td>
+        <td><strong>Relatórios completos e inteligentes</strong></td>
+        <td><span class="badge b-part">Parcial</span></td>
+        <td>Tempo de atendimento, volume, CSAT, funil do bot e exportação CSV/PDF: sim. “<strong>Clientes que mais usam</strong>”: ainda não está em produção.</td>
+      </tr>
+      <tr>
+        <td class="num">4</td>
+        <td><strong>Dashboard com informações importantes</strong></td>
+        <td><span class="badge b-ok">Entregue</span></td>
+        <td>Oito indicadores, gráfico por fila e bloco de equipe, atualizados por evento — não por recarregar a página.</td>
+      </tr>
+      <tr>
+        <td class="num">5</td>
+        <td><strong>Atendimento humano ou automatizado</strong></td>
+        <td><span class="badge b-off">Existe · desligado</span></td>
+        <td>O motor existe e é sólido, mas <strong>o bot está desligado nesta instância</strong>. Hoje o atendimento do Mais Varejo é 100% humano. Ligar é cadastrar as filas e virar uma chave.</td>
+      </tr>
+      <tr>
+        <td class="num">6</td>
+        <td><strong>Consultar produtos e preços e fazer pedidos</strong></td>
+        <td><span class="badge b-no">Não entregue</span></td>
+        <td>O cliente consegue <em>consultar</em> um pedido já existente pelo WhatsApp, mas não <em>fazer</em> pedido nem consultar catálogo. O material já diz “será possível”.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="card">
+    <h4>A frase que resume</h4>
+    <p>
+      A comparação com o WhatsApp comum <strong>se sustenta em cinco das seis linhas</strong>.
+      O item 6 é roadmap declarado. O item 2 é o único que precisa de ajuste de texto:
+      trocar “disparos automatizados” por algo que descreva o que existe hoje, ou marcá-lo
+      como próximo passo, do mesmo jeito que o item 6 foi marcado.
+    </p>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="v">90</div><div class="l">Rotas de API</div></div>
+    <div class="kpi"><div class="v">441</div><div class="l">Testes automatizados</div></div>
+    <div class="kpi"><div class="v">0</div><div class="l">Testes falhando</div></div>
+    <div class="kpi"><div class="v">28</div><div class="l">Migrações de banco</div></div>
+  </div>
+  <p class="ev">
+    Números da instância verificada. A suíte roda em ~10 s: 441 testes, 438 aprovados, 3 ignorados, nenhuma falha.
+  </p>
+</section>
+
+<!-- ================= 2. COMO LER ================= -->
+<section class="sec-wrap">
+  <div class="sec-kicker">Seção 2</div>
+  <h2 class="sec">Como ler este documento</h2>
+  <div class="sec-rule"></div>
+
+  <p>
+    Há uma distinção que atravessa o documento inteiro e sem a qual metade das respostas fica errada:
+    <strong>uma coisa é o que o produto sabe fazer, outra é o que está ligado nesta instância.</strong>
+  </p>
+
+  <h3>Um cliente = uma instância</h3>
+  <p>
+    O Mavo Talk não é um sistema único com vários clientes dentro. Cada cliente recebe
+    <strong>uma cópia dedicada</strong>: número de WhatsApp próprio, banco de dados próprio e
+    ambiente próprio. O Mais Varejo roda em <code>mavotalk-maisvarejo</code>, um espelho do produto
+    base com três ajustes de configuração em cima.
+  </p>
+  <p>
+    Isso é uma vantagem real de isolamento — o volume de um cliente não afeta o outro, e um
+    problema num ambiente não derruba os demais. Mas significa que “o sistema faz X” pode ser
+    verdade no produto e falso na instância, se X estiver desligado ali.
+  </p>
+
+  <div class="card info">
+    <h4>As três chaves que mudam a resposta nesta instância</h4>
+    <table style="margin:2mm 0 0;">
+      <thead>
+        <tr><th style="width:42%">Configuração</th><th style="width:14%">Valor</th><th>O que isso significa na prática</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>SUPERMARKET_BOT_ENABLED</code></td>
+          <td><strong>false</strong></td>
+          <td>O robô de atendimento não responde nada. Toda mensagem vai direto para uma pessoa.</td>
+        </tr>
+        <tr>
+          <td><code>SUPERMARKET_AUTO_APPLY_PRESET</code></td>
+          <td><strong>false</strong></td>
+          <td>Não cria as filas padrão de supermercado (“Açougue, padaria e hortifruti”) numa operação de suporte.</td>
+        </tr>
+        <tr>
+          <td><code>MAVO_AGENT_API_ENABLED</code></td>
+          <td><strong>false</strong></td>
+          <td>A sincronização de produtos, preços e vendas está desligada. Sem ela não há catálogo nem relatório de vendas.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    As três foram decisões conscientes, não esquecimentos. O motor do bot nasceu para um
+    supermercado e traz nomes desse contexto; o Mais Varejo é <strong>empresa de suporte a sistema</strong>.
+    Ligar o bot antes de cadastrar as filas certas faria o cliente receber um menu de hortifruti.
+  </p>
+
+  <h3>O que “em produção” quer dizer aqui</h3>
+  <p>
+    Considerei em produção apenas o que está <strong>commitado e publicado</strong>. Código escrito
+    e ainda não publicado não conta, por mais pronto que pareça — e isso é decisivo em dois
+    dos seis itens, como a Seção 3 detalha.
+  </p>
+
+  <div class="card warn">
+    <h4>Observação de método, para registro</h4>
+    <p>
+      No momento desta verificação, o repositório do produto base estava sendo alterado —
+      a funcionalidade de campanhas e grupos foi escrita ao longo da manhã de 31/08 e ainda
+      não estava publicada. Por isso a verificação foi feita contra a
+      <strong>instância do Mais Varejo</strong>, que é um retrato estável e é o que o cliente
+      efetivamente recebe. Se a funcionalidade de campanhas for publicada, o item 2 muda de status.
+    </p>
+  </div>
+</section>
+
+<!-- ================= 3. PONTO A PONTO ================= -->
+<section class="sec-wrap">
+  <div class="sec-kicker">Seção 3</div>
+  <h2 class="sec">Verificação ponto a ponto</h2>
+  <div class="sec-rule"></div>
+  <p>
+    Cada bloco traz a promessa do material, o veredito, o que existe de fato, onde isso pode ser
+    reconferido no sistema, e a ressalva — porque é a ressalva que evita a conversa difícil depois.
+  </p>
+
+  <!-- 1 -->
+  <div class="claim">
+    <div class="claim-head">
+      <h3><span class="n">1</span>Atendimento colaborativo e monitorado</h3>
+      <span class="badge b-ok">Entregue</span>
+    </div>
+    <div class="claim-body">
+      <div class="quote">
+        <b>O material promete:</b> “Possibilidade de 3, 4 ou mais pessoas acompanharem o chat,
+        interagirem com os clientes e o gestor poder monitorar a qualidade do atendimento.”
+      </div>
+
+      <h4>O que existe hoje</h4>
+      <ul>
+        <li><strong>Sem limite de pessoas.</strong> A empresa cria quantos usuários quiser, em três papéis: administrador, gestor e atendente.</li>
+        <li><strong>Qualquer atendente responde qualquer conversa.</strong> Responder não exige ser o “dono” do chamado — a permissão é por perfil, não por posse. É isso que torna real o “3, 4 ou mais pessoas no mesmo chat”.</li>
+        <li><strong>Tempo real de verdade.</strong> Mensagem nova, conversa criada, conversa atualizada, transferência, presença e “digitando…” chegam por evento a todos os painéis abertos, sem recarregar.</li>
+        <li><strong>Equipe agora.</strong> Um bloco mostra cada pessoa como online, ausente ou offline, com há quanto tempo foi vista e <em>quantos atendimentos tem em aberto</em>.</li>
+        <li><strong>Transferência de chamado</strong> entre atendentes, com registro de quem passou para quem.</li>
+        <li><strong>Assinatura do atendente</strong> na mensagem enviada — o cliente e o gestor sabem quem respondeu. Pode ser ligada por organização ou por envio.</li>
+        <li><strong>Monitoramento de qualidade:</strong> nota de satisfação de 1 a 5 enviada automaticamente no encerramento; tempo médio de espera (TME) e de atendimento (TMA) por pessoa; alerta de SLA de primeira resposta rodando em segundo plano.</li>
+        <li><strong>Permissões finas:</strong> cada área do painel tem permissão separada de ler, criar, editar, excluir e administrar, por papel.</li>
+      </ul>
+
+      <h4>Ressalva honesta</h4>
+      <p>
+        Não existe trava contra duas pessoas responderem ao mesmo tempo, nem “modo observador”
+        silencioso. A colaboração é sustentada por presença, atribuição e transferência —
+        não por bloqueio. Na prática funciona; vale combinar com a equipe.
+      </p>
+      <p class="ev">
+        Evidência: <code>app/api/conversations/[id]/messages/route.ts</code> (permissão por perfil),
+        <code>lib/realtime.ts</code> e <code>server.cjs</code> (eventos),
+        <code>frontend/components/TeamPresence.tsx</code>,
+        <code>lib/agent-message.ts</code> (assinatura),
+        <code>app/api/conversations/[id]/close/route.ts</code> (pesquisa de satisfação),
+        <code>lib/metrics/agents.ts</code> (TME, TMA, CSAT), <code>lib/sla-worker.mjs</code>.
+      </p>
+    </div>
+  </div>
+
+  <!-- 2 -->
+  <div class="claim">
+    <div class="claim-head">
+      <h3><span class="n">2</span>Mais facilidade para automação</h3>
+      <span class="badge b-part">Parcial — 2 de 3</span>
+    </div>
+    <div class="claim-body">
+      <div class="quote">
+        <b>O material promete:</b> “Crie <u>fluxos</u>, <u>respostas</u> e <u>disparos</u>
+        automatizados de forma simples e poderosa.”
+      </div>
+
+      <h4>Fluxos <span class="badge b-ok">sim</span></h4>
+      <p>
+        O menu de atendimento é montado a partir das filas cadastradas — o nome que a empresa
+        escreve é o que o cliente lê. Cada fila tem seu tipo de automação, hoje três:
+        conteúdo livre, encarte de ofertas e horário/localização. Dá para configurar mensagem
+        de abertura, mensagem de “não há conteúdo”, mensagem de encerramento, se permite falar
+        com humano, se mostra “voltar ao menu”, e há limite de reexibição do menu para não
+        entrar em laço. Configuração tem rascunho e publicação.
+      </p>
+
+      <h4>Respostas <span class="badge b-ok">sim</span></h4>
+      <ul>
+        <li><strong>Respostas rápidas</strong> cadastradas e usadas pelo atendente no chat.</li>
+        <li><strong>Resposta automática por horário</strong>, com grade semanal, intervalos e exceções (feriados).</li>
+        <li><strong>Notificação automática de status de pedido</strong>, com fila de reenvio e limite de tentativas.</li>
+        <li><strong>Pesquisa de satisfação</strong> disparada sozinha no encerramento.</li>
+      </ul>
+
+      <h4>Disparos <span class="badge b-no">não</span></h4>
+      <p>
+        <strong>Não existe em produção.</strong> Não há campanha, agendamento, lista de transmissão
+        nem envio para grupos de WhatsApp no sistema publicado. O que existe de envio automático é
+        sempre <em>reativo</em> — responde a um evento (pedido mudou de status, atendimento encerrou),
+        nunca <em>ativo</em> para uma lista.
+      </p>
+
+      <div class="card stop">
+        <h4>Este é o ponto sensível do material</h4>
+        <p>
+          “Disparos automatizados” é a única promessa do infográfico que descreve, no presente,
+          algo que o sistema não faz. Recomendo ajustar o texto ou marcá-la como próximo passo —
+          do mesmo jeito que o item 6 já foi honestamente marcado com “será possível”.
+        </p>
+        <p style="margin-top:2mm;">
+          <strong>Contexto:</strong> a funcionalidade está sendo construída neste momento no produto
+          base (rotas de campanhas, públicos, agendamento e grupos de WhatsApp foram escritas em
+          31/08). Ainda não está publicada nem presente nesta instância. Quando entrar, este item
+          passa a “entregue”.
+        </p>
+      </div>
+      <p class="ev">
+        Evidência: <code>lib/queue-automation-schemas.ts</code> (três tipos de automação),
+        <code>app/api/quick-replies</code>, <code>app/api/queues/[id]/location/hours</code> e
+        <code>/exceptions</code>, <code>worker.mjs</code> (fila de notificações).
+        Ausência verificada por varredura de rotas: nenhuma rota de campanha ou transmissão
+        entre as 90 publicadas.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="sec-wrap">
+  <!-- 3 -->
+  <div class="claim">
+    <div class="claim-head">
+      <h3><span class="n">3</span>Relatórios completos e inteligentes</h3>
+      <span class="badge b-part">Parcial</span>
+    </div>
+    <div class="claim-body">
+      <div class="quote">
+        <b>O material promete:</b> “Acompanhe os <u>clientes que mais usam</u>, <u>tempo de
+        atendimento</u>, <u>respostas</u> e muito mais.”
+      </div>
+
+      <h4>O que existe hoje</h4>
+      <ul>
+        <li><strong>Tempo de atendimento</strong> nas duas medidas que importam: TME (quanto o cliente esperou pela primeira resposta) e TMA (quanto levou até resolver) — por atendente e por fila.</li>
+        <li><strong>Volume</strong> de atendimentos por período, por fila e por pessoa.</li>
+        <li><strong>Satisfação</strong> (CSAT) com a média e o número de respostas, para não tirar conclusão de duas notas.</li>
+        <li><strong>Funil do atendimento automático:</strong> o que o bot resolveu sozinho e para onde foi cada conversa.</li>
+        <li><strong>Série temporal</strong> e <strong>comparação com o período anterior</strong>.</li>
+        <li><strong>Relatório de tickets</strong> paginado e <strong>exportável em CSV e PDF</strong> — o número que vai para a reunião.</li>
+        <li><strong>Filtros</strong> por fila, atendente e período, com fuso horário da organização respeitado.</li>
+      </ul>
+
+      <h4>O que falta exatamente</h4>
+      <p>
+        “<strong>Clientes que mais usam</strong>” — o ranking de contatos por volume de atendimento —
+        <strong>ainda não está em produção</strong>. Foi escrito em 31/08 e não publicado.
+        É a única palavra dessa linha do material que ainda não tem lastro.
+      </p>
+
+      <div class="card warn">
+        <h4>Onde esses relatórios aparecem — e o que falta ligar</h4>
+        <p>
+          Os relatórios ricos moram na <strong>API de Métricas v1</strong>, consumida pelo
+          <strong>Mavo Gerenciamento</strong>, o painel próprio do dono da empresa (login dele,
+          gráficos, comparação, exportação). Nesta instância as chaves que ligam um ao outro
+          (<code>MAVO_METRICS_TOKEN</code> e <code>MAVO_MANAGEMENT_URL</code>) <strong>ainda não
+          foram preenchidas</strong>. O motor está pronto; a tomada ainda não foi plugada.
+        </p>
+      </div>
+      <p class="ev">
+        Evidência: <code>lib/metrics/</code> (agents, queues, overview, timeseries, bot, filters,
+        tickets-report), <code>app/api/metrics/v1/*</code> — 16 rotas publicadas.
+        Pendência de configuração registrada em <code>docs/CLIENTE-MAIS-VAREJO.md</code>.
+      </p>
+    </div>
+  </div>
+
+  <!-- 4 -->
+  <div class="claim">
+    <div class="claim-head">
+      <h3><span class="n">4</span>Dashboard com informações importantes</h3>
+      <span class="badge b-ok">Entregue</span>
+    </div>
+    <div class="claim-body">
+      <div class="quote">
+        <b>O material promete:</b> “Tenha uma visão geral do atendimento, performance da equipe
+        e principais indicadores em tempo real.”
+      </div>
+
+      <h4>O que existe hoje, dentro do próprio Mavo Talk</h4>
+      <p>A tela <strong>“Visão da operação”</strong> traz oito indicadores:</p>
+      <table>
+        <thead><tr><th style="width:26%">Indicador</th><th>O que responde</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Aguardando</strong></td><td>Conversas que ainda não receberam nenhuma ação.</td></tr>
+          <tr><td><strong>Em atendimento</strong></td><td>Conversas em andamento pela equipe.</td></tr>
+          <tr><td><strong>Resolvidos</strong></td><td>Conversas encerradas no período.</td></tr>
+          <tr><td><strong>1ª resposta</strong></td><td>Média de minutos até o primeiro retorno.</td></tr>
+          <tr><td><strong>SLA próximo</strong></td><td>Primeiras respostas vencendo nos próximos 15 minutos.</td></tr>
+          <tr><td><strong>SLA vencido</strong></td><td>Chamados que estouraram o prazo — a fila da vergonha.</td></tr>
+          <tr><td><strong>Resolução</strong></td><td>Média de minutos até o encerramento.</td></tr>
+          <tr><td><strong>Sync online</strong></td><td>Agentes de integração ativos (não são atendentes).</td></tr>
+        </tbody>
+      </table>
+      <p>
+        Abaixo, um <strong>gráfico de distribuição por fila</strong> (onde a demanda está concentrada)
+        e o bloco <strong>“Equipe agora”</strong> com a presença de cada pessoa e sua carga aberta.
+        Na API há ainda um retrato instantâneo com fila atual, em atendimento, conversa mais
+        antiga esperando e SLA em risco.
+      </p>
+
+      <h4>Ressalvas honestas</h4>
+      <ul>
+        <li><strong>“Sync online” não é gente.</strong> Conta agentes de integração, não atendentes. A própria tela avisa, mas o nome confunde numa demonstração.</li>
+        <li><strong>“Tempo real” tem um asterisco de infraestrutura.</strong> O ambiente roda em plano gratuito: sem tráfego, hiberna em 15 minutos e leva cerca de 50 segundos para acordar. Enquanto não houver um serviço externo mantendo o ambiente acordado — pendência já mapeada — a primeira abertura do dia é lenta.</li>
+      </ul>
+      <p class="ev">
+        Evidência: <code>frontend/components/Dashboard.tsx</code>,
+        <code>app/api/dashboard/metrics/route.ts</code>, <code>lib/metrics/live.ts</code>.
+      </p>
+    </div>
+  </div>
+</section>
+
+<section class="sec-wrap">
+  <!-- 5 -->
+  <div class="claim">
+    <div class="claim-head">
+      <h3><span class="n">5</span>Atendimento humano ou automatizado</h3>
+      <span class="badge b-off">Existe · desligado aqui</span>
+    </div>
+    <div class="claim-body">
+      <div class="quote">
+        <b>O material promete:</b> “O cliente escolhe: falar com um humano ou ser atendido
+        por um robô inteligente.”
+      </div>
+
+      <h4>No produto: sim, e bem resolvido</h4>
+      <ul>
+        <li><strong>“Falar com um atendente” é fila protegida do sistema.</strong> Pode ser renomeada, não pode ser excluída — a porta para o humano nunca some por descuido de configuração.</li>
+        <li><strong>Cada fila decide</strong> se permite ir para o humano e se oferece “voltar ao menu”.</li>
+        <li><strong>Quando um humano assume, o bot sai de cena</strong> e não volta a mandar menu por cima do atendente. É transição de mão única: mensagem nova atualiza o chat, mas não devolve o chamado para o robô.</li>
+        <li><strong>Bot desligado por contato:</strong> dá para silenciar o robô para um cliente específico. A mensagem dele continua chegando normalmente, só sem nenhuma automação.</li>
+        <li><strong>Limite de tentativas de menu:</strong> depois de duas escolhas inválidas o sistema para de repetir o menu, em vez de insistir eternamente.</li>
+        <li><strong>Foto sem legenda</strong> não é lida como opção inválida de menu — detalhe pequeno que evita o robô brigando com o cliente.</li>
+      </ul>
+
+      <div class="card stop">
+        <h4>Nesta instância, hoje: 100% humano</h4>
+        <p>
+          A chave <code>SUPERMARKET_BOT_ENABLED</code> está em <strong>false</strong>. Com ela
+          desligada o motor de decisão do bot <strong>nem chega a ser consultado</strong> —
+          toda mensagem recebida vai direto para a fila humana. Nenhum menu, nenhuma resposta
+          automática de atendimento.
+        </p>
+        <p style="margin-top:2mm;">
+          <strong>Isso é decisão, não defeito.</strong> O menu padrão nasceu para supermercado
+          (“Ofertas e promoções”, “Açougue, padaria e hortifruti”) e o Mais Varejo é empresa de
+          suporte a sistema. Ligar antes de cadastrar as filas certas entregaria ao cliente um
+          menu de hortifruti.
+        </p>
+        <p style="margin-top:2mm;">
+          <strong>Para ligar:</strong> cadastrar as filas reais do suporte no painel e virar a chave
+          para <code>true</code>. O menu se monta a partir das filas cadastradas, com os nomes e
+          comportamentos delas — não há nada de supermercado preso no código.
+        </p>
+      </div>
+
+      <h4>Sobre “robô inteligente”</h4>
+      <p>
+        Vale calibrar a palavra. O bot de hoje é <strong>determinístico</strong>: menu numérico e
+        mensagens configuradas. Ele é confiável e previsível, o que num atendimento é qualidade —
+        mas não é IA. Existe um fallback para inteligência artificial, e ele vem
+        <strong>desligado</strong>; quando ligado, o que ele faz é o bot <em>parar de responder</em>
+        e entregar a conversa para uma IA externa, que precisa estar contratada e configurada à parte.
+        A configuração atual mantém a IA em <strong>modo triagem apenas</strong>.
+      </p>
+      <p class="ev">
+        Evidência: <code>lib/supermarket-config.ts</code> (filas protegidas 1, 2 e 6),
+        <code>lib/supermarket-bot.ts</code> (motor, limite de tentativas),
+        <code>app/api/webhooks/n8n/ticket-upsert/route.ts</code> (o bot só é consultado se estiver
+        habilitado; humano no comando desliga a automação), <code>render.yaml</code> (chaves da instância).
+      </p>
+    </div>
+  </div>
+
+  <!-- 6 -->
+  <div class="claim">
+    <div class="claim-head">
+      <h3><span class="n">6</span>Consultar produtos, preços e fazer pedidos</h3>
+      <span class="badge b-no">Não entregue</span>
+    </div>
+    <div class="claim-body">
+      <div class="quote">
+        <b>O material promete:</b> “<u>Será possível</u> consultar produtos, preços e fazer pedidos
+        de forma automatizada, com opção de não depender do atendente para fazer pedidos.”
+      </div>
+
+      <div class="card">
+        <h4>Aqui o material já está correto</h4>
+        <p>
+          Esta é a única vantagem escrita <strong>no futuro</strong>, e com razão. Não há promessa
+          quebrada — há um roadmap declarado. Se alguém perguntar, a resposta é “ainda não, e o
+          material já diz isso”.
+        </p>
+      </div>
+
+      <h4>Onde cada pedaço está</h4>
+      <table>
+        <thead><tr><th style="width:30%">Pedaço</th><th style="width:18%">Hoje</th><th>Situação</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Consultar produtos e preços</strong></td>
+            <td><span class="badge b-no">Não</span></td>
+            <td>Depende do agente que sincroniza o catálogo com o sistema da loja. Nesta instância ele está <strong>desligado</strong> (travava a subida do ambiente) e o contrato de leitura de catálogo ainda não foi definido.</td>
+          </tr>
+          <tr>
+            <td><strong>Fazer pedido pelo WhatsApp</strong></td>
+            <td><span class="badge b-no">Não</span></td>
+            <td>Pedido só é criado <strong>de dentro do painel</strong>, por um usuário logado. O cliente não consegue abrir pedido pela conversa.</td>
+          </tr>
+          <tr>
+            <td><strong>Consultar um pedido existente</strong></td>
+            <td><span class="badge b-ok">Sim</span></td>
+            <td>O cliente informa número do pedido e telefone e recebe a situação. Funciona hoje.</td>
+          </tr>
+          <tr>
+            <td><strong>Ser avisado do andamento</strong></td>
+            <td><span class="badge b-ok">Sim</span></td>
+            <td>Mudança de status dispara notificação automática, com reenvio em caso de falha. Sete situações, de “recebido” a “entregue”.</td>
+          </tr>
+          <tr>
+            <td><strong>Previsão de entrega</strong></td>
+            <td><span class="badge b-ok">Sim</span></td>
+            <td>Grade de horários e margem configuráveis, com janela estimada calculada no momento do pedido.</td>
+          </tr>
+          <tr>
+            <td><strong>Encarte de ofertas pelo WhatsApp</strong></td>
+            <td><span class="badge b-ok">Sim</span></td>
+            <td>Promoções cadastradas com imagem, validade e ordem de exibição, entregues pela fila de ofertas. É cadastro manual, não catálogo automático.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p>
+        Resumindo a linha: o sistema já sabe <strong>acompanhar</strong> um pedido de ponta a ponta.
+        O que falta é o cliente conseguir <strong>criar</strong> um, e o catálogo real por trás disso.
+      </p>
+      <p class="ev">
+        Evidência: <code>lib/commerce.ts</code> (criação de pedido exige usuário do painel;
+        consulta por número + telefone é aberta ao cliente),
+        <code>app/api/orders/route.ts</code>, <code>worker.mjs</code> (notificações),
+        <code>render.yaml</code> (agente de sincronização desligado).
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 4. INVENTARIO ================= -->
+<section class="sec-wrap">
+  <div class="sec-kicker">Seção 4</div>
+  <h2 class="sec">Inventário: tudo que o sistema faz hoje</h2>
+  <div class="sec-rule"></div>
+  <p>
+    O infográfico cobre seis pontos. O sistema faz bastante coisa que não está lá. Este é o
+    inventário completo do que está publicado e funcionando, organizado por área.
+  </p>
+
+  <h3>4.1 Caixa de entrada e atendimento</h3>
+  <ul>
+    <li>Conversas de WhatsApp centralizadas, com histórico completo por contato.</li>
+    <li>Envio e recebimento de <strong>texto, imagem, documento, PDF e áudio</strong>. O atendente grava áudio direto no painel.</li>
+    <li>Arquivos servidos por link assinado e temporário — não ficam expostos em endereço público.</li>
+    <li>Indicador de “digitando…” e confirmação de envio.</li>
+    <li>Atribuição de responsável, transferência entre atendentes e encerramento com pesquisa de satisfação.</li>
+    <li>Estados de chamado: aguardando, em atendimento e encerrado, com regra de transição que impede um chamado assumido voltar sozinho para a fila.</li>
+    <li>Início de conversa <strong>pelo painel</strong>, a partir de um contato — não é preciso esperar o cliente escrever.</li>
+    <li>Respostas rápidas cadastradas, aplicáveis no chat.</li>
+  </ul>
+
+  <h3>4.2 Trabalho em equipe</h3>
+  <ul>
+    <li>Presença ao vivo: online, ausente, offline, última vez visto e carga aberta por pessoa.</li>
+    <li>Assinatura do atendente na mensagem, configurável por organização e por envio.</li>
+    <li>Transferência de chamado com registro de origem e destino.</li>
+    <li>Notificações do sistema no painel e aviso de nova versão disponível.</li>
+  </ul>
+
+  <h3>4.3 Contatos</h3>
+  <ul>
+    <li>Base de contatos com origem registrada (de onde aquele contato veio).</li>
+    <li>Sincronização com a agenda do WhatsApp conectado, com foto de perfil.</li>
+    <li>Deduplicação de contatos repetidos.</li>
+    <li>Chave de silenciar o robô por contato.</li>
+  </ul>
+
+  <h3>4.4 Filas e automação de atendimento</h3>
+  <ul>
+    <li>Filas com nome, descrição, número no menu, cor, ícone, prazo de SLA e ativo/inativo.</li>
+    <li>Três tipos de automação: conteúdo livre, encarte de ofertas, horário e localização.</li>
+    <li>Mensagens configuráveis: abertura, sem conteúdo, encerramento.</li>
+    <li>Grade de horários por dia da semana, com intervalos e exceções para feriados.</li>
+    <li>Endereço, ponto de referência, telefone e link de mapa exibidos conforme configuração.</li>
+    <li>Rascunho e publicação — a configuração só entra no ar quando publicada.</li>
+    <li>Filas 1, 2 e 6 protegidas: renomeáveis, não excluíveis.</li>
+  </ul>
+
+  <h3>4.5 Promoções e encartes</h3>
+  <ul>
+    <li>Cadastro com título, descrição, vigência, imagem e ordem de exibição.</li>
+    <li>Estados: rascunho, agendada, ativa, expirada, desativada — com expiração automática a cada 5 minutos.</li>
+    <li>Duplicação de promoção para reaproveitar cadastro.</li>
+    <li>Entrega pela fila de ofertas com controle de quantidade, ordem e exibição de validade.</li>
+  </ul>
+
+  <h3>4.6 Pedidos e entrega</h3>
+  <ul>
+    <li>Pedido com número, contato, observações e sete situações de andamento.</li>
+    <li>Histórico de mudanças de situação, com origem da mudança.</li>
+    <li>Notificação automática ao cliente a cada mudança, com fila de reenvio e limite de tentativas.</li>
+    <li>Janela estimada de entrega calculada a partir da grade configurada.</li>
+    <li>Consulta do pedido pelo próprio cliente, por número e telefone.</li>
+  </ul>
+
+  <h3>4.7 Indicadores no painel do atendimento</h3>
+  <ul>
+    <li>Oito cartões operacionais (Seção 3, item 4) e gráfico de distribuição por fila.</li>
+    <li>Retrato instantâneo: na fila, em atendimento, conversa mais antiga esperando, SLA em risco.</li>
+    <li>Verificação de SLA de primeira resposta rodando em segundo plano.</li>
+  </ul>
+
+  <h3>4.8 API de Métricas v1 e painel do dono da empresa</h3>
+  <p>
+    Dezesseis rotas que alimentam o <strong>Mavo Gerenciamento</strong> — painel separado, com
+    login próprio do cliente:
+  </p>
+  <ul>
+    <li>Visão geral do período, com comparação contra o período anterior.</li>
+    <li>Produção por atendente: volume, TME, TMA e CSAT.</li>
+    <li>Métricas por fila, com fechamento do total.</li>
+    <li>Funil do atendimento automático.</li>
+    <li>Série temporal e opções de filtro.</li>
+    <li>Bloco “Agora”, ao vivo.</li>
+    <li>Relatório de tickets paginado, exportável em CSV e PDF.</li>
+    <li>Login próprio, com recuperação de senha entregue <strong>pelo WhatsApp</strong>.</li>
+    <li>Administração dos usuários da própria empresa pelo cliente.</li>
+    <li>Isolamento entre empresas coberto por testes específicos.</li>
+  </ul>
+
+  <h3>4.9 Consulta gerencial pelo WhatsApp</h3>
+  <p>
+    Um gestor autorizado consulta indicadores do negócio pelo próprio WhatsApp, com acesso
+    protegido por PIN, sessão com validade, bloqueio após tentativas erradas e trilha de auditoria.
+    Dez consultas atendidas por menu numérico — resumo do negócio, total de vendas, produtos mais
+    e menos vendidos, média diária, vendas por dia e por dia da semana, entradas de estoque,
+    comparação entre períodos.
+  </p>
+  <div class="card warn">
+    <p>
+      <strong>Ressalva:</strong> o canal está ligado nesta instância, mas as consultas de venda e
+      estoque dependem do agente de sincronização, que está <strong>desligado</strong>. Sem ele o
+      canal existe e responde, porém sem dados de venda para mostrar.
+    </p>
+  </div>
+
+  <h3>4.10 Administração e segurança</h3>
+  <ul>
+    <li>Usuários da empresa criados, editados e desativados apenas pelo administrador.</li>
+    <li>Sessão revogada automaticamente quando o papel ou a situação do usuário muda.</li>
+    <li>Visibilidade e permissões de cada área do painel configuráveis por papel — com trava que impede o administrador remover o próprio acesso à tela de permissões.</li>
+    <li>Recuperação de senha por token seguro, entregue pelo WhatsApp.</li>
+    <li>Painel master para operação interna, com cabeçalhos de segurança reforçados.</li>
+    <li>Cabeçalhos de segurança em todas as respostas, incluindo política de conteúdo, bloqueio de enquadramento em outro site e política de permissões de câmera, microfone e localização.</li>
+    <li>Isolamento entre empresas em todas as consultas ao banco, com auditoria dedicada.</li>
+    <li>Credenciais de integração guardadas cifradas.</li>
+  </ul>
+
+  <h3>4.11 Conexão do WhatsApp</h3>
+  <ul>
+    <li>Conexão por QR Code ou por código de pareamento.</li>
+    <li>Sessão persistida cifrada no banco — reiniciar o serviço não obriga a ler o QR de novo.</li>
+    <li>Tela de situação da conexão e diagnóstico.</li>
+    <li>Modo de simulação para testar sem enviar nada real.</li>
+  </ul>
+
+  <h3>4.12 Integrações disponíveis</h3>
+  <ul>
+    <li>Entrada de mensagens por webhook, com token e assinatura.</li>
+    <li>Canal alternativo por Twilio (WhatsApp oficial), além da conexão direta.</li>
+    <li>Webhook de saída para outros sistemas, com assinatura, retentativas e recorte de payload.</li>
+    <li>Ponte para IA externa, com modo triagem.</li>
+    <li>API para agentes de sincronização instalados no cliente, com credencial rotacionável, revogação, limite de requisições e trilha de eventos.</li>
+    <li>Armazenamento de mídia em nuvem, com fila de envio.</li>
+  </ul>
+</section>
+
+<!-- ================= 5. O QUE NAO FAZ ================= -->
+<section class="sec-wrap">
+  <div class="sec-kicker">Seção 5</div>
+  <h2 class="sec">O que o sistema não faz hoje</h2>
+  <div class="sec-rule"></div>
+  <p>
+    Lista deliberadamente franca. Saber isso antes da reunião vale mais do que descobrir durante.
+  </p>
+
+  <table>
+    <thead><tr><th style="width:34%">Não faz</th><th>Detalhe</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Campanha ou disparo em massa</strong></td><td>Não há envio ativo para lista, agendamento de campanha nem envio para grupos de WhatsApp em produção. Em construção no produto base.</td></tr>
+      <tr><td><strong>Ranking de clientes que mais usam</strong></td><td>Escrito, não publicado.</td></tr>
+      <tr><td><strong>Catálogo de produtos e preços</strong></td><td>Depende do agente de sincronização, desligado nesta instância, e do contrato de leitura de catálogo, ainda não definido.</td></tr>
+      <tr><td><strong>Pedido feito pelo cliente</strong></td><td>Pedido nasce no painel. O cliente consulta e acompanha, não cria.</td></tr>
+      <tr><td><strong>Robô com IA conversando livremente</strong></td><td>O bot é de menu. O caminho para IA existe, vem desligado e depende de serviço externo contratado à parte.</td></tr>
+      <tr><td><strong>Trava de dois atendentes no mesmo chat</strong></td><td>Nada impede resposta simultânea. Presença e atribuição orientam, não bloqueiam.</td></tr>
+      <tr><td><strong>Aplicativo móvel próprio</strong></td><td>O painel é web e responsivo. Não há aplicativo nas lojas.</td></tr>
+      <tr><td><strong>Chamada de voz ou vídeo</strong></td><td>Não existe no produto.</td></tr>
+      <tr><td><strong>Outros canais</strong></td><td>Somente WhatsApp. Não há Instagram, Facebook, Telegram ou chat de site.</td></tr>
+      <tr><td><strong>Disponibilidade contínua garantida</strong></td><td>No plano gratuito o ambiente hiberna após 15 minutos sem uso e leva cerca de 50 segundos para acordar. Resolvido com um serviço de keep-alive — pendência aberta — ou com plano pago.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="card info">
+    <h4>Sobre o WhatsApp não oficial</h4>
+    <p>
+      A conexão principal é feita pelo QR Code do WhatsApp comum, não pela API oficial do
+      WhatsApp Business. Isso é o que torna o produto barato e rápido de ligar, e é a escolha
+      certa para o momento — mas implica que envios em volume alto exigem cuidado, e que a
+      conta está sujeita às regras de uso do WhatsApp. Existe suporte a canal oficial via
+      Twilio para quando o volume justificar.
+    </p>
+  </div>
+</section>
+
+<!-- ================= 6. ESTADO DA INSTANCIA ================= -->
+<section class="sec-wrap">
+  <div class="sec-kicker">Seção 6</div>
+  <h2 class="sec">Estado da instância Mais Varejo</h2>
+  <div class="sec-rule"></div>
+  <p>
+    O ambiente foi provisionado em 31/08/2026. Está de pé, respondendo e com banco conectado —
+    mas <strong>ainda não entrou em operação</strong>. Falta ler o QR Code e cadastrar as filas.
+  </p>
+
+  <h3>Pronto</h3>
+  <table>
+    <thead><tr><th style="width:34%">Item</th><th>Situação</th></tr></thead>
+    <tbody>
+      <tr><td>Ambiente de aplicação</td><td><span class="badge b-ok">No ar</span> — três serviços publicados, plano gratuito.</td></tr>
+      <tr><td>Banco de dados dedicado</td><td><span class="badge b-ok">Conectado</span> — projeto exclusivo, nenhum dado compartilhado com outro cliente.</td></tr>
+      <tr><td>Verificação de saúde</td><td><span class="badge b-ok">OK</span> — aplicação, banco e cache respondendo.</td></tr>
+      <tr><td>Segredos próprios</td><td><span class="badge b-ok">Gerados</span> — nenhuma chave reaproveitada de outro cliente; a sessão de WhatsApp de outro ambiente ficou de fora.</td></tr>
+      <tr><td>Bot de supermercado</td><td><span class="badge b-off">Desligado</span> — proposital, ver Seção 3, item 5.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Falta</h3>
+  <table>
+    <thead><tr><th style="width:8%">#</th><th style="width:34%">Pendência</th><th>Por quê</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td><strong>Cadastrar as filas reais do suporte</strong></td><td>Antes de conectar o WhatsApp. É o que define o menu que o cliente do Mais Varejo vai ver.</td></tr>
+      <tr><td class="num">2</td><td><strong>Ler o QR Code</strong> no número exclusivo</td><td>A conexão está aguardando. Depois, reiniciar uma vez para confirmar que a sessão persistiu.</td></tr>
+      <tr><td class="num">3</td><td><strong>Keep-alive externo</strong>, a cada 10 minutos</td><td>Sem isso o ambiente hiberna em 15 minutos e o atendimento cai.</td></tr>
+      <tr><td class="num">4</td><td><strong>Ligar o painel de indicadores do cliente</strong></td><td>Duas chaves de configuração. Sem elas o Mavo Gerenciamento não conversa com esta instância.</td></tr>
+      <tr><td class="num">5</td><td><strong>Definir o login master</strong></td><td>Acesso à administração interna do ambiente.</td></tr>
+      <tr><td class="num">6</td><td><strong>Desligar a API de dados aberta do banco</strong></td><td>Passo de segurança previsto no procedimento de provisionamento, ainda pendente.</td></tr>
+      <tr><td class="num">7</td><td><strong>Decidir sobre ligar o bot</strong></td><td>Depende do item 1. Enquanto não for feito, o atendimento é integralmente humano.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="card warn">
+    <h4>Uma decisão registrada, para não ser “corrigida” por engano</h4>
+    <p>
+      O banco de dados está numa região e a aplicação em outra, o que custa cerca de 10 a 12
+      milissegundos por consulta. Foi uma escolha consciente: a região do banco é imutável e
+      recriar qualquer um dos lados custava mais do que o problema, especialmente num plano
+      que já hiberna. <strong>Não é um defeito.</strong>
+    </p>
+  </div>
+</section>
+
+<!-- ================= 7. RESPOSTA ================= -->
+<section class="sec-wrap">
+  <div class="sec-kicker">Seção 7</div>
+  <h2 class="sec">Sugestão de resposta</h2>
+  <div class="sec-rule"></div>
+  <p>
+    Texto pronto para responder à pergunta “entendi bem? temos essas diferenças em relação
+    ao WhatsApp?”. Curto de propósito — o detalhe está neste documento, que pode seguir anexo.
+  </p>
+
+  <div class="reply">
+    <p>Bom dia! Entendeu certo, e conferi item por item para te responder com segurança.</p>
+    <p>
+      <strong>Quatro pontos estão exatamente como o material diz</strong>, hoje, funcionando:
+      atendimento colaborativo com várias pessoas no mesmo chat e monitoramento pelo gestor;
+      dashboard com os indicadores em tempo real; relatórios de tempo de atendimento, volume
+      e satisfação, com exportação; e a escolha entre atendimento humano ou automatizado.
+    </p>
+    <p>
+      <strong>Dois pontos merecem um ajuste de leitura.</strong> No item de automação, os fluxos
+      e as respostas automáticas existem, mas <strong>“disparos” — campanha, envio para uma lista
+      — ainda não</strong>; está em desenvolvimento. E o item de consultar produtos, preços e fazer
+      pedidos o próprio material já coloca como “será possível”, o que está correto: hoje o cliente
+      consegue acompanhar um pedido pelo WhatsApp, mas não fazer um.
+    </p>
+    <p>
+      <strong>Um detalhe da sua operação:</strong> o robô de atendimento está desligado no seu
+      ambiente de propósito, porque o menu padrão é de supermercado e vocês são suporte.
+      Assim que definirmos as filas de vocês, ligo — é rápido.
+    </p>
+    <p>
+      Preparei um documento com a verificação completa, ponto a ponto, e com o que ainda falta
+      para colocar no ar. Segue anexo.
+    </p>
+  </div>
+
+  <div class="card">
+    <h4>Se a pergunta for “então vale a pena contra o WhatsApp comum?”</h4>
+    <p>
+      Vale, e por um motivo que o infográfico quase não destaca: no WhatsApp comum
+      <strong>não existe registro</strong>. Não dá para saber quem respondeu, quanto tempo o
+      cliente esperou, quantos ficaram sem resposta, nem cobrar a equipe com dado. O Mavo Talk
+      transforma conversa em <strong>chamado com dono, prazo, histórico e nota</strong>.
+      Essa é a diferença estrutural — as outras são consequência dela.
+    </p>
+  </div>
+</section>
+
+<!-- ================= 8. ANEXO ================= -->
+<section class="sec-wrap">
+  <div class="sec-kicker">Seção 8</div>
+  <h2 class="sec">Anexo — método e evidências</h2>
+  <div class="sec-rule"></div>
+
+  <h3>Como esta verificação foi feita</h3>
+  <ol>
+    <li>Leitura direta do código-fonte publicado na instância do cliente, não de documentação nem de memória.</li>
+    <li>Varredura das 90 rotas de API publicadas, para confirmar tanto presença quanto <strong>ausência</strong> de funcionalidade.</li>
+    <li>Leitura das chaves de configuração do ambiente publicado, para separar o que o produto sabe fazer do que está ligado.</li>
+    <li>Execução da suíte de testes automatizados.</li>
+    <li>Rastreamento de cada afirmação até o arquivo que a sustenta, registrado ao final de cada item da Seção 3.</li>
+  </ol>
+
+  <h3>Números da instância verificada</h3>
+  <table>
+    <thead><tr><th style="width:52%">Medida</th><th style="width:20%">Valor</th><th>Observação</th></tr></thead>
+    <tbody>
+      <tr><td>Rotas de API publicadas</td><td class="num">90</td><td>Inclui 16 rotas da API de Métricas v1.</td></tr>
+      <tr><td>Telas do painel de atendimento</td><td class="num">28</td><td>Componentes de tela.</td></tr>
+      <tr><td>Migrações de banco aplicadas</td><td class="num">28</td><td>Evolução versionada do banco.</td></tr>
+      <tr><td>Arquivos de teste</td><td class="num">95</td><td>—</td></tr>
+      <tr><td>Testes executados</td><td class="num">441</td><td>438 aprovados, 3 ignorados.</td></tr>
+      <tr><td>Testes com falha</td><td class="num">0</td><td>Suíte roda em cerca de 10 segundos.</td></tr>
+      <tr><td>Linhas na camada de regras de negócio</td><td class="num">12.772</td><td>Somente a pasta de regras, sem telas nem testes.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Rastreabilidade</h3>
+  <table>
+    <thead><tr><th style="width:36%">Item</th><th>Referência</th></tr></thead>
+    <tbody>
+      <tr><td>Instância verificada</td><td><code>C:\willydev\mavotalk-maisvarejo</code>, commit <code>aa4c593</code></td></tr>
+      <tr><td>Produto base</td><td><code>willy-henrique/willtalk</code>, commit <code>89f3516</code></td></tr>
+      <tr><td>Chaves do ambiente</td><td><code>render.yaml</code></td></tr>
+      <tr><td>Estado do provisionamento</td><td><code>docs/CLIENTE-MAIS-VAREJO.md</code></td></tr>
+      <tr><td>Roteiro de novo cliente</td><td><code>docs/PROVISIONAR-NOVO-CLIENTE.md</code></td></tr>
+    </tbody>
+  </table>
+
+  <div class="card warn">
+    <h4>Validade deste documento</h4>
+    <p>
+      Este retrato vale para <strong>31 de agosto de 2026</strong>. Dois itens estavam em
+      desenvolvimento ativo na data — campanhas/disparos e ranking de clientes — e mudam de
+      status assim que forem publicados. Antes de reutilizar o documento numa proposta,
+      confirme se esses dois já entraram.
+    </p>
+  </div>
+
+  <p class="footnote">
+    Mavo Talk — verificação técnica do material comercial · 31/08/2026 ·
+    Willy Henrique, responsável técnico. Documento gerado a partir da leitura do código em produção.
+  </p>
+</section>
+
+</body>
+</html>
