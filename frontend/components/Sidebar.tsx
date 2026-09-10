@@ -42,7 +42,7 @@ const menuItems = [
   { id: 'remote_accesses', label: 'Acessos remotos', icon: Icons.Vault, path: '/admin/acessos-remotos', role: 'ANY' as const },
   { id: 'mavo_gestao', label: 'Mavo Gestão', icon: Icons.ExternalLink, path: 'https://bloco-maisvarejo.vercel.app/', role: 'ANY' as const, isExternal: true },
   { id: 'dashboard', label: 'Visão da operação', icon: Icons.Chart, path: '/dashboard', role: 'METRICS' as const },
-  { id: 'mavo_metricas', label: 'Métricas do Suporte', icon: Icons.Chart, path: 'https://mavo-metricas-willy-henriques-projects.vercel.app/', role: 'METRICS' as const, isExternal: true },
+  { id: 'mavo_metricas', label: 'Métricas do Suporte', icon: Icons.Chart, path: 'https://mavo-metricas.vercel.app/', role: 'METRICS' as const, isExternal: true },
   { id: 'painel', label: 'Conexão WhatsApp', icon: Icons.QrCode, path: '/painel', role: 'PAINEL' as const },
   { id: 'business_sync', label: 'Agentes e sincronização', icon: Icons.Settings, path: '/business/sincronizacao', role: UserRole.ADMIN },
   { id: 'business_audit', label: 'Auditoria gerencial', icon: Icons.Settings, path: '/business/auditoria', role: UserRole.ADMIN },
