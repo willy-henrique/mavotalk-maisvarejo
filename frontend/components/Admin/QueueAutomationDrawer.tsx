@@ -16,7 +16,7 @@ type Queue = {
 type MenuOptionSwap = { id: string; name: string; menuOption: number };
 
 type Config = {
-  queueType: 'custom' | 'offers_promotions' | 'business_hours_location';
+  queueType: 'custom' | 'offers_promotions' | 'business_hours_location' | 'mavo_ai';
   generalConfig: Record<string, any>;
   automationConfig: Record<string, any>;
   version: number;
@@ -364,7 +364,7 @@ export function QueueAutomationDrawer({ queue, initialTab = 'Visão geral', onCl
                 <button type="button" onClick={() => void saveLocation()} disabled={busy} className="mavo-button-primary mt-6">{busy ? 'Salvando…' : 'Salvar unidade e horários'}</button>
               </div>}
 
-              {tab === 'Conteúdo' && config.queueType === 'custom' && <div className="max-w-2xl rounded-2xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700"><p className="text-3xl">✨</p><h3 className="mt-3 text-lg font-black">Esta é uma automação personalizada</h3><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">Configure a mensagem, encaminhamento e regras na etapa de Mensagens. Esta fila não precisa de flyers, endereço ou horários.</p><button type="button" onClick={() => setTab('Mensagens')} className="mavo-button-primary mt-5">Configurar mensagens</button></div>}
+              {tab === 'Conteúdo' && (config.queueType === 'custom' || config.queueType === 'mavo_ai') && <div className="max-w-2xl rounded-2xl border border-dashed border-slate-300 p-8 text-center dark:border-slate-700"><p className="text-3xl">💬</p><h3 className="mt-3 text-lg font-black">{config.queueType === 'mavo_ai' ? 'Fila Integrada com Mavo.AI' : 'Esta é uma automação personalizada'}</h3><p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">{config.queueType === 'mavo_ai' ? 'Esta fila encaminha o atendimento diretamente para o orquestrador do Mavo.AI responder e diagnosticar automaticamente.' : 'Configure a mensagem, encaminhamento e regras na etapa de Mensagens. Esta fila não precisa de flyers, endereço ou horários.'}</p><button type="button" onClick={() => setTab('Mensagens')} className="mavo-button-primary mt-5">Configurar mensagens</button></div>}
 
               {tab === 'Prévia' && <div className="mx-auto max-w-md"><SectionTitle eyebrow="Teste antes de publicar" title="Assim o cliente verá a automação" description="Esta é uma simulação. Nenhuma mensagem será enviada durante o teste." /><CustomerPreview messages={preview} queue={queue} /></div>}
 

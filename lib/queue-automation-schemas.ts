@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const QUEUE_AUTOMATION_TYPES = ["custom", "offers_promotions", "business_hours_location"] as const;
+export const QUEUE_AUTOMATION_TYPES = ["custom", "offers_promotions", "business_hours_location", "mavo_ai"] as const;
 export type QueueAutomationType = (typeof QUEUE_AUTOMATION_TYPES)[number];
 export type QueueConfigurationStatus = "draft" | "published";
 

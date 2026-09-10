@@ -14,7 +14,7 @@ type Queue = {
   defaultSlaMins: number;
   isActive: boolean;
   isSystem?: boolean;
-  queueType?: 'custom' | 'offers_promotions' | 'business_hours_location';
+  queueType?: 'custom' | 'offers_promotions' | 'business_hours_location' | 'mavo_ai';
 };
 
 type StoreSettings = {
@@ -520,7 +520,8 @@ const TicketTypeManagement: React.FC = () => {
               <div>
                 <label htmlFor="queue-type" className="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo da fila</label>
                 <select id="queue-type" value={formQueueType} onChange={(e) => setFormQueueType(e.target.value as typeof formQueueType)} className="mavo-field">
-                  <option value="custom">Fila personalizada</option>
+                  <option value="custom">Fila de atendimento humano</option>
+                  <option value="mavo_ai">Atendimento Inteligente (Mavo.AI)</option>
                   <option value="offers_promotions">Ofertas e promoções</option>
                   <option value="business_hours_location">Horários e localização</option>
                 </select>
