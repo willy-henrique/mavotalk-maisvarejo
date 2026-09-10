@@ -45,7 +45,6 @@ const menuItems = [
   { id: 'mavo_metricas', label: 'Métricas do Suporte', icon: Icons.Chart, path: 'https://mavo-metricas.vercel.app/', role: 'METRICS' as const, isExternal: true },
   { id: 'painel', label: 'Conexão WhatsApp', icon: Icons.QrCode, path: '/painel', role: 'PAINEL' as const },
   { id: 'business_sync', label: 'Agentes e sincronização', icon: Icons.Settings, path: '/business/sincronizacao', role: UserRole.ADMIN },
-  { id: 'business_audit', label: 'Auditoria gerencial', icon: Icons.Settings, path: '/business/auditoria', role: UserRole.ADMIN },
   { id: 'admin_business_access', label: 'Acessos gerenciais', icon: Icons.Users, path: '/admin/acessos-gerenciais', role: UserRole.ADMIN },
   { id: 'admin_users', label: 'Equipe', icon: Icons.Users, path: '/admin/usuarios', role: UserRole.ADMIN },
   { id: 'admin_types', label: 'Filas e automações', icon: Icons.Settings, path: '/admin/tipos', role: UserRole.ADMIN },
