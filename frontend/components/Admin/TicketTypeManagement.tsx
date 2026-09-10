@@ -463,73 +463,157 @@ const TicketTypeManagement: React.FC = () => {
             <div className="p-6">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label htmlFor="queue-name" className="block text-xs font-bold text-slate-500 uppercase mb-1">Nome</label>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                  Tipo de Atendimento
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div
+                    onClick={() => setFormQueueType('mavo_ai')}
+                    className={`cursor-pointer p-4 rounded-2xl border-2 transition-all ${
+                      formQueueType === 'mavo_ai'
+                        ? 'border-blue-600 bg-blue-50/50 dark:bg-blue-950/20 shadow-md shadow-blue-500/10'
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${
+                        formQueueType === 'mavo_ai' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      }`}>
+                        AI
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-900 dark:text-white">Mavo.AI Inteligente</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">Diagnóstico, triagem e resposta autônoma</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setFormQueueType('custom')}
+                    className={`cursor-pointer p-4 rounded-2xl border-2 transition-all ${
+                      formQueueType === 'custom'
+                        ? 'border-blue-600 bg-blue-50/50 dark:bg-blue-950/20 shadow-md shadow-blue-500/10'
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-900'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${
+                        formQueueType === 'custom' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                      }`}>
+                        👥
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-slate-900 dark:text-white">Equipe Humana</p>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">Encaminha direto para os atendentes</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="queue-name" className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                  Nome da Fila / Departamento *
+                </label>
                 <input
                   id="queue-name"
                   type="text"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
-                  placeholder="Ex: Sped Fiscal"
-                  className="mavo-field"
+                  placeholder="Ex.: Suporte Fiscal, PDV, Financeiro..."
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
                   required
                 />
               </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="queue-menu-option" className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                    Número no Menu do WhatsApp *
+                  </label>
+                  <input
+                    id="queue-menu-option"
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={formMenuOption}
+                    onChange={(e) => setFormMenuOption(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                    required
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Dígito que o cliente vai enviar no WhatsApp</p>
+                </div>
+
+                <div>
+                  <label htmlFor="queue-sla" className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+                    Meta de SLA (Minutos) *
+                  </label>
+                  <input
+                    id="queue-sla"
+                    type="number"
+                    min={5}
+                    max={1440}
+                    value={formDefaultSlaMins}
+                    onChange={(e) => setFormDefaultSlaMins(Number(e.target.value))}
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-3.5 py-2.5 text-sm text-slate-900 dark:text-white outline-none transition focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10"
+                    required
+                  />
+                  <p className="text-[11px] text-slate-400 mt-1">Tempo limite para o primeiro retorno</p>
+                </div>
+              </div>
+
               <div>
-                <label htmlFor="queue-menu-option" className="block text-xs font-bold text-slate-500 uppercase mb-1">Opção no menu (número)</label>
-                <input
-                  id="queue-menu-option"
-                  type="number"
-                  min={1}
-                  max={99}
-                  value={formMenuOption}
-                  onChange={(e) => setFormMenuOption(Number(e.target.value))}
-                  className="mavo-field"
-                  required
-                />
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-2">
+                  Cor de Identificação
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    id="queue-color"
+                    type="color"
+                    value={formColorHex}
+                    onChange={(e) => setFormColorHex(e.target.value)}
+                    className="h-10 w-14 cursor-pointer rounded-xl border border-slate-200 dark:border-slate-700 bg-white p-1"
+                  />
+                  <div className="flex flex-wrap gap-1.5 flex-1">
+                    {['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed', '#475569'].map((presetColor) => (
+                      <button
+                        key={presetColor}
+                        type="button"
+                        onClick={() => setFormColorHex(presetColor)}
+                        style={{ backgroundColor: presetColor }}
+                        className={`w-7 h-7 rounded-lg transition-transform ${formColorHex === presetColor ? 'ring-2 ring-offset-2 ring-blue-500 scale-110' : 'hover:scale-105'}`}
+                        title={presetColor}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
-              <div>
-                <label htmlFor="queue-color" className="block text-xs font-bold text-slate-500 uppercase mb-1">Cor</label>
-                <input
-                  id="queue-color"
-                  type="color"
-                  value={formColorHex}
-                  onChange={(e) => setFormColorHex(e.target.value)}
-                  className="w-full h-10 rounded-xl border border-slate-200 cursor-pointer"
-                />
-                <input aria-label="Código hexadecimal da cor"
-                  type="text"
-                  value={formColorHex}
-                  onChange={(e) => setFormColorHex(e.target.value)}
-                  placeholder="#64748b"
-                  className="mavo-field mt-2 py-2"
-                />
+
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 dark:border-slate-700/60 p-4 bg-slate-50/50 dark:bg-slate-900/40">
+                <div>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">Fila Ativa no WhatsApp</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Se desativada, não aparece na lista de opções para o cliente.</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={formIsActive}
+                  onClick={() => setFormIsActive((v) => !v)}
+                  className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition ${formIsActive ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'}`}
+                >
+                  <span className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transition ${formIsActive ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
               </div>
-              <div>
-                <label htmlFor="queue-sla" className="block text-xs font-bold text-slate-500 uppercase mb-1">SLA Resposta (minutos)</label>
-                <input
-                  id="queue-sla"
-                  type="number"
-                  min={5}
-                  max={1440}
-                  value={formDefaultSlaMins}
-                  onChange={(e) => setFormDefaultSlaMins(Number(e.target.value))}
-                  className="mavo-field"
-                  required
-                />
-              </div>
-              <div>
-                <label htmlFor="queue-type" className="block text-xs font-bold text-slate-500 uppercase mb-1">Tipo da fila</label>
-                <select id="queue-type" value={formQueueType} onChange={(e) => setFormQueueType(e.target.value as typeof formQueueType)} className="mavo-field">
-                  <option value="custom">Fila de atendimento humano</option>
-                  <option value="mavo_ai">Atendimento Inteligente (Mavo.AI)</option>
-                  <option value="offers_promotions">Ofertas e promoções</option>
-                  <option value="business_hours_location">Horários e localização</option>
-                </select>
-              </div>
-              <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
-                <div><p className="text-sm font-bold text-slate-800 dark:text-slate-100">Ativo no menu do chatbot</p><p className="text-xs text-slate-500 dark:text-slate-400">Filas inativas não aparecem como opção para o cliente.</p></div>
-                <button type="button" role="switch" aria-checked={formIsActive} aria-label="Alternar fila ativa no menu do chatbot" onClick={() => setFormIsActive((value) => !value)} className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${formIsActive ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-700'}`}><span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition ${formIsActive ? 'translate-x-6' : 'translate-x-1'}`} /></button>
-              </div>
+
+              {formQueueType === 'mavo_ai' && (
+                <div className="rounded-2xl border border-blue-200 dark:border-blue-900/60 bg-blue-50/70 dark:bg-blue-950/30 p-4 text-xs text-blue-950 dark:text-blue-200 leading-relaxed space-y-1">
+                  <p className="font-bold flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-blue-600 animate-pulse" />
+                    Orquestrador Mavo.AI conectado
+                  </p>
+                  <p>As mensagens enviadas para este departamento serão processadas pela IA para diagnósticos imediatos, com transbordo automático para a equipe humana se solicitado pelo cliente.</p>
+                </div>
+              )}
 
               {editingId && (
                 <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-blue-900 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-100">
