@@ -225,11 +225,11 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
             <>
               <span className="tracking-tight">Mavo Talk</span>
               <span className="rounded-md bg-slate-200/60 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
-                v0.8.1
+                v0.8.2
               </span>
             </>
           ) : (
-            <span className="font-mono text-[10px] font-bold tracking-tight text-slate-500">v0.8.1</span>
+            <span className="font-mono text-[10px] font-bold tracking-tight text-slate-500">v0.8.2</span>
           )}
         </div>
       </div>
