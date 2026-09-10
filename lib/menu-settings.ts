@@ -15,11 +15,12 @@ export type MenuItemDefinition = {
 /** Fonte única de verdade sobre os itens do menu e quem os vê por padrão. Mantém em sincronia com frontend/components/Sidebar.tsx. */
 export const MENU_ITEMS: MenuItemDefinition[] = [
   { id: "inbox", label: "Inbox" },
-  { id: "dashboard", label: "Visão da operação" },
   { id: "contacts", label: "Contatos" },
   { id: "personal_workspace", label: "Meu espaço" },
-  { id: "painel", label: "Conexão WhatsApp" },
   { id: "remote_accesses", label: "Acessos remotos" },
+  { id: "dashboard", label: "Visão da operação" },
+  { id: "mavo_metricas", label: "Métricas do Suporte" },
+  { id: "painel", label: "Conexão WhatsApp" },
   { id: "business_sync", label: "Agentes e sincronização" },
   { id: "business_audit", label: "Auditoria gerencial" },
   { id: "admin_business_access", label: "Acessos gerenciais" },
@@ -33,11 +34,12 @@ const MENU_ITEM_IDS = new Set(MENU_ITEMS.map((item) => item.id));
 
 const DEFAULT_VISIBILITY: Record<string, Record<MenuRole, boolean>> = {
   inbox: { admin: true, gestor: true, atendente: true },
-  dashboard: { admin: true, gestor: true, atendente: false },
   contacts: { admin: true, gestor: true, atendente: true },
   personal_workspace: { admin: true, gestor: true, atendente: true },
-  painel: { admin: true, gestor: true, atendente: false },
   remote_accesses: { admin: true, gestor: true, atendente: true },
+  dashboard: { admin: true, gestor: true, atendente: false },
+  mavo_metricas: { admin: true, gestor: true, atendente: false },
+  painel: { admin: true, gestor: true, atendente: false },
   business_sync: { admin: true, gestor: false, atendente: false },
   business_audit: { admin: true, gestor: false, atendente: false },
   admin_business_access: { admin: true, gestor: false, atendente: false },
@@ -63,11 +65,12 @@ const NONE = { admin: false, gestor: false, atendente: false };
  */
 const DEFAULT_PERMISSIONS: Record<string, Record<MenuPermissionAction, Record<MenuRole, boolean>>> = {
   inbox: { read: EVERYONE, create: EVERYONE, update: EVERYONE, delete: NONE, admin: NONE },
-  dashboard: { read: CAN_MANAGE, create: NONE, update: NONE, delete: NONE, admin: NONE },
   contacts: { read: EVERYONE, create: EVERYONE, update: EVERYONE, delete: NONE, admin: NONE },
   personal_workspace: { read: EVERYONE, create: EVERYONE, update: EVERYONE, delete: EVERYONE, admin: NONE },
-  painel: { read: CAN_MANAGE, create: NONE, update: CAN_MANAGE, delete: NONE, admin: NONE },
   remote_accesses: { read: EVERYONE, create: CAN_MANAGE, update: CAN_MANAGE, delete: NONE, admin: CAN_MANAGE },
+  dashboard: { read: CAN_MANAGE, create: NONE, update: NONE, delete: NONE, admin: NONE },
+  mavo_metricas: { read: CAN_MANAGE, create: NONE, update: NONE, delete: NONE, admin: NONE },
+  painel: { read: CAN_MANAGE, create: NONE, update: CAN_MANAGE, delete: NONE, admin: NONE },
   business_sync: { read: CAN_MANAGE, create: ADMIN_ONLY, update: ADMIN_ONLY, delete: ADMIN_ONLY, admin: ADMIN_ONLY },
   business_audit: { read: ADMIN_ONLY, create: NONE, update: NONE, delete: NONE, admin: ADMIN_ONLY },
   admin_business_access: { read: ADMIN_ONLY, create: ADMIN_ONLY, update: ADMIN_ONLY, delete: ADMIN_ONLY, admin: ADMIN_ONLY },

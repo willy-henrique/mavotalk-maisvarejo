@@ -37,11 +37,12 @@ const TAB_BY_PATH: Record<string, string> = {
 
 const menuItems = [
   { id: 'inbox', label: 'Inbox', icon: Icons.Inbox, path: '/inbox', role: 'ANY' as const },
-  { id: 'dashboard', label: 'Visão da operação', icon: Icons.Chart, path: '/dashboard', role: 'METRICS' as const },
   { id: 'contacts', label: 'Contatos', icon: Icons.Users, path: '/contacts', role: 'ANY' as const },
   { id: 'personal_workspace', label: 'Meu espaço', icon: Icons.Inbox, path: '/meu-espaco', role: 'ANY' as const },
   { id: 'remote_accesses', label: 'Acessos remotos', icon: Icons.Vault, path: '/admin/acessos-remotos', role: 'ANY' as const },
   { id: 'mavo_gestao', label: 'Mavo Gestão', icon: Icons.ExternalLink, path: 'https://bloco-maisvarejo.vercel.app/', role: 'ANY' as const, isExternal: true },
+  { id: 'dashboard', label: 'Visão da operação', icon: Icons.Chart, path: '/dashboard', role: 'METRICS' as const },
+  { id: 'mavo_metricas', label: 'Métricas do Suporte', icon: Icons.Chart, path: 'https://mavo-metricas.vercel.app/', role: 'METRICS' as const, isExternal: true },
   { id: 'painel', label: 'Conexão WhatsApp', icon: Icons.QrCode, path: '/painel', role: 'PAINEL' as const },
   { id: 'business_sync', label: 'Agentes e sincronização', icon: Icons.Settings, path: '/business/sincronizacao', role: UserRole.ADMIN },
   { id: 'business_audit', label: 'Auditoria gerencial', icon: Icons.Settings, path: '/business/auditoria', role: UserRole.ADMIN },
@@ -53,7 +54,7 @@ const menuItems = [
   { id: 'admin_menu_settings', label: 'Menu do painel', icon: Icons.Settings, path: '/admin/menu-visibilidade', role: UserRole.ADMIN },
 ];
 
-const OPERATIONAL_ITEMS = ['inbox', 'dashboard', 'contacts', 'personal_workspace', 'remote_accesses', 'mavo_gestao'];
+const OPERATIONAL_ITEMS = ['inbox', 'contacts', 'personal_workspace', 'remote_accesses', 'mavo_gestao'];
 
 const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate }) => {
   const navigate = useNavigate();
@@ -99,6 +100,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
 
   const canSee = (item: (typeof menuItems)[0]) => {
     if (item.id === 'mavo_gestao') return true;
+    if (item.id === 'mavo_metricas') return user.role === UserRole.SUPERVISOR || user.role === UserRole.ADMIN;
     const roleAllowed = item.role === 'ANY'
       || (item.role === 'PAINEL' && AuthService.canAccessPainel())
       || (item.role === 'METRICS' && (user.role === UserRole.SUPERVISOR || user.role === UserRole.ADMIN))
