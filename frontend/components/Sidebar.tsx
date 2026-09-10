@@ -207,7 +207,7 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
         </div>
       )}
 
-      <div className={`p-4 border-t border-slate-200 dark:border-slate-800 ${collapsed ? 'flex justify-center' : ''}`}>
+      <div className={`p-4 border-t border-slate-200 dark:border-slate-800 ${collapsed ? 'flex flex-col items-center' : ''}`}>
         <div className={`flex items-center gap-3 p-3 rounded-2xl bg-slate-100/80 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 ${collapsed ? 'justify-center' : ''}`}>
           <div
             className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-200 shrink-0 border-2 border-blue-200 dark:border-blue-800 shadow-sm flex items-center justify-center text-xs font-black"
@@ -220,6 +220,18 @@ const Sidebar: React.FC<SidebarProps> = ({ user, mobileOpen = false, onNavigate 
               <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate leading-none mb-1">{user.name}</p>
               <p className="text-[10px] font-black text-blue-600 dark:text-blue-500 uppercase tracking-wider">{user.role}</p>
             </div>
+          )}
+        </div>
+        <div className={`mt-3 flex items-center ${collapsed ? 'justify-center' : 'justify-between px-1'} text-[11px] font-semibold text-slate-400 dark:text-slate-500`}>
+          {!collapsed ? (
+            <>
+              <span className="tracking-tight">Mavo Talk</span>
+              <span className="rounded-md bg-slate-200/60 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                v0.8.1
+              </span>
+            </>
+          ) : (
+            <span className="font-mono text-[10px] font-bold tracking-tight text-slate-500">v0.8.1</span>
           )}
         </div>
       </div>
